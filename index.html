@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>EVLT Operations Platform</title>
+        <!-- External Libraries -->
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+        <script src="https://unpkg.com/lucide@latest"></script>
+        <style>
+    :root { 
+      --primary: #1e3a1e; 
+      --primary-hover: #152915;
+      --primary-light: #f0f7f0;
+      --bg: #f8fafc; 
+      --card-bg: #ffffff; 
+      --sidebar-bg: #0f172a;
+      --sidebar-hover: #1e293b;
+      --sidebar-text: #94a3b8;
+      --sidebar-text-active: #ffffff;
+      --text: #0f172a; 
+      --text-muted: #64748b;
+      --border: #e2e8f0; 
+      --radius-sm: 4px;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-sans); }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    
+    /* Top Navigation Header */
+    header { 
+      background: var(--primary); 
+      color: white; 
+      padding: 0.75rem 1.5rem; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      position: sticky; 
+      top: 0; 
+      z-index: 1001; 
+      box-shadow: var(--shadow-sm);
+      height: 56px;
+    }
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .brand-title { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em; }
+    .menu-btn { display: none; background: none; border: none; color: white; cursor: pointer; padding: 0.25rem; border-radius: var(--radius-sm); }
+    .menu-btn:hover { background: rgba(255,255,255,0.1); }
+    
+    /* App Layout */
+    .app-container { display: flex; flex: 1; position: relative; }
+    
+    /* Sidebar Navigation with Scroll Support */
+    sidebar { 
+      width: 240px; 
+      background: var(--sidebar-bg); 
+      color: var(--sidebar-text); 
+      padding: 1rem 0.75rem; 
+      flex-shrink: 0; 
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      transition: transform 0.2s ease; 
+      overflow-y: auto;
+      max-height: calc(100vh - 56px);
+    }
+    .sidebar-section-label { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: #475569; padding: 0.75rem 0.75rem 0.25rem 0.75rem; }
+    sidebar a { 
+      display: flex; 
+      align-items: center; 
+      gap: 0.75rem; 
+      padding: 0.6rem 0.75rem; 
+      color: var(--sidebar-text); 
+      text-decoration: none; 
+      font-weight: 500; 
+      font-size: 0.875rem; 
+      border-radius: var(--radius);
+      transition: all 0.15s ease;
+    }
+    sidebar a:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+    sidebar a.active { background: var(--primary); color: var(--sidebar-text-active); font-weight: 600; }
+    sidebar a i { width: 18px; height: 18px; stroke-width: 2; }
+    
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(2px); z-index: 999; }
+    
+    /* Main Content Area */
+    main { flex: 1; padding: 1.75rem 2rem; max-width: 1400px; width: 100%; margin: 0 auto; min-width: 0; }
+    
+    /* Page View Top Section Header */
+    .page-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+    .page-title h2 { font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    
+    /* Controls & Actions Header */
+    .table-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; width: 100%; max-width: 480px; justify-content: flex-end; }
+    .search-input-wrapper { position: relative; flex: 1; min-width: 200px; }
+    .search-input-wrapper i { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted); }
+    .search-input { width: 100%; padding: 0.5rem 0.75rem 0.5rem 2.25rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.875rem; outline: none; background: white; transition: border-color 0.15s; }
+    .search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(30, 58, 30, 0.1); }
+    
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap; }
+    .btn i { width: 16px; height: 16px; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: white; border-color: var(--border); color: var(--text); }
+    .btn-secondary:hover { background: var(--bg); border-color: #cbd5e1; }
+    .btn-import { background: #10b981; color: white; }
+    .btn-import:hover { background: #059669; }
+    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+
+    /* Dashboard Metric Cards */
+    .grid-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.75rem; }
+    .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; box-shadow: var(--shadow-sm); cursor: pointer; transition: all 0.15s ease; display: flex; flex-direction: column; justify-content: space-between; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: #cbd5e1; }
+    .stat-header { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; }
+    .stat-icon { width: 36px; height: 36px; border-radius: var(--radius); background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+    .stat-icon i { width: 20px; height: 20px; }
+    .stat-value { font-size: 1.75rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+
+    /* Modern Table Container */
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .table-container { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; text-align: left; }
+    th { background: #f8fafc; font-weight: 600; color: var(--text-muted); padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+
+    /* Standardised Status Badges */
+    .badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; text-transform: capitalize; width: fit-content; }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .badge-success { background: #dcfce7; color: #14532d; }
+    .badge-success .badge-dot { background: #16a34a; }
+    .badge-warning { background: #fef9c3; color: #713f12; }
+    .badge-warning .badge-dot { background: #ca8a04; }
+    .badge-danger { background: #fee2e2; color: #7f1d1d; }
+    .badge-danger .badge-dot { background: #dc2626; }
+    .badge-info { background: #e0f2fe; color: #0c4a6e; }
+    .badge-info .badge-dot { background: #0284c7; }
+
+    /* Standardised Empty State */
+    .empty-state { text-align: center; padding: 3.5rem 1.5rem; }
+    .empty-icon-wrapper { width: 56px; height: 56px; border-radius: 50%; background: #f1f5f9; color: var(--text-muted); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; }
+    .empty-icon-wrapper i { width: 28px; height: 28px; }
+    .empty-state h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 0.25rem; }
+    .empty-state p { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.25rem; max-width: 400px; margin-left: auto; margin-right: auto; }
+
+    /* Clock-In View */
+    .clock-card { max-width: 440px; margin: 2rem auto; padding: 2rem; text-align: center; }
+    .clock-card h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .clock-card select { width: 100%; padding: 0.65rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.9rem; background: white; outline: none; }
+    .clock-btn-group { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+    .clock-btn-in { flex: 1; background: #10b981; color: white; padding: 0.75rem; border: none; border-radius: var(--radius); font-weight: 600; cursor: pointer; }
+    .clock-btn-in:hover { background: #059669; }
+    .clock-btn-out { flex: 1; background: #ef4444; color: white; padding: 0.75rem; border: none; border-radius: var(--radius); font-weight: 600; cursor: pointer; }
+    .clock-btn-out:hover { background: #dc2626; }
+
+    /* Calendar View */
+    .cal-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; padding: 0 0.25rem; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-day-header { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); padding: 0.5rem 0; text-transform: uppercase; }
+    .cal-day { background: white; border: 1px solid var(--border); min-height: 80px; padding: 0.5rem; border-radius: var(--radius); font-size: 0.8rem; cursor: pointer; transition: border-color 0.15s; }
+    .cal-day:hover { border-color: var(--primary); background: #f8fafc; }
+    .cal-badge { background: #dcfce7; color: #14532d; padding: 2px 6px; border-radius: var(--radius-sm); margin-top: 6px; font-weight: 600; font-size: 0.7rem; }
+
+    /* Modal Styling */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 1rem; }
+    .modal { background: white; padding: 1.75rem; border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+    .modal h3 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.35rem; color: var(--text); }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.875rem; outline: none; background: white; transition: border-color 0.15s; }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(30, 58, 30, 0.1); }
+    .checkbox-group { display: flex; flex-direction: column; gap: 0.5rem; border: 1px solid var(--border); padding: 0.85rem; border-radius: var(--radius); background: #f8fafc; }
+    .checkbox-group label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 400; cursor: pointer; }
+    .checkbox-group input[type="checkbox"] { width: auto; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+
+    /* Responsive Mobile Formatting */
+    @media (max-width: 768px) {
+      .menu-btn { display: block; }
+      sidebar { 
+        position: fixed; 
+        top: 56px; 
+        left: 0; 
+        bottom: 0; 
+        height: calc(100vh - 56px); 
+        z-index: 1000; 
+        transform: translateX(-100%); 
+        width: 240px; 
+        padding-top: 1rem;
+        overflow-y: auto;
+      }
+      sidebar.active { transform: translateX(0); }
+      .overlay.active { display: block; }
+      main { padding: 1rem; }
+      .table-actions { max-width: 100%; }
+      .mobile-cards table, .mobile-cards thead, .mobile-cards tbody, .mobile-cards th, .mobile-cards td, .mobile-cards tr { display: block; }
+      .mobile-cards thead { display: none; }
+      .mobile-cards tr { margin-bottom: 0.85rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem; background: #fff; box-shadow: var(--shadow-sm); }
+      .mobile-cards td { border: none; padding: 0.35rem 0; display: flex; align-items: center; justify-content: flex-start; gap: 0.75rem; font-size: 0.85rem; text-align: left; }
+      .mobile-cards td::before { content: attr(data-label); font-weight: 600; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; min-width: 120px; flex-shrink: 0; }
+    }
+  </style>
+      </head>
+      <body>
+        <!-- Top Navigation Header -->
+        <header>
+          <div class="header-left">
+            <button class="menu-btn" onclick="toggleMenu()" aria-label="Toggle navigation menu">
+              <i data-lucide="menu">
+              </i>
+            </button>
+            <div class="brand-title">
+              <span>EVLT Operations Platform</span>
+            </div>
+          </div>
+          <div>
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;" onchange="importExcel(event)">
+              <button class="btn btn-import btn-sm" onclick="document.getElementById('excelFileInput').click()">
+                <i data-lucide="upload">
+                </i> Import Excel
+              </button>
+            </div>
+          </header>
+          <div class="overlay" id="overlay" onclick="toggleMenu()">
+          </div>
+          <!-- Main Application Container -->
+          <div class="app-container">
+            <sidebar id="sidebar">
+              <div class="sidebar-section-label">Main</div>
+              <a href="#" class="active" onclick="navigate('dashboard')">
+                <i data-lucide="layout-dashboard">
+                </i> Dashboard</a>
+                <a href="#" onclick="navigate('clock')">
+                  <i data-lucide="clock">
+                  </i> Clock In/Out</a>
+                  <a href="#" onclick="navigate('calendar')">
+                    <i data-lucide="calendar">
+                    </i> Attendance & Hours</a>
+                    <div class="sidebar-section-label">Operations</div>
+                    <a href="#" onclick="navigate('volunteers')">
+                      <i data-lucide="users">
+                      </i> Volunteers</a>
+                      <a href="#" onclick="navigate('actions')">
+                        <i data-lucide="check-square">
+                        </i> Actions</a>
+                        <a href="#" onclick="navigate('maintenance')">
+                          <i data-lucide="wrench">
+                          </i> Maintenance</a>
+                          <a href="#" onclick="navigate('events')">
+                            <i data-lucide="calendar-range">
+                            </i> Events</a>
+                            <div class="sidebar-section-label">Management</div>
+                            <a href="#" onclick="navigate('assets')">
+                              <i data-lucide="box">
+                              </i> Assets</a>
+                              <a href="#" onclick="navigate('stock')">
+                                <i data-lucide="packages">
+                                </i> Stock</a>
+                                <a href="#" onclick="navigate('suppliers')">
+                                  <i data-lucide="truck">
+                                  </i> Suppliers</a>
+                                  <a href="#" onclick="navigate('enquiries')">
+                                    <i data-lucide="help-circle">
+                                    </i> Enquiries</a>
+                                    <a href="#" onclick="navigate('documents')">
+                                      <i data-lucide="file-text">
+                                      </i> Documents</a>
+                                      <a href="#" onclick="navigate('notes')">
+                                        <i data-lucide="sticky-note">
+                                        </i> Notes</a>
+                                      </sidebar>
+                                      <main id="content">
+                                        <!-- Dynamic View Area -->
+                                      </main>
+                                    </div>
+                                    <!-- Form Add/Edit Modal -->
+                                    <div class="modal-overlay" id="addModal">
+                                      <div class="modal">
+                                        <h3 id="modalTitle">Record Form</h3>
+                                        <form id="addForm" onsubmit="saveRecord(event)">
+                                          <input type="hidden" id="editIndex" value="-1">
+                                            <div id="formFields">
+                                            </div>
+                                            <div class="modal-actions">
+                                              <button type="button" class="btn btn-secondary" onclick="closeModal('addModal')">Cancel</button>
+                                              <button type="submit" class="btn btn-primary">Save Record</button>
+                                            </div>
+                                          </form>
+                                        </div>
+                                      </div>
+                                      <!-- Calendar Day Attendance Details Modal -->
+                                      <div class="modal-overlay" id="dayDetailsModal">
+                                        <div class="modal">
+                                          <h3 id="dayModalTitle">Attendance Details</h3>
+                                          <div id="dayModalContent" class="mobile-cards">
+                                          </div>
+                                          <div class="modal-actions">
+                                            <button type="button" class="btn btn-secondary" onclick="closeModal('dayDetailsModal')">Close</button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <script>
+    // Firebase Realtime Database Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMx-PXg-AMY",
+      authDomain: "evlt-admin.firebaseapp.com",
+      databaseURL: "https://evlt-admin-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "evlt-admin",
+      storageBucket: "evlt-admin.firebasestorage.app",
+      messagingSenderId: "603418741774",
+      appId: "1:603418741774:web:b9d4717f3d-c4a3ede5805f"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    let db = {};
+    let currentView = 'dashboard';
+    let calDate = new Date();
+
+    const AVAILABLE_ROLES = ["Driver", "Station Staff", "Maintenance", "Shop", "Barn", "Tearoom"];
+
+    // Entity Schema Definitions
+    const schema = {
+      volunteers: ["Volunteer ID", "Name", "Contact Details", "Roles", "Skills", "Active Status", "Notes"],
+      actions: ["Action ID", "Action Description", "Area", "Assigned Volunteer ID", "Due Date", "Priority", "Status", "Notes"],
+      maintenance: ["Job ID", "Date Reported", "Asset ID", "Description", "Priority", "Status", "Assigned Volunteer ID", "Due Date", "Completed Date", "Notes"],
+      events: ["Date", "Event Name", "Event Type", "Event Lead", "Driver", "Guard", "Ticket Office Staff", "Café Staff", "Status", "Notes"],
+      assets: ["Asset ID", "Asset Name", "Category", "Location", "Serial Number", "Purchase Date", "Condition", "Responsible Area", "Notes"],
+      stock: ["Stock ID", "Item Description", "Category", "Quantity", "Min Stock Level", "Supplier ID", "Reorder Status", "Notes"],
+      suppliers: ["Supplier ID", "Supplier Name", "Contact Details", "Website", "Products Supplied", "Notes"],
+      enquiries: ["Enquiry ID", "Date Received", "From", "Contact Details", "Subject", "Assigned Volunteer ID", "Status", "Date Responded", "Notes"],
+      documents: ["Document ID", "Document Name", "Category", "File Path / Link", "Owner", "Date Added", "Review Date", "Status", "Notes"],
+      notes: ["Date", "Author", "Category", "Title", "Details"]
+    };
+
+    // Excel Date Serial Number Conversion
+    function formatExcelDate(value) {
+      if (!value) return '';
+      if (typeof value === 'number' || (!isNaN(value) && Number(value) > 20000 && Number(value) < 60000)) {
+        const num = Number(value);
+        const dateObj = XLSX.SSF.parse_date_code(num);
+        if (dateObj) {
+          const d = String(dateObj.d).padStart(2, '0');
+          const m = String(dateObj.m).padStart(2, '0');
+          return `${d}/${m}/${dateObj.y}`;
+        }
+      }
+      return value;
+    }
+
+    function toISODate(val) {
+      if (!val) return '';
+      const str = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+        const parts = str.split('/');
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+      if (!isNaN(str) && Number(str) > 20000) {
+        const parsed = XLSX.SSF.parse_date_code(Number(str));
+        if (parsed) {
+          return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+        }
+      }
+      return '';
+    }
+
+    // Real-time Database Listener
+    database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+      db = snapshot.val() || {};
+      if (!db.clockLogs) db.clockLogs = [];
+      if (!db.notes) db.notes = [];
+      navigate(currentView);
+    });
+
+    function toggleMenu() {
+      document.getElementById('sidebar').classList.toggle('active');
+      document.getElementById('overlay').classList.toggle('active');
+    }
+
+    function getVolunteerName(v) {
+      return v.Name || v.name || v['Volunteer Name'] || v['Volunteer ID'] || 'Unknown';
+    }
+
+    // Import Spreadsheet Handler
+    function importExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const parseSheet = (sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return [];
+          return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        };
+
+        db.volunteers = parseSheet('Volunteers');
+        db.events = parseSheet('Events');
+        db.maintenance = parseSheet('Maintenance');
+        db.assets = parseSheet('Assets');
+        db.stock = parseSheet('Stock');
+        db.suppliers = parseSheet('Suppliers');
+        db.enquiries = parseSheet('Enquiries');
+        db.documents = parseSheet('Documents');
+        db.actions = parseSheet('Actions');
+        db.notes = parseSheet('Notes');
+
+        database.ref('EVLT_ADMIN_DB').set(db);
+        alert('Excel imported and synced successfully!');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Standard Status Badges Rendering
+    function renderStatusBadge(val, headerName = '') {
+      if (val === undefined || val === null || val === '') return '-';
+      if (headerName.toLowerCase().includes('date')) {
+        return formatExcelDate(val);
+      }
+      const str = String(val).toLowerCase().trim();
+      
+      if (['active', 'completed', 'done', 'ok', 'good', 'passed', 'clocked in'].includes(str)) {
+        return `<span class="badge badge-success"><span class="badge-dot"></span>${val}</span>`;
+      }
+      if (['pending', 'in progress', 'open', 'medium', 'reorder'].includes(str)) {
+        return `<span class="badge badge-warning"><span class="badge-dot"></span>${val}</span>`;
+      }
+      if (['urgent', 'high', 'out of stock', 'failed', 'inactive', 'overdue', 'clocked out', 'not active'].includes(str)) {
+        return `<span class="badge badge-danger"><span class="badge-dot"></span>${val}</span>`;
+      }
+      if (['low', 'info', 'scheduled'].includes(str)) {
+        return `<span class="badge badge-info"><span class="badge-dot"></span>${val}</span>`;
+      }
+      return val;
+    }
+
+    // View Navigation Router
+    function navigate(view) {
+      currentView = view;
+      document.querySelectorAll('sidebar a').forEach(a => a.classList.remove('active'));
+      const activeLink = document.querySelector(`sidebar a[onclick="navigate('${view}')"]`);
+      if (activeLink) activeLink.classList.add('active');
+
+      if (document.getElementById('sidebar').classList.contains('active')) {
+        toggleMenu();
+      }
+
+      if (view === 'dashboard') {
+        renderDashboard();
+      } else if (view === 'clock') {
+        renderClockView();
+      } else if (view === 'calendar') {
+        renderCalendarView();
+      } else {
+        renderTablePage(view);
+      }
+      lucide.createIcons();
+    }
+
+    // Render Dashboard
+    function renderDashboard() {
+      const content = document.getElementById('content');
+      const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Operations Dashboard</h2>
+          </div>
+        </div>
+
+        <div class="grid-stats">
+          <div class="stat-card" onclick="navigate('clock')">
+            <div class="stat-header">
+              <span>On Site Now</span>
+              <div class="stat-icon"><i data-lucide="clock"></i></div>
+            </div>
+            <div class="stat-value">${activeClockIns}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('volunteers')">
+            <div class="stat-header">
+              <span>Volunteers</span>
+              <div class="stat-icon"><i data-lucide="users"></i></div>
+            </div>
+            <div class="stat-value">${(db.volunteers || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('actions')">
+            <div class="stat-header">
+              <span>Open Actions</span>
+              <div class="stat-icon"><i data-lucide="check-square"></i></div>
+            </div>
+            <div class="stat-value">${(db.actions || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('maintenance')">
+            <div class="stat-header">
+              <span>Maintenance Jobs</span>
+              <div class="stat-icon"><i data-lucide="wrench"></i></div>
+            </div>
+            <div class="stat-value">${(db.maintenance || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('events')">
+            <div class="stat-header">
+              <span>Events</span>
+              <div class="stat-icon"><i data-lucide="calendar-range"></i></div>
+            </div>
+            <div class="stat-value">${(db.events || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('assets')">
+            <div class="stat-header">
+              <span>Tracked Assets</span>
+              <div class="stat-icon"><i data-lucide="box"></i></div>
+            </div>
+            <div class="stat-value">${(db.assets || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('stock')">
+            <div class="stat-header">
+              <span>Stock Items</span>
+              <div class="stat-icon"><i data-lucide="packages"></i></div>
+            </div>
+            <div class="stat-value">${(db.stock || []).length}</div>
+          </div>
+          <div class="stat-card" onclick="navigate('notes')">
+            <div class="stat-header">
+              <span>System Notes</span>
+              <div class="stat-icon"><i data-lucide="sticky-note"></i></div>
+            </div>
+            <div class="stat-value">${(db.notes || []).length}</div>
+          </div>
+        </div>`;
+    }
+
+    // Render Clock In/Out View
+    function renderClockView() {
+      const content = document.getElementById('content');
+      const volunteers = db.volunteers || [];
+      const options = volunteers.map(v => {
+        const name = getVolunteerName(v);
+        return `<option value="${name}">${name}</option>`;
+      }).join('');
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Volunteer Clock In / Out</h2>
+          </div>
+        </div>
+
+        <div class="card clock-card">
+          <h2>Shift Register</h2>
+          <p style="margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.85rem;">Select your volunteer profile to sign on or off.</p>
+          <form onsubmit="handleClockToggle(event)">
+            <select id="clockName" required onchange="updateClockRoles(this.value)">
+              <option value="">-- Select Volunteer Name --</option>
+              ${options}
+            </select>
+            <select id="clockRole" required disabled>
+              <option value="">-- Select Name First --</option>
+            </select>
+            <div class="clock-btn-group">
+              <button type="submit" onclick="window.clockAction='in'" class="clock-btn-in">Clock In</button>
+              <button type="submit" onclick="window.clockAction='out'" class="clock-btn-out">Clock Out</button>
+            </div>
+          </form>
+        </div>`;
+    }
+
+    function updateClockRoles(volunteerName) {
+      const roleSelect = document.getElementById('clockRole');
+      if (!volunteerName) {
+        roleSelect.innerHTML = '<option value="">-- Select Name First --</option>';
+        roleSelect.disabled = true;
+        return;
+      }
+
+      const volunteer = (db.volunteers || []).find(v => getVolunteerName(v) === volunteerName);
+      let userRoles = [];
+
+      if (volunteer && (volunteer.Roles || volunteer.roles)) {
+        const roleData = volunteer.Roles || volunteer.roles;
+        userRoles = typeof roleData === 'string' ? roleData.split(',').map(r => r.trim()) : roleData;
+      }
+
+      if (userRoles.length === 0) {
+        userRoles = AVAILABLE_ROLES;
+      }
+
+      roleSelect.innerHTML = userRoles.map(r => `<option value="${r}">${r}</option>`).join('');
+      roleSelect.disabled = false;
+    }
+
+    function handleClockToggle(e) {
+      e.preventDefault();
+      const name = document.getElementById('clockName').value;
+      const role = document.getElementById('clockRole').value;
+      const action = window.clockAction;
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+
+      if (!db.clockLogs) db.clockLogs = [];
+
+      if (action === 'in') {
+        const existing = db.clockLogs.find(l => l.name === name && l.status === 'Clocked In');
+        if (existing) {
+          alert(`${name} is already clocked in.`);
+          return;
+        }
+        
+        db.clockLogs.push({
+          id: Date.now(),
+          name: name,
+          role: role,
+          date: todayStr,
+          timeIn: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timeOut: '',
+          hours: 0,
+          status: 'Clocked In'
+        });
+        
+        alert(`Clocked In: ${name} (${role})`);
+      } else {
+        const activeLogIndex = db.clockLogs.findIndex(l => l.name === name && l.status === 'Clocked In');
+        if (activeLogIndex === -1) {
+          alert(`${name} is not currently clocked in.`);
+          return;
+        }
+
+        const log = db.clockLogs[activeLogIndex];
+        log.timeOut = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        log.status = 'Clocked Out';
+        
+        const inParts = log.timeIn.split(':');
+        const startMinutes = parseInt(inParts[0]) * 60 + parseInt(inParts[1]);
+        const endMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        let diffHrs = (endMinutes - startMinutes) / 60;
+        if (diffHrs <= 0) diffHrs = 0.25; 
+        log.hours = Math.round(diffHrs * 10) / 10;
+
+        alert(`Clocked Out: ${name} (${log.hours} hrs logged)`);
+      }
+
+      database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+      navigate('clock');
+    }
+
+    function changeMonth(delta) {
+      calDate.setMonth(calDate.getMonth() + delta);
+      renderCalendarView();
+    }
+
+    // Render Attendance Calendar View
+    function renderCalendarView() {
+      const content = document.getElementById('content');
+      const year = calDate.getFullYear();
+      const month = calDate.getMonth();
+
+      const logs = db.clockLogs || [];
+      const totalAnnualHours = logs
+        .filter(l => l.date && l.date.startsWith(String(year)))
+        .reduce((sum, l) => sum + (Number(l.hours) || 0), 0);
+
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const monthName = calDate.toLocaleString('default', { month: 'long' });
+
+      let calDaysHTML = '';
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayLogs = logs.filter(l => l.date === dateStr);
+        const uniqueVolunteersCount = new Set(dayLogs.map(l => l.name)).size;
+
+        calDaysHTML += `
+          <div class="cal-day" onclick="showDayDetails('${dateStr}')">
+            <strong>${day}</strong>
+            ${uniqueVolunteersCount > 0 ? `<div class="cal-badge">${uniqueVolunteersCount} Present</div>` : ''}
+          </div>`;
+      }
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Attendance & Hours</h2>
+          </div>
+          <div class="btn btn-secondary">Annual Total: ${totalAnnualHours.toFixed(1)} hrs</div>
+        </div>
+
+        <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
+          <div class="cal-controls">
+            <button class="btn btn-secondary btn-sm" onclick="changeMonth(-1)"><i data-lucide="chevron-left"></i> Previous</button>
+            <h3 style="font-size: 1rem; font-weight: 700;">${monthName} ${year}</h3>
+            <button class="btn btn-secondary btn-sm" onclick="changeMonth(1)">Next <i data-lucide="chevron-right"></i></button>
+          </div>
+
+          <div class="calendar-grid">
+            <div class="cal-day-header">Sun</div><div class="cal-day-header">Mon</div><div class="cal-day-header">Tue</div>
+            <div class="cal-day-header">Wed</div><div class="cal-day-header">Thu</div><div class="cal-day-header">Fri</div>
+            <div class="cal-day-header">Sat</div>
+            ${calDaysHTML}
+          </div>
+        </div>
+
+        <div class="card mobile-cards">
+          <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);">
+            <h3 style="font-size: 1rem; font-weight: 600;">Recent Shift Activity</h3>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Date</th><th>Name</th><th>Role</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Status</th></tr></thead>
+              <tbody>
+                ${logs.length === 0 ? `
+                  <tr><td colspan="7">
+                    <div class="empty-state">
+                      <div class="empty-icon-wrapper"><i data-lucide="clock"></i></div>
+                      <h3>No shift records recorded</h3>
+                      <p>Volunteers can clock in using the Clock In/Out module.</p>
+                      <button class="btn btn-primary" onclick="navigate('clock')">Clock In</button>
+                    </div>
+                  </td></tr>` :
+                  logs.slice(-10).reverse().map(l => `
+                    <tr>
+                      <td data-label="Date">${formatExcelDate(l.date)}</td>
+                      <td data-label="Name">${l.name}</td>
+                      <td data-label="Role">${l.role}</td>
+                      <td data-label="Time In">${l.timeIn}</td>
+                      <td data-label="Time Out">${l.timeOut || '-'}</td>
+                      <td data-label="Hours">${l.hours} hrs</td>
+                      <td data-label="Status">${renderStatusBadge(l.status)}</td>
+                    </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function showDayDetails(dateStr) {
+      const dayLogs = (db.clockLogs || []).filter(l => l.date === dateStr);
+      const title = document.getElementById('dayModalTitle');
+      const content = document.getElementById('dayModalContent');
+
+      title.innerText = `Attendance: ${formatExcelDate(dateStr)}`;
+
+      if (dayLogs.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state" style="padding: 1.5rem 0;">
+            <p>No volunteers logged shift time on this date.</p>
+          </div>`;
+      } else {
+        const aggregated = {};
+        dayLogs.forEach(log => {
+          if (!aggregated[log.name]) {
+            aggregated[log.name] = {
+              name: log.name,
+              totalHours: 0,
+              roles: new Set(),
+              currentlyActive: false,
+              shifts: 0
+            };
+          }
+          aggregated[log.name].totalHours += Number(log.hours) || 0;
+          aggregated[log.name].roles.add(log.role);
+          aggregated[log.name].shifts += 1;
+          if (log.status === 'Clocked In') {
+            aggregated[log.name].currentlyActive = true;
+          }
+        });
+
+        const listHTML = Object.values(aggregated).map(v => `
+          <div style="border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem; margin-bottom: 0.65rem; background: #f8fafc;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <strong style="color:var(--text); font-size:0.95rem;">${v.name}</strong>
+              ${v.currentlyActive ? '<span class="badge badge-success"><span class="badge-dot"></span>Clocked In</span>' : '<span class="badge badge-info"><span class="badge-dot"></span>Completed</span>'}
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted);">
+              <span>Role: <strong>${Array.from(v.roles).join(', ')}</strong> (${v.shifts} shift${v.shifts > 1 ? 's' : ''})</span>
+              <span>Total: <strong style="color:var(--primary);">${v.totalHours.toFixed(1)} hrs</strong></span>
+            </div>
+          </div>
+        `).join('');
+
+        content.innerHTML = listHTML;
+      }
+
+      document.getElementById('dayDetailsModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    // Generic Data Table Page Builder
+    function renderTablePage(view, query = '') {
+      const items = db[view] || [];
+      let rawHeaders = items.length > 0 ? Array.from(new Set(items.flatMap(obj => Object.keys(obj)))) : (schema[view] || ["Name", "Notes"]);
+      
+      const headers = view === 'events' 
+        ? rawHeaders.filter(h => !h.toLowerCase().endsWith('id')) 
+        : rawHeaders;
+
+      const filtered = items.map((item, originalIndex) => ({ item, originalIndex }))
+        .filter(({ item }) => {
+          if (!query) return true;
+          return Object.values(item).some(v => String(v).toLowerCase().includes(query.toLowerCase()));
+        });
+
+      const singleEntityName = view.endsWith('s') ? view.slice(0, -1) : view;
+
+      document.getElementById('content').innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>${view.toUpperCase()}</h2>
+          </div>
+          <div class="table-actions">
+            <div class="search-input-wrapper">
+              <i data-lucide="search"></i>
+              <input type="text" class="search-input" placeholder="Search ${view}..." value="${query}" oninput="filterTable('${view}', this.value)">
+            </div>
+            <button class="btn btn-primary" onclick="openAddModal('${view}')">
+              <i data-lucide="plus"></i> Add Record
+            </button>
+          </div>
+        </div>
+
+        <div class="card mobile-cards">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  ${headers.map(h => `<th>${h}</th>`).join('')}
+                  <th style="width: 80px; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filtered.length === 0 ? `
+                  <tr>
+                    <td colspan="${headers.length + 1}">
+                      <div class="empty-state">
+                        <div class="empty-icon-wrapper"><i data-lucide="folder-open"></i></div>
+                        <h3>No ${view} records found</h3>
+                        <p>There are no entries currently in this register.</p>
+                        <button class="btn btn-primary" onclick="openAddModal('${view}')">
+                          <i data-lucide="plus"></i> Add ${singleEntityName}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>` : 
+                  filtered.map(({ item, originalIndex }) => `
+                    <tr>
+                      ${headers.map(h => `<td data-label="${h}">${renderStatusBadge(item[h], h)}</td>`).join('')}
+                      <td data-label="Actions" style="text-align: right;">
+                        <button class="btn btn-secondary btn-sm" onclick="openEditModal('${view}', ${originalIndex})">
+                          <i data-lucide="edit-2"></i> Edit
+                        </button>
+                      </td>
+                    </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function filterTable(view, q) { renderTablePage(view, q); }
+
+    function openAddModal(view) {
+      document.getElementById('editIndex').value = "-1";
+      buildFormModal(view);
+    }
+
+    function openEditModal(view, index) {
+      document.getElementById('editIndex').value = index;
+      const record = db[view][index];
+      buildFormModal(view, record);
+    }
+
+    // Modal Form Builder
+    function buildFormModal(view, record = null) {
+      const items = db[view] || [];
+      let rawHeaders = items.length > 0 ? Array.from(new Set(items.flatMap(obj => Object.keys(obj)))) : (schema[view] || ["Name", "Notes"]);
+      
+      const headers = view === 'events' 
+        ? rawHeaders.filter(h => !h.toLowerCase().endsWith('id')) 
+        : rawHeaders;
+
+      const titlePrefix = record ? 'Edit' : 'Add New';
+      const entityLabel = view.endsWith('s') ? view.slice(0, -1) : view;
+      document.getElementById('modalTitle').innerText = `${titlePrefix} ${entityLabel.toUpperCase()}`;
+      
+      document.getElementById('formFields').innerHTML = headers.map(h => {
+        const key = h.toLowerCase();
+        const val = record && record[h] !== undefined ? record[h] : '';
+
+        if (view === 'volunteers' && (key === 'roles' || key === 'role')) {
+          const activeRoles = typeof val === 'string' ? val.split(',').map(r => r.trim()) : [];
+          return `
+            <div class="form-group">
+              <label>Roles (Select all that apply)</label>
+              <div class="checkbox-group">
+                ${AVAILABLE_ROLES.map(role => `
+                  <label><input type="checkbox" name="Roles" value="${role}" ${activeRoles.includes(role) ? 'checked' : ''}> ${role}</label>
+                `).join('')}
+              </div>
+            </div>`;
+        }
+
+        if (key.includes('date')) {
+          const isoDate = toISODate(val);
+          return `
+            <div class="form-group">
+              <label>${h}</label>
+              <input type="date" name="${h}" value="${isoDate}">
+            </div>`;
+        }
+
+        if (key === 'status' || key === 'active status') {
+          return `
+            <div class="form-group">
+              <label>${h}</label>
+              <select name="${h}">
+                <option value="Active" ${val === 'Active' ? 'selected' : ''}>Active</option>
+                <option value="Inactive" ${val === 'Inactive' ? 'selected' : ''}>Inactive</option>
+                <option value="Pending" ${val === 'Pending' ? 'selected' : ''}>Pending</option>
+              </select>
+            </div>`;
+        }
+
+        if (key === 'details' || key === 'notes') {
+          return `<div class="form-group"><label>${h}</label><textarea name="${h}" rows="3" placeholder="Enter ${h}...">${val}</textarea></div>`;
+        }
+
+        return `<div class="form-group"><label>${h}</label><input type="text" name="${h}" value="${val}" placeholder="Enter ${h}..."></div>`;
+      }).join('');
+
+      document.getElementById('addModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function closeModal(modalId) { 
+      document.getElementById(modalId).style.display = 'none'; 
+    }
+
+    // Save Record to Firebase
+    function saveRecord(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const editIndex = parseInt(document.getElementById('editIndex').value, 10);
+      const newRow = {};
+
+      if (currentView === 'volunteers') {
+        const selectedRoles = formData.getAll('Roles');
+        newRow['Roles'] = selectedRoles.join(', ');
+      }
+
+      formData.forEach((value, key) => {
+        if (key !== 'Roles') {
+          newRow[key] = value;
+        }
+      });
+
+      if (!db[currentView]) db[currentView] = [];
+
+      if (editIndex >= 0) {
+        db[currentView][editIndex] = { ...db[currentView][editIndex], ...newRow };
+      } else {
+        db[currentView].push(newRow);
+      }
+
+      database.ref(`EVLT_ADMIN_DB/${currentView}`).set(db[currentView]);
+      closeModal('addModal');
+    }
+
+    window.onload = () => {
+      navigate('dashboard');
+    };
+  </script>
+                                    </body>
+                                  </html>
