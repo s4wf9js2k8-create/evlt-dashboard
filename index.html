@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>EVLT Admin System</title>
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+        <style>
+    :root { 
+      --primary: #184517; 
+      --primary-hover: #113210;
+      --bg: #f8fafc; 
+      --card-bg: #ffffff; 
+      --text: #0f172a; 
+      --border: #e2e8f0; 
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; }
+    
+    header { background: var(--primary); color: white; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1001; }
+    .header-left { display: flex; align-items: center; gap: 0.75rem; }
+    .menu-btn { display: none; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; }
+    header h1 { font-size: 1rem; font-weight: 700; letter-spacing: 0.5px; }
+    .import-btn { background: #10b981; color: white; padding: 0.4rem 0.75rem; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.8rem; }
+    .import-btn:hover { background: #059669; }
+    
+    .app-container { display: flex; flex: 1; position: relative; }
+    
+    sidebar { width: 180px; background: #0f172a; color: white; padding: 0.75rem 0; flex-shrink: 0; transition: transform 0.25s ease; }
+    sidebar a { display: block; padding: 0.75rem 1rem; color: #94a3b8; text-decoration: none; font-weight: 500; font-size: 0.85rem; border-left: 4px solid transparent; }
+    sidebar a:hover { background: #1e293b; color: white; }
+    sidebar a.active { background: #1e293b; color: white; border-left-color: var(--primary); }
+    
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; }
+    
+    main { flex: 1; padding: 1rem; width: 100%; min-width: 0; }
+    
+    .card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .dash-btn { background: #f1f5f9; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .dash-btn:active, .dash-btn:hover { background: #e2e8f0; border-color: var(--primary); }
+    .dash-btn h3 { font-size: 1.5rem; color: var(--primary); margin-bottom: 0.25rem; }
+    .dash-btn p { font-size: 0.8rem; color: #475569; font-weight: 600; }
+
+    .table-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+    .search-input { padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; width: 100%; max-width: 250px; outline: none; }
+    .search-input:focus { border-color: var(--primary); }
+    .add-btn { background: var(--primary); color: white; padding: 0.6rem 0.85rem; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; width: 100%; max-width: 150px; }
+    .add-btn:hover { background: var(--primary-hover); }
+
+    .sub-stats { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .stat-badge { background: #f8fafc; border: 1px solid var(--border); padding: 0.5rem 0.85rem; border-radius: 6px; font-size: 0.8rem; color: #334155; }
+    .stat-badge strong { color: var(--primary); font-size: 0.95rem; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.85rem; }
+    th, td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; color: #1e293b; }
+
+    .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: capitalize; }
+    .badge-success { background: #dcfce7; color: #166534; }
+    .badge-warning { background: #fef9c3; color: #854d0e; }
+    .badge-danger { background: #fee2e2; color: #991b1b; }
+    .badge-info { background: #e0f2fe; color: #075985; }
+
+    .clock-card { max-width: 450px; margin: 0 auto; text-align: center; padding: 1.5rem; }
+    .clock-card select, .clock-card input { width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; }
+    .clock-btn-in { width: 100%; padding: 0.85rem; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+    .clock-btn-out { width: 100%; padding: 0.85rem; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+
+    .cal-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .cal-nav-btn { background: #e2e8f0; border: none; padding: 0.4rem 0.85rem; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+    .cal-nav-btn:hover { background: #cbd5e1; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 0.5rem; }
+    .cal-day { background: #f8fafc; border: 1px solid var(--border); min-height: 55px; padding: 0.35rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .cal-day:hover { background: #f1f5f9; }
+    .cal-day-header { font-weight: bold; text-align: center; padding: 0.3rem 0; background: #e2e8f0; border-radius: 4px; font-size: 0.7rem; }
+    .cal-badge { background: #dcfce7; color: #166534; padding: 2px 4px; border-radius: 4px; margin-top: 4px; font-weight: bold; font-size: 0.65rem; text-align: center; }
+
+    .modal-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal { background: white; padding: 1.5rem; border-radius: 8px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; }
+    .modal h3 { margin-bottom: 1rem; color: var(--primary); }
+    .form-group { margin-bottom: 0.85rem; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; color: #334155; }
+    .form-group input, .form-group textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+    .cancel-btn { background: #e2e8f0; color: #334155; padding: 0.6rem 0.85rem; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; }
+
+    @media (max-width: 768px) {
+      .menu-btn { display: block; }
+      sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; z-index: 1000; transform: translateX(-100%); width: 220px; padding-top: 3.5rem; }
+      sidebar.active { transform: translateX(0); }
+      .overlay.active { display: block; }
+
+      .table-header { flex-direction: column; align-items: stretch; }
+      .search-input { max-width: 100%; }
+      .add-btn { max-width: 100%; }
+
+      .mobile-cards table, .mobile-cards thead, .mobile-cards tbody, .mobile-cards th, .mobile-cards td, .mobile-cards tr { display: block; }
+      .mobile-cards thead { display: none; }
+      .mobile-cards tr { margin-bottom: 0.75rem; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+      .mobile-cards td { border: none; padding: 0.35rem 0; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+      .mobile-cards td::before { content: attr(data-label); font-weight: 600; color: #64748b; font-size: 0.75rem; text-transform: uppercase; padding-right: 0.5rem; }
+    }
+  </style>
+      </head>
+      <body>
+        <header>
+          <div class="header-left">
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <h1>EVLT ADMIN DASHBOARD</h1>
+          </div>
+          <div>
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;" onchange="importExcel(event)">
+              <button class="import-btn" onclick="document.getElementById('excelFileInput').click()">📁 Import</button>
+            </div>
+          </header>
+          <div class="overlay" id="overlay" onclick="toggleMenu()">
+          </div>
+          <div class="app-container">
+            <sidebar id="sidebar">
+              <a href="#" class="active" onclick="navigate('dashboard')">Dashboard</a>
+              <a href="#" onclick="navigate('clock')">⏱️ Clock In/Out</a>
+              <a href="#" onclick="navigate('calendar')">📅 Calendar & Hours</a>
+              <a href="#" onclick="navigate('volunteers')">Volunteers</a>
+              <a href="#" onclick="navigate('actions')">Actions</a>
+              <a href="#" onclick="navigate('maintenance')">Maintenance</a>
+              <a href="#" onclick="navigate('events')">Events</a>
+              <a href="#" onclick="navigate('assets')">Assets</a>
+              <a href="#" onclick="navigate('stock')">Stock</a>
+              <a href="#" onclick="navigate('suppliers')">Suppliers</a>
+              <a href="#" onclick="navigate('enquiries')">Enquiries</a>
+              <a href="#" onclick="navigate('documents')">Documents</a>
+              <a href="#" onclick="navigate('notes')">📝 Notes</a>
+            </sidebar>
+            <main id="content">
+            </main>
+          </div>
+          <div class="modal-overlay" id="addModal">
+            <div class="modal">
+              <h3 id="modalTitle">Add New Entry</h3>
+              <form id="addForm" onsubmit="saveNewRecord(event)">
+                <div id="formFields">
+                </div>
+                <div class="modal-actions">
+                  <button type="button" class="cancel-btn" onclick="closeModal('addModal')">Cancel</button>
+                  <button type="submit" class="add-btn">Save Record</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="modal-overlay" id="dayDetailsModal">
+            <div class="modal">
+              <h3 id="dayModalTitle">Attendance Details</h3>
+              <div id="dayModalContent" class="mobile-cards">
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="cancel-btn" onclick="closeModal('dayDetailsModal')">Close</button>
+              </div>
+            </div>
+          </div>
+          <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMx-PXg-AMY",
+      authDomain: "evlt-admin.firebaseapp.com",
+      databaseURL: "https://evlt-admin-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "evlt-admin",
+      storageBucket: "evlt-admin.firebasestorage.app",
+      messagingSenderId: "603418741774",
+      appId: "1:603418741774:web:b9d4717f3d-c4a3ede5805f"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    let db = {};
+    let currentView = 'dashboard';
+    let calDate = new Date();
+
+    const schema = {
+      volunteers: ["Volunteer ID", "Name", "Contact Details", "Roles", "Skills", "Active Status", "Notes"],
+      actions: ["Action ID", "Action Description", "Area", "Assigned Volunteer ID", "Due Date", "Priority", "Status", "Notes"],
+      maintenance: ["Job ID", "Date Reported", "Asset ID", "Description", "Priority", "Status", "Assigned Volunteer ID", "Due Date", "Completed Date", "Notes"],
+      events: ["Date", "Event Name", "Event Type", "Event Lead", "Driver", "Guard", "Ticket Office Staff", "Café Staff", "Status", "Notes"],
+      assets: ["Asset ID", "Asset Name", "Category", "Location", "Serial Number", "Purchase Date", "Condition", "Responsible Area", "Notes"],
+      stock: ["Stock ID", "Item Description", "Category", "Quantity", "Min Stock Level", "Supplier ID", "Reorder Status", "Notes"],
+      suppliers: ["Supplier ID", "Supplier Name", "Contact Details", "Website", "Products Supplied", "Notes"],
+      enquiries: ["Enquiry ID", "Date Received", "From", "Contact Details", "Subject", "Assigned Volunteer ID", "Status", "Date Responded", "Notes"],
+      documents: ["Document ID", "Document Name", "Category", "File Path / Link", "Owner", "Date Added", "Review Date", "Status", "Notes"],
+      notes: ["Date", "Author", "Category", "Title", "Details"]
+    };
+
+    database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+      db = snapshot.val() || {};
+      if (!db.clockLogs) db.clockLogs = [];
+      if (!db.notes) db.notes = [];
+      navigate(currentView);
+    });
+
+    function toggleMenu() {
+      document.getElementById('sidebar').classList.toggle('active');
+      document.getElementById('overlay').classList.toggle('active');
+    }
+
+    function getVolunteerName(v) {
+      return v.Name || v.name || v['Volunteer Name'] || v['Volunteer ID'] || 'Unknown';
+    }
+
+    function importExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const parseSheet = (sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return [];
+          return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        };
+
+        db.volunteers = parseSheet('Volunteers');
+        db.events = parseSheet('Events');
+        db.maintenance = parseSheet('Maintenance');
+        db.assets = parseSheet('Assets');
+        db.stock = parseSheet('Stock');
+        db.suppliers = parseSheet('Suppliers');
+        db.enquiries = parseSheet('Enquiries');
+        db.documents = parseSheet('Documents');
+        db.actions = parseSheet('Actions');
+        db.notes = parseSheet('Notes');
+
+        database.ref('EVLT_ADMIN_DB').set(db);
+        alert('Excel imported and synced!');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderStatusBadge(val) {
+      if (!val) return '';
+      const str = String(val).toLowerCase().trim();
+      if (['active', 'completed', 'done', 'ok', 'good', 'passed', 'clocked in'].includes(str)) return `<span class="badge badge-success">${val}</span>`;
+      if (['pending', 'in progress', 'open', 'medium', 'reorder'].includes(str)) return `<span class="badge badge-warning">${val}</span>`;
+      if (['urgent', 'high', 'out of stock', 'failed', 'inactive', 'overdue', 'clocked out'].includes(str)) return `<span class="badge badge-danger">${val}</span>`;
+      if (['low', 'info', 'scheduled'].includes(str)) return `<span class="badge badge-info">${val}</span>`;
+      return val;
+    }
+
+    function navigate(view) {
+      currentView = view;
+      document.querySelectorAll('sidebar a').forEach(a => a.classList.remove('active'));
+      const activeLink = document.querySelector(`sidebar a[onclick="navigate('${view}')"]`);
+      if(activeLink) activeLink.classList.add('active');
+
+      if (document.getElementById('sidebar').classList.contains('active')) {
+        toggleMenu();
+      }
+
+      const content = document.getElementById('content');
+      if (view === 'dashboard') {
+        renderDashboard();
+      } else if (view === 'clock') {
+        renderClockView();
+      } else if (view === 'calendar') {
+        renderCalendarView();
+      } else {
+        renderTablePage(view);
+      }
+    }
+
+    function renderDashboard() {
+      const content = document.getElementById('content');
+      const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
+      content.innerHTML = `
+        <div class="card">
+          <h2>Dashboard Overview</h2>
+          <div class="grid">
+            <div class="dash-btn" onclick="navigate('clock')">
+              <h3>${activeClockIns}</h3>
+              <p>On Site Now</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('volunteers')">
+              <h3>${(db.volunteers || []).length}</h3>
+              <p>Volunteers</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('actions')">
+              <h3>${(db.actions || []).length}</h3>
+              <p>Actions</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('maintenance')">
+              <h3>${(db.maintenance || []).length}</h3>
+              <p>Maintenance</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('events')">
+              <h3>${(db.events || []).length}</h3>
+              <p>Events</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('assets')">
+              <h3>${(db.assets || []).length}</h3>
+              <p>Assets</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('stock')">
+              <h3>${(db.stock || []).length}</h3>
+              <p>Stock</p>
+            </div>
+            <div class="dash-btn" onclick="navigate('notes')">
+              <h3>${(db.notes || []).length}</h3>
+              <p>Notes</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderClockView() {
+      const content = document.getElementById('content');
+      const volunteers = db.volunteers || [];
+      const options = volunteers.map(v => {
+        const name = getVolunteerName(v);
+        return `<option value="${name}">${name}</option>`;
+      }).join('');
+
+      content.innerHTML = `
+        <div class="card clock-card">
+          <h2>⏱️ Volunteer Clock In / Out</h2>
+          <p style="margin-bottom: 1.5rem; color: #64748b; font-size: 0.85rem;">Select your name to update your shift status.</p>
+          <form onsubmit="handleClockToggle(event)">
+            <select id="clockName" required>
+              <option value="">-- Select Your Name --</option>
+              ${options}
+            </select>
+            <select id="clockRole">
+              <option value="General Volunteer">General Volunteer</option>
+              <option value="Driver / Guard">Driver / Guard</option>
+              <option value="Maintenance">Maintenance</option>
+              <option value="Ticket Office / Shop">Ticket Office / Shop</option>
+              <option value="Café">Café</option>
+            </select>
+            <div style="display: flex; gap: 0.75rem;">
+              <button type="submit" onclick="window.clockAction='in'" class="clock-btn-in">Clock In</button>
+              <button type="submit" onclick="window.clockAction='out'" class="clock-btn-out">Clock Out</button>
+            </div>
+          </form>
+        </div>`;
+    }
+
+    function handleClockToggle(e) {
+      e.preventDefault();
+      const name = document.getElementById('clockName').value;
+      const role = document.getElementById('clockRole').value;
+      const action = window.clockAction;
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+
+      if (!db.clockLogs) db.clockLogs = [];
+
+      if (action === 'in') {
+        const existing = db.clockLogs.find(l => l.name === name && l.status === 'Clocked In');
+        if (existing) {
+          alert(`⚠️ ${name} is ALREADY clocked in (since ${existing.timeIn})!`);
+          return;
+        }
+        
+        db.clockLogs.push({
+          id: Date.now(),
+          name: name,
+          role: role,
+          date: todayStr,
+          timeIn: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timeOut: '',
+          hours: 0,
+          status: 'Clocked In'
+        });
+        
+        alert(`✅ Clocked In: ${name}`);
+      } else {
+        const activeLogIndex = db.clockLogs.findIndex(l => l.name === name && l.status === 'Clocked In');
+        if (activeLogIndex === -1) {
+          alert(`⚠️ ${name} is NOT currently clocked in!`);
+          return;
+        }
+
+        const log = db.clockLogs[activeLogIndex];
+        log.timeOut = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        log.status = 'Clocked Out';
+        
+        const inParts = log.timeIn.split(':');
+        const startMinutes = parseInt(inParts[0]) * 60 + parseInt(inParts[1]);
+        const endMinutes = now.getHours() * 60 + now.getMinutes();
+        
+        let diffHrs = (endMinutes - startMinutes) / 60;
+        if (diffHrs <= 0) diffHrs = 0.25; 
+        log.hours = Math.round(diffHrs * 10) / 10;
+
+        alert(`✅ Clocked Out: ${name} (${log.hours} hrs logged)`);
+      }
+
+      database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+      navigate('clock');
+    }
+
+    function changeMonth(delta) {
+      calDate.setMonth(calDate.getMonth() + delta);
+      renderCalendarView();
+    }
+
+    function renderCalendarView() {
+      const content = document.getElementById('content');
+      const year = calDate.getFullYear();
+      const month = calDate.getMonth();
+
+      const logs = db.clockLogs || [];
+      const totalAnnualHours = logs
+        .filter(l => l.date && l.date.startsWith(String(year)))
+        .reduce((sum, l) => sum + (Number(l.hours) || 0), 0);
+
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const monthName = calDate.toLocaleString('default', { month: 'long' });
+
+      let calDaysHTML = '';
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayLogs = logs.filter(l => l.date === dateStr);
+        const uniqueVolunteersCount = new Set(dayLogs.map(l => l.name)).size;
+
+        calDaysHTML += `
+          <div class="cal-day" onclick="showDayDetails('${dateStr}')">
+            <strong>${day}</strong>
+            ${uniqueVolunteersCount > 0 ? `<div class="cal-badge">${uniqueVolunteersCount} Present</div>` : ''}
+          </div>`;
+      }
+
+      content.innerHTML = `
+        <div class="card">
+          <div class="table-header">
+            <h2>📅 Attendance Overview</h2>
+            <div class="stat-badge">Annual Hours (${year}): <strong>${totalAnnualHours.toFixed(1)} hrs</strong></div>
+          </div>
+          
+          <div class="cal-controls">
+            <button class="cal-nav-btn" onclick="changeMonth(-1)">◀ Prev</button>
+            <h3 style="color: var(--primary); font-size: 1rem;">${monthName} ${year}</h3>
+            <button class="cal-nav-btn" onclick="changeMonth(1)">Next ▶</button>
+          </div>
+
+          <div class="calendar-grid">
+            <div class="cal-day-header">S</div><div class="cal-day-header">M</div><div class="cal-day-header">T</div>
+            <div class="cal-day-header">W</div><div class="cal-day-header">T</div><div class="cal-day-header">F</div>
+            <div class="cal-day-header">S</div>
+            ${calDaysHTML}
+          </div>
+        </div>
+        <div class="card mobile-cards">
+          <h3>Recent Shifts</h3>
+          <table>
+            <thead><tr><th>Date</th><th>Name</th><th>Role</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Status</th></tr></thead>
+            <tbody>
+              ${logs.length === 0 ? '<tr><td colspan="7">No shift records found.</td></tr>' :
+                logs.slice(-10).reverse().map(l => `
+                  <tr>
+                    <td data-label="Date">${l.date}</td>
+                    <td data-label="Name">${l.name}</td>
+                    <td data-label="Role">${l.role}</td>
+                    <td data-label="Time In">${l.timeIn}</td>
+                    <td data-label="Time Out">${l.timeOut || '-'}</td>
+                    <td data-label="Hours">${l.hours} hrs</td>
+                    <td data-label="Status">${renderStatusBadge(l.status)}</td>
+                  </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function showDayDetails(dateStr) {
+      const dayLogs = (db.clockLogs || []).filter(l => l.date === dateStr);
+      const title = document.getElementById('dayModalTitle');
+      const content = document.getElementById('dayModalContent');
+
+      title.innerText = `Attendance: ${dateStr}`;
+
+      if (dayLogs.length === 0) {
+        content.innerHTML = `<p style="color:#64748b; padding:1rem 0; text-align:center;">No volunteers logged shift time on this date.</p>`;
+      } else {
+        const aggregated = {};
+        dayLogs.forEach(log => {
+          if (!aggregated[log.name]) {
+            aggregated[log.name] = {
+              name: log.name,
+              totalHours: 0,
+              roles: new Set(),
+              currentlyActive: false,
+              shifts: 0
+            };
+          }
+          aggregated[log.name].totalHours += Number(log.hours) || 0;
+          aggregated[log.name].roles.add(log.role);
+          aggregated[log.name].shifts += 1;
+          if (log.status === 'Clocked In') {
+            aggregated[log.name].currentlyActive = true;
+          }
+        });
+
+        const listHTML = Object.values(aggregated).map(v => `
+          <div style="border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.65rem; background: #f8fafc;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <strong style="color:var(--primary); font-size:0.95rem;">${v.name}</strong>
+              ${v.currentlyActive ? '<span class="badge badge-success">Clocked In</span>' : '<span class="badge badge-info">Completed</span>'}
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#475569;">
+              <span>Role: <strong>${Array.from(v.roles).join(', ')}</strong> (${v.shifts} shift${v.shifts > 1 ? 's' : ''})</span>
+              <span>Total: <strong style="color:var(--primary);">${v.totalHours.toFixed(1)} hrs</strong></span>
+            </div>
+          </div>
+        `).join('');
+
+        content.innerHTML = listHTML;
+      }
+
+      document.getElementById('dayDetailsModal').style.display = 'flex';
+    }
+
+    function renderTablePage(view, query = '') {
+      const items = db[view] || [];
+      let rawHeaders = items.length > 0 ? Array.from(new Set(items.flatMap(obj => Object.keys(obj)))) : (schema[view] || ["Name", "Notes"]);
+      
+      const headers = view === 'events' 
+        ? rawHeaders.filter(h => !h.toLowerCase().endsWith('id')) 
+        : rawHeaders;
+
+      const filtered = items.filter(row => {
+        if (!query) return true;
+        return Object.values(row).some(v => String(v).toLowerCase().includes(query.toLowerCase()));
+      });
+
+      document.getElementById('content').innerHTML = `
+        <div class="card mobile-cards">
+          <div class="table-header">
+            <h2>${view.toUpperCase()}</h2>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; width:100%; max-width:400px; justify-content:flex-end;">
+              <input type="text" class="search-input" placeholder="🔍 Search ${view}..." value="${query}" oninput="filterTable('${view}', this.value)">
+              <button class="add-btn" onclick="openAddModal('${view}')">+ Add Record</button>
+            </div>
+          </div>
+          <table>
+            <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${filtered.length === 0 ? `<tr><td colspan="${headers.length}" style="text-align:center; color:#64748b;">No records found. Click <strong>+ Add Record</strong> to create one.</td></tr>` : 
+                filtered.map(row => `
+                  <tr>
+                    ${headers.map(h => `<td data-label="${h}">${renderStatusBadge(row[h] !== undefined ? row[h] : '')}</td>`).join('')}
+                  </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function filterTable(view, q) { renderTablePage(view, q); }
+
+    function openAddModal(view) {
+      const items = db[view] || [];
+      let rawHeaders = items.length > 0 ? Array.from(new Set(items.flatMap(obj => Object.keys(obj)))) : (schema[view] || ["Name", "Notes"]);
+      
+      const headers = view === 'events' 
+        ? rawHeaders.filter(h => !h.toLowerCase().endsWith('id')) 
+        : rawHeaders;
+
+      document.getElementById('modalTitle').innerText = `Add New ${view.slice(0, view.endsWith('s') ? -1 : view.length).toUpperCase()}`;
+      document.getElementById('formFields').innerHTML = headers.map(h => {
+        if (h.toLowerCase() === 'details' || h.toLowerCase() === 'notes') {
+          return `<div class="form-group"><label>${h}</label><textarea name="${h}" rows="3" placeholder="Enter ${h}..."></textarea></div>`;
+        }
+        return `<div class="form-group"><label>${h}</label><input type="text" name="${h}" placeholder="Enter ${h}..."></div>`;
+      }).join('');
+      document.getElementById('addModal').style.display = 'flex';
+    }
+
+    function closeModal(modalId) { 
+      document.getElementById(modalId).style.display = 'none'; 
+    }
+
+    function saveNewRecord(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const newRow = {};
+      formData.forEach((value, key) => { newRow[key] = value; });
+
+      if (!db[currentView]) db[currentView] = [];
+      db[currentView].push(newRow);
+
+      database.ref(`EVLT_ADMIN_DB/${currentView}`).set(db[currentView]);
+      closeModal('addModal');
+    }
+
+    window.onload = () => navigate('dashboard');
+  </script>
+        </body>
+      </html>
