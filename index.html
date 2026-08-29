@@ -1,0 +1,1791 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>EVLT Operations Platform</title>
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+        <script src="https://unpkg.com/lucide@latest"></script>
+        <style>
+    :root { 
+      --primary: #1e3a1e; 
+      --primary-hover: #152915;
+      --primary-light: #f0f4f0;
+      --accent: #2d5a2d;
+      
+      --bg: #f8fafc; 
+      --card-bg: #ffffff; 
+      --sidebar-bg: #0f172a;
+      --sidebar-hover: #1e293b;
+      --sidebar-text: #94a3b8;
+      --sidebar-text-active: #ffffff;
+      
+      --text: #0f172a; 
+      --text-muted: #64748b;
+      --border: #e2e8f0; 
+      --border-subtle: #f1f5f9;
+      
+      --radius-sm: 4px;
+      --radius: 6px;
+      --radius-lg: 8px;
+      
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08);
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-sans); }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+    
+    header { 
+      background: var(--primary); 
+      color: white; 
+      padding: 0 1.25rem; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      position: sticky; 
+      top: 0; 
+      z-index: 1001; 
+      height: 56px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .header-left { display: flex; align-items: center; gap: 0.85rem; }
+    
+    .header-logo { width: 38px; height: 38px; flex-shrink: 0; display: block; }
+    .brand-title { display: flex; align-items: center; gap: 0.65rem; font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; color: #ffffff; }
+    .brand-badge { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 3px; color: #f1f5f9; }
+    
+    .menu-btn { display: none; background: none; border: none; color: white; cursor: pointer; padding: 0.25rem; border-radius: var(--radius-sm); }
+    .menu-btn:hover { background: rgba(255,255,255,0.1); }
+    
+    .app-container { display: flex; flex: 1; position: relative; }
+    
+    sidebar { 
+      width: 230px; 
+      background: var(--sidebar-bg); 
+      color: var(--sidebar-text); 
+      padding: 0.85rem 0.65rem; 
+      flex-shrink: 0; 
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      transition: transform 0.2s ease; 
+      overflow-y: auto;
+      max-height: calc(100vh - 56px);
+      border-right: 1px solid var(--border);
+    }
+    .sidebar-section-label { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: #64748b; padding: 0.65rem 0.65rem 0.25rem 0.65rem; }
+    sidebar a { 
+      display: flex; 
+      align-items: center; 
+      gap: 0.65rem; 
+      padding: 0.5rem 0.65rem; 
+      color: var(--sidebar-text); 
+      text-decoration: none; 
+      font-weight: 500; 
+      font-size: 0.85rem; 
+      border-radius: var(--radius-sm);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    sidebar a:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+    sidebar a.active { background: var(--primary); color: var(--sidebar-text-active); font-weight: 600; }
+    sidebar a i { width: 16px; height: 16px; opacity: 0.85; }
+    
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); z-index: 999; }
+    
+    main { flex: 1; padding: 1.5rem 2rem; max-width: 1300px; width: 100%; margin: 0 auto; min-width: 0; }
+    
+    .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.85rem; }
+    .page-title h2 { font-size: 1.35rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.2; }
+    .page-title p { font-size: 0.825rem; color: var(--text-muted); margin-top: 0.2rem; }
+    
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.85rem; border-radius: var(--radius); font-size: 0.825rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap; }
+    .btn i { width: 15px; height: 15px; }
+    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+    .btn-secondary { background: white; border-color: var(--border); color: var(--text); }
+    .btn-secondary:hover { background: var(--bg); border-color: #cbd5e1; }
+    .btn-subtle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 0.3rem 0.5rem; }
+    .btn-subtle:hover { background: var(--border-subtle); color: var(--text); }
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.775rem; }
+
+    .section-group { margin-bottom: 2rem; }
+    .section-header { font-size: 0.9rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .section-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .grid-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.15rem; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 0.15s ease; display: flex; flex-direction: column; justify-content: space-between; }
+    .stat-card:hover { border-color: var(--primary); }
+    .stat-header { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
+    .stat-icon { width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+    .stat-icon i { width: 16px; height: 16px; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; margin-top: 0.5rem; }
+
+    .checks-table { width: 100%; border-collapse: collapse; }
+    .checks-row { cursor: pointer; transition: background 0.15s ease; }
+    .checks-row:hover { background: #f1f5f9 !important; }
+    .result-badge { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; color: white; font-weight: 700; }
+    .result-pass { background: #16a34a; }
+    .result-fail { background: #dc2626; }
+    .result-none { background: #cbd5e1; color: #475569; }
+    .train-tag { display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 8px; border-radius: 12px; font-size: 0.725rem; font-weight: 600; margin-right: 4px; margin-top: 2px; }
+    .fail-reason { color: #dc2626; font-weight: 600; font-size: 0.8rem; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .table-container { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.825rem; text-align: left; }
+    th { background: #f8fafc; font-weight: 600; color: var(--text-muted); padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.725rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    td { padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--border-subtle); color: var(--text); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 1rem; }
+    .modal { background: white; padding: 1.5rem; border-radius: var(--radius-lg); width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
+    .modal h3 { font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.65rem; }
+    .form-group { margin-bottom: 0.85rem; }
+    .form-group label { display: block; font-size: 0.775rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--text); }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.825rem; outline: none; background: white; transition: border-color 0.15s; }
+    .checkbox-group { display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.65rem; border-radius: var(--radius); background: #f8fafc; }
+    .checkbox-group label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 400; cursor: pointer; }
+    .checkbox-group input[type="checkbox"] { width: auto; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; border-top: 1px solid var(--border); padding-top: 0.85rem; }
+
+    .preview-thumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: var(--radius); margin-top: 0.5rem; border: 1px solid var(--border); }
+    .badge-out-of-service { background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; text-transform: uppercase; }
+
+    /* Login Firewall Styles */
+    #authOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: flex; justify-content: center; align-items: center; padding: 1rem; }
+    .login-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 380px; padding: 2rem; box-shadow: var(--shadow-lg); text-align: center; }
+    .login-logo { width: 64px; height: 64px; margin-bottom: 1rem; }
+    .login-error { color: #dc2626; font-size: 0.775rem; margin-top: 0.5rem; display: none; text-align: left; }
+    .auth-tabs { display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+    .auth-tab { flex: 1; padding: 0.4rem; background: none; border: none; font-size: 0.825rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
+    .auth-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* POS Terminal specific styles */
+    .pos-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; align-items: start; }
+    .pos-catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; max-height: 65vh; overflow-y: auto; padding-right: 0.25rem; }
+    .pos-item-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem; cursor: pointer; transition: all 0.15s ease; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; }
+    .pos-item-card:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+    .pos-item-name { font-weight: 600; font-size: 0.825rem; color: var(--text); }
+    .pos-item-price { font-weight: 700; color: var(--primary); font-size: 0.9rem; }
+    .pos-cart-panel { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: var(--shadow-sm); }
+    .cart-items-list { max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
+    .cart-item-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.825rem; }
+    .cart-summary-row { display: flex; justify-content: space-between; font-size: 0.9rem; font-weight: 600; }
+    .cart-summary-total { font-size: 1.15rem; font-weight: 700; color: var(--primary); }
+
+    @media (max-width: 900px) {
+      .pos-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .menu-btn { display: block; }
+      sidebar { position: fixed; top: 56px; left: 0; bottom: 0; height: calc(100vh - 56px); z-index: 1000; transform: translateX(-100%); width: 230px; padding-top: 0.85rem; }
+      sidebar.active { transform: translateX(0); }
+      .overlay.active { display: block; }
+      main { padding: 1rem; }
+      .page-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+    }
+  </style>
+      </head>
+      <body>
+        <div id="authOverlay">
+          <div class="login-card">
+            <svg class="login-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+              <defs>
+                <path id="topArcL" d="M 15,50 A 35,35 0 0,1 85,50" />
+                <path id="bottomArcL" d="M 85,50 A 35,35 0 0,1 15,50" />
+              </defs>
+              <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+                <textPath href="#topArcL" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+              </text>
+              <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+                <textPath href="#bottomArcL" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+              </text>
+              <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+              <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+              <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+              <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+            </svg>
+            <h2 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.25rem;">EVLT Platform</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">Access staff portal</p>
+            <div class="auth-tabs">
+              <button class="auth-tab active" id="signInTab" onclick="switchAuthTab('signin')">Sign In</button>
+              <button class="auth-tab" id="signUpTab" onclick="switchAuthTab('signup')">Create Account</button>
+            </div>
+            <form id="signInForm" onsubmit="handleLogin(event)">
+              <div class="form-group" style="text-align: left;">
+                <label>Username or Email</label>
+                <input type="text" id="loginUsername" required placeholder="e.g. driver1 or email@domain.com" autocomplete="username">
+                </div>
+                <div class="form-group" style="text-align: left;">
+                  <label>Password</label>
+                  <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
+                  </div>
+                  <div class="login-error" id="loginError">Invalid username or password.</div>
+                  <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem; justify-content: center;">Sign In</button>
+                </form>
+                <form id="signup-form" style="display: none;" onsubmit="handleSignUp(event)">
+                  <div class="form-group" style="text-align: left;">
+                    <label>Email Address</label>
+                    <input type="email" id="signup-email" placeholder="Email Address" required />
+                  </div>
+                  <div class="form-group" style="text-align: left;">
+                    <label>Password (min 6 chars)</label>
+                    <input type="password" id="signup-password" placeholder="Password (min 6 chars)" required />
+                  </div>
+                  <p id="signup-error" class="login-error">
+                  </p>
+                  <button id="signup-btn" type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem; justify-content: center;">Sign Up</button>
+                </form>
+              </div>
+            </div>
+            <header id="mainHeader" style="display: none;">
+              <div class="header-left">
+                <button class="menu-btn" onclick="toggleMenu()" aria-label="Toggle navigation menu">
+                  <i data-lucide="menu">
+                  </i>
+                </button>
+                <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+                  <defs>
+                    <path id="topArc" d="M 15,50 A 35,35 0 0,1 85,50" />
+                    <path id="bottomArc" d="M 85,50 A 35,35 0 0,1 15,50" />
+                  </defs>
+                  <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+                    <textPath href="#topArc" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+                  </text>
+                  <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+                    <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+                  </text>
+                  <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+                  <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+                  <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+                  <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+                </svg>
+                <div class="brand-title">
+                  <span>EVLT Operations Platform</span>
+                  <span class="brand-badge">Admin</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="file" id="excelFileInput" accept=".xlsx, .xls" style="display: none;" onchange="importExcel(event)">
+                  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('excelFileInput').click()">
+                    <i data-lucide="upload">
+                    </i> Import Excel
+                  </button>
+                  <button class="btn btn-subtle btn-sm" style="color: #f1f5f9;" onclick="handleLogout()">
+                    <i data-lucide="log-out">
+                    </i> Sign Out
+                  </button>
+                </div>
+              </header>
+              <div class="overlay" id="overlay" onclick="toggleMenu()">
+              </div>
+              <div class="app-container" id="mainApp" style="display: none;">
+                <sidebar id="sidebar">
+                  <div class="sidebar-section-label">Main</div>
+                  <a href="#" class="active" onclick="navigate('dashboard')">
+                    <i data-lucide="layout-dashboard">
+                    </i> Dashboard
+                  </a>
+                  <a href="#" onclick="navigate('clock')">
+                    <i data-lucide="clock">
+                    </i> Clock In/Out
+                  </a>
+                  <a href="#" onclick="navigate('calendar')">
+                    <i data-lucide="calendar">
+                    </i> Attendance & Hours
+                  </a>
+                  <div class="sidebar-section-label">Safety & Competency</div>
+                  <a href="#" onclick="navigate('incidents')">
+                    <i data-lucide="alert-triangle">
+                    </i> Incident & Defect Log
+                  </a>
+                  <a href="#" onclick="navigate('competency')">
+                    <i data-lucide="award">
+                    </i> Qualifications Matrix
+                  </a>
+                  <div class="sidebar-section-label">Operations</div>
+                  <a href="#" onclick="navigate('volunteers')">
+                    <i data-lucide="users">
+                    </i> Volunteers
+                  </a>
+                  <a href="#" onclick="navigate('actions')">
+                    <i data-lucide="check-square">
+                    </i> Actions
+                  </a>
+                  <a href="#" onclick="navigate('maintenance')">
+                    <i data-lucide="wrench">
+                    </i> Maintenance
+                  </a>
+                  <a href="#" onclick="navigate('events')">
+                    <i data-lucide="calendar-range">
+                    </i> Events
+                  </a>
+                  <div class="sidebar-section-label">Management</div>
+                  <a href="#" onclick="navigate('pos')">
+                    <i data-lucide="credit-card">
+                    </i> POS Terminal
+                  </a>
+                  <a href="#" onclick="navigate('assets')">
+                    <i data-lucide="box">
+                    </i> Assets
+                  </a>
+                  <a href="#" onclick="navigate('stock')">
+                    <i data-lucide="package">
+                    </i> Stock
+                  </a>
+                  <a href="#" onclick="navigate('suppliers')">
+                    <i data-lucide="truck">
+                    </i> Suppliers
+                  </a>
+                  <a href="#" onclick="navigate('enquiries')">
+                    <i data-lucide="help-circle">
+                    </i> Enquiries
+                  </a>
+                  <a href="#" onclick="navigate('documents')">
+                    <i data-lucide="file-text">
+                    </i> Documents
+                  </a>
+                  <a href="#" onclick="navigate('notes')">
+                    <i data-lucide="sticky-note">
+                    </i> Notes
+                  </a>
+                  <div class="sidebar-section-label">Archives</div>
+                  <a href="#" onclick="navigate('archives')">
+                    <i data-lucide="archive">
+                    </i> Historical Archives
+                  </a>
+                </sidebar>
+                <main id="content">
+                </main>
+              </div>
+              <div class="modal-overlay" id="dayDetailModal">
+                <div class="modal">
+                  <h3 id="dayDetailTitle">Attendance Logs</h3>
+                  <div id="dayDetailContent" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 60vh; overflow-y: auto;">
+                  </div>
+                  <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('dayDetailModal')">Close</button>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-overlay" id="opCheckModal">
+                <div class="modal">
+                  <h3 id="opCheckTitle">Log Inspection Check</h3>
+                  <form onsubmit="saveOpCheck(event)">
+                    <input type="hidden" id="opCheckKey" value="">
+                      <div class="form-group">
+                        <label>Inspected By (Volunteer)</label>
+                        <select id="opCheckInspector" required>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label>Inspection Outcome</label>
+                        <select id="opCheckResult" required onchange="toggleOpCheckReason(this.value)">
+                          <option value="Pass">Pass</option>
+                          <option value="Fail">Fail</option>
+                          <option value="Not Completed">Not Completed</option>
+                        </select>
+                      </div>
+                      <div class="form-group" id="reasonSelectionGroup" style="display: none;">
+                        <label id="reasonLabel">Reason for Failure</label>
+                        <textarea id="opCheckReason" rows="3" placeholder="Specify failure reason or defect...">
+                        </textarea>
+                      </div>
+                      <div class="form-group" id="trainSelectionGroup">
+                        <label>Locomotives Used (Select single running loco)</label>
+                        <select id="opCheckLocoSelect" class="form-group">
+                          <option value="">-- Select Locomotive --</option>
+                        </select>
+                        <div class="checkbox-group" id="trainCheckboxes" style="display:none;">
+                        </div>
+                      </div>
+                      <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('opCheckModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Check</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+                <div class="modal-overlay" id="incidentModal">
+                  <div class="modal">
+                    <h3>Log Incident / Defect</h3>
+                    <form id="incidentForm" onsubmit="saveIncident(event); return false;">
+                      <div class="form-group">
+                        <label>Asset / Locomotive / Location</label>
+                        <input type="text" id="incidentAsset" placeholder="e.g. Canadian Pacific, North Turnout" required>
+                        </div>
+                        <div class="form-group">
+                          <label>Defect Description</label>
+                          <textarea id="incidentDesc" rows="3" placeholder="Describe the issue or defect..." required>
+                          </textarea>
+                        </div>
+                        <div class="form-group">
+                          <label>Red Tag Status (Out of Service)</label>
+                          <select id="incidentRedTag">
+                            <option value="Operational">Operational (Minor Issue)</option>
+                            <option value="Out of Service">Out of Service (LOCKOUT / RED TAG)</option>
+                          </select>
+                        </div>
+                        <div class="form-group">
+                          <label>Defect Photo (Optional)</label>
+                          <input type="file" id="incidentPhoto" accept="image/*" onchange="previewIncidentPhoto(event)">
+                            <img id="incidentPhotoPreview" class="preview-thumb" style="display:none;" />
+                          </div>
+                          <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Report Defect</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                    <div class="modal-overlay" id="genericModal">
+                      <div class="modal">
+                        <h3 id="genericModalTitle">Add Item</h3>
+                        <form id="genericForm" onsubmit="saveGenericItem(event)">
+                          <div id="genericFormFields">
+                          </div>
+                          <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" onclick="closeModal('genericModal')">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Item</button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                    <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMx-PXg-AMY",
+      authDomain: "evlt-admin.firebaseapp.com",
+      databaseURL: "https://evlt-admin-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "evlt-admin",
+      storageBucket: "evlt-admin.firebasestorage.app",
+      messagingSenderId: "603418741774",
+      appId: "1:603418741774:web:b9d4717f3d-c4a3ede5805f"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const auth = firebase.auth();
+
+    let db = {};
+    let currentView = 'dashboard';
+    let tempPhotoBase64 = '';
+    let currentCalendarDate = new Date();
+    let editingIndex = null;
+    let posCart = [];
+
+    const AVAILABLE_TRAINS = ["Canadian Pacific", "DB", "Santa Fe", "George", "Edward", "Dylan"];
+    const AVAILABLE_ROLES = ["Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom"];
+
+    /* Tab Switcher for Sign In vs Sign Up */
+    function switchAuthTab(tab) {
+      const signInForm = document.getElementById('signInForm');
+      const signUpForm = document.getElementById('signup-form');
+      const signInTab = document.getElementById('signInTab');
+      const signUpTab = document.getElementById('signUpTab');
+
+      if (tab === 'signin') {
+        signInForm.style.display = 'block';
+        signUpForm.style.display = 'none';
+        signInTab.classList.add('active');
+        signUpTab.classList.remove('active');
+      } else {
+        signInForm.style.display = 'none';
+        signUpForm.style.display = 'block';
+        signUpTab.classList.add('active');
+        signInTab.classList.remove('active');
+      }
+    }
+
+    /* Firebase Auth Observer */
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        document.getElementById('authOverlay').style.display = 'none';
+        document.getElementById('mainHeader').style.display = 'flex';
+        document.getElementById('mainApp').style.display = 'flex';
+        initRealtimeDatabase();
+      } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('mainHeader').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'none';
+      }
+    });
+
+    function handleLogin(e) {
+      e.preventDefault();
+      let userInput = document.getElementById('loginUsername').value.trim();
+      const pass = document.getElementById('loginPassword').value;
+      const errorEl = document.getElementById('loginError');
+      errorEl.style.display = 'none';
+
+      let authEmail = userInput;
+      if (!authEmail.includes('@')) {
+        authEmail = `${userInput.toLowerCase()}@evlt.internal`;
+      }
+
+      auth.signInWithEmailAndPassword(authEmail, pass).catch((error) => {
+        errorEl.innerText = "Invalid username or password.";
+        errorEl.style.display = 'block';
+      });
+    }
+
+    function handleSignUp(e) {
+      e.preventDefault();
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      const errorElement = document.getElementById('signup-error');
+
+      errorElement.style.display = 'none';
+      errorElement.textContent = '';
+
+      auth.createUserWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+          console.log('Account created for:', userCredential.user.email);
+        })
+        .catch((error) => {
+          errorElement.textContent = error.message;
+          errorElement.style.display = 'block';
+        });
+    }
+
+    function handleLogout() {
+      auth.signOut();
+    }
+
+    function getTodayString() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    }
+
+    function initRealtimeDatabase() {
+      database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+        db = snapshot.val() || {};
+        if (!db.clockLogs) db.clockLogs = [];
+        if (!db.incidents) db.incidents = [];
+        if (!db.volunteers) db.volunteers = [];
+        if (!db.maintenance) db.maintenance = [];
+        if (!db.actions) db.actions = [];
+        if (!db.events) db.events = [];
+        if (!db.assets) db.assets = [];
+        if (!db.stock) db.stock = [];
+        if (!db.suppliers) db.suppliers = [];
+        if (!db.enquiries) db.enquiries = [];
+        if (!db.documents) db.documents = [];
+        if (!db.notes) db.notes = [];
+        if (!db.historicalArchive) db.historicalArchive = [];
+        if (!db.posSales) db.posSales = [];
+
+        const todayStr = getTodayString();
+        if (!db.dailyChecks || db.dailyChecks.lastCheckDate !== todayStr) {
+          if (db.dailyChecks && db.dailyChecks.lastCheckDate) {
+            db.historicalArchive.push({
+              date: db.dailyChecks.lastCheckDate,
+              checks: db.dailyChecks,
+              logs: (db.clockLogs || []).filter(l => l.date === db.dailyChecks.lastCheckDate)
+            });
+            database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+          }
+
+          db.dailyChecks = {
+            lastCheckDate: todayStr,
+            trackWalk: { inspector: '', result: '', notes: '', trains: [] },
+            testRun: { inspector: '', result: '', notes: '', trains: [] }
+          };
+          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        }
+
+        navigate(currentView);
+      });
+    }
+
+    function toggleMenu() {
+      document.getElementById('sidebar').classList.toggle('active');
+      document.getElementById('overlay').classList.toggle('active');
+    }
+
+    function getVolunteerName(v) {
+      return v.Name || v.name || v['Volunteer Name'] || v['Volunteer ID'] || 'Unknown';
+    }
+
+    function getRedTaggedAssets() {
+      return (db.incidents || [])
+        .filter(i => String(i['Red Tag Status']).toLowerCase() === 'out of service' && String(i.Status).toLowerCase() !== 'resolved')
+        .map(i => String(i.asset || i['Asset / Location'] || '').toLowerCase());
+    }
+
+    function openOpCheckModal(checkKey) {
+      const daily = db.dailyChecks || { trackWalk: {}, testRun: {} };
+
+      if (checkKey === 'testRun') {
+        if (!daily.trackWalk || daily.trackWalk.result !== 'Pass') {
+          alert('Cannot complete Test Run until a Track Walk has been successfully completed and passed.');
+          return;
+        }
+      }
+
+      const checkData = daily[checkKey] ? daily[checkKey] : { inspector: '', result: 'Pass', notes: '', trains: [] };
+      document.getElementById('opCheckKey').value = checkKey;
+      document.getElementById('opCheckTitle').innerText = checkKey === 'trackWalk' ? 'Log Track Walk' : 'Log Test Run';
+
+      const volunteers = db.volunteers || [];
+      const inspectorSelect = document.getElementById('opCheckInspector');
+      
+      inspectorSelect.innerHTML = '<option value="">-- Select Qualified Volunteer --</option>' + 
+        volunteers.map(v => {
+          const name = getVolunteerName(v);
+          const roles = String(v.Roles || v.roles || '');
+          if (checkKey === 'trackWalk' && !roles.includes('Maintenance') && !roles.includes('Driver')) return '';
+          return `<option value="${name}" ${checkData.inspector === name ? 'selected' : ''}>${name} (${roles || 'Standard'})</option>`;
+        }).join('');
+
+      const resultVal = checkData.result || 'Pass';
+      document.getElementById('opCheckResult').value = resultVal;
+      document.getElementById('opCheckReason').value = checkData.notes || '';
+      toggleOpCheckReason(resultVal);
+
+      const trainGroup = document.getElementById('trainSelectionGroup');
+      if (checkKey === 'testRun') {
+        trainGroup.style.display = 'block';
+        const redTagged = getRedTaggedAssets();
+        const locoSelect = document.getElementById('opCheckLocoSelect');
+        const activeLoco = (checkData.trains && checkData.trains.length > 0) ? checkData.trains[0] : '';
+
+        locoSelect.innerHTML = '<option value="">-- Select Running Locomotive --</option>' + 
+          AVAILABLE_TRAINS.map(train => {
+            const isRedTagged = redTagged.some(rt => rt.includes(train.toLowerCase()));
+            if (isRedTagged) return '';
+            return `<option value="${train}" ${activeLoco === train ? 'selected' : ''}>${train}</option>`;
+          }).join('');
+      } else {
+        trainGroup.style.display = 'none';
+      }
+
+      document.getElementById('opCheckModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function saveOpCheck(e) {
+      e.preventDefault();
+      const checkKey = document.getElementById('opCheckKey').value;
+      const inspector = document.getElementById('opCheckInspector').value;
+      const result = document.getElementById('opCheckResult').value;
+      const notes = document.getElementById('opCheckReason').value;
+      
+      if (!inspector) {
+        alert('Please select a qualified volunteer inspector.');
+        return;
+      }
+
+      const selectedTrains = [];
+      if (checkKey === 'testRun') {
+        const chosenLoco = document.getElementById('opCheckLocoSelect').value;
+        if (chosenLoco) selectedTrains.push(chosenLoco);
+      }
+
+      if (!db.dailyChecks) db.dailyChecks = {};
+      db.dailyChecks.lastCheckDate = getTodayString();
+      db.dailyChecks[checkKey] = { inspector, result, notes, trains: selectedTrains };
+
+      if (checkKey === 'trackWalk' && result === 'Fail') {
+        db.dailyChecks.testRun = { inspector: '', result: 'Fail', notes: 'Automatically invalidated due to Track Walk failure.', trains: [] };
+      }
+
+      database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+      closeModal('opCheckModal');
+      renderDashboard();
+    }
+
+    function toggleOpCheckReason(resultVal) {
+      const reasonGroup = document.getElementById('reasonSelectionGroup');
+      const reasonInput = document.getElementById('opCheckReason');
+      if (resultVal === 'Fail') {
+        reasonGroup.style.display = 'block';
+        reasonInput.required = true;
+      } else {
+        reasonGroup.style.display = 'none';
+        reasonInput.required = false;
+      }
+    }
+
+    function openIncidentModal() {
+      tempPhotoBase64 = '';
+      document.getElementById('incidentAsset').value = '';
+      document.getElementById('incidentDesc').value = '';
+      document.getElementById('incidentRedTag').value = 'Operational';
+      document.getElementById('incidentPhoto').value = '';
+      document.getElementById('incidentPhotoPreview').style.display = 'none';
+      document.getElementById('incidentModal').style.display = 'flex';
+    }
+
+    function previewIncidentPhoto(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          tempPhotoBase64 = evt.target.result;
+          const img = document.getElementById('incidentPhotoPreview');
+          img.src = tempPhotoBase64;
+          img.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function saveIncident(e) {
+      e.preventDefault(); 
+      try {
+        const asset = document.getElementById('incidentAsset').value;
+        const desc = document.getElementById('incidentDesc').value;
+        const redTag = document.getElementById('incidentRedTag').value;
+
+        const newIncident = {
+          id: Date.now(),
+          asset: asset, 
+          Description: desc,
+          'Red Tag Status': redTag,
+          Status: 'Open',
+          Date: new Date().toLocaleDateString('en-GB'),
+          Photo: tempPhotoBase64
+        };
+
+        if (!db.incidents) db.incidents = [];
+        db.incidents.push(newIncident);
+
+        closeModal('incidentModal');
+        document.getElementById('incidentForm').reset();
+        document.getElementById('incidentPhotoPreview').style.display = 'none';
+        tempPhotoBase64 = ''; 
+
+        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+        
+        if (currentView === 'incidents') {
+          renderIncidents();
+        } else {
+          renderDashboard();
+        }
+      } catch (error) {
+        console.error("Error saving incident:", error);
+        alert("There was an error saving the defect. Please try again.");
+      }
+    }
+
+    function resolveIncident(idx) {
+      if (db.incidents && db.incidents[idx]) {
+        db.incidents[idx].Status = 'Resolved';
+        database.ref(`EVLT_ADMIN_DB/incidents/${idx}`).set(db.incidents[idx]);
+        renderIncidents();
+      }
+    }
+
+    function handleClockAction(e) {
+      e.preventDefault();
+      const name = document.getElementById('clockVolunteer').value;
+      const action = document.getElementById('clockActionType').value;
+      const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = getTodayString();
+
+      if (!db.clockLogs) db.clockLogs = [];
+
+      if (action === 'In') {
+        const alreadyClockedIn = db.clockLogs.some(l => l.name === name && l.status === 'Clocked In');
+        if (alreadyClockedIn) {
+          alert('You are already clocked in! Please clock out first.');
+          return;
+        }
+        db.clockLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: timeStr, clockOut: '-', status: 'Clocked In' });
+      } else {
+        const activeLog = db.clockLogs.slice().reverse().find(l => l.name === name && l.status === 'Clocked In');
+        if (activeLog) {
+          activeLog.clockOut = timeStr;
+          activeLog.status = 'Completed';
+        } else {
+          alert('No active clock-in session found for this user.');
+          return;
+        }
+      }
+
+      database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+      renderClock();
+    }
+
+    function importExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.SheetNames[0];
+          const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet]);
+          
+          db.volunteers = json;
+          database.ref('EVLT_ADMIN_DB/volunteers').set(json);
+          alert(`Successfully imported ${json.length} records!`);
+          navigate(currentView);
+        } catch (err) {
+          alert('Error parsing Excel file.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    /* POS Terminal Functions */
+    function addToPosCart(name, price) {
+      const existing = posCart.find(i => i.name === name);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        posCart.push({ name, price: Number(price), qty: 1 });
+      }
+      renderPOS();
+    }
+
+    function updatePosQty(index, change) {
+      posCart[index].qty += change;
+      if (posCart[index].qty <= 0) {
+        posCart.splice(index, 1);
+      }
+      renderPOS();
+    }
+
+    function clearPosCart() {
+      posCart = [];
+      renderPOS();
+    }
+
+    function processPosPayment(method) {
+      if (posCart.length === 0) {
+        alert('Cart is empty.');
+        return;
+      }
+      const total = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      const saleRecord = {
+        id: Date.now(),
+        date: getTodayString(),
+        time: new Date().toLocaleTimeString('en-GB'),
+        method: method,
+        items: [...posCart],
+        total: total
+      };
+
+      if (!db.posSales) db.posSales = [];
+      db.posSales.push(saleRecord);
+      database.ref('EVLT_ADMIN_DB/posSales').set(db.posSales);
+
+      alert(`Successfully processed £${total.toFixed(2)} via ${method}!`);
+      posCart = [];
+      renderPOS();
+    }
+
+    function renderPOS() {
+      const content = document.getElementById('content');
+      const defaultItems = [
+        { Item: 'Adult Museum Entry', Category: 'Tickets', Quantity: 100, Price: 8.50 },
+        { Item: 'Child Museum Entry', Category: 'Tickets', Quantity: 100, Price: 4.50 },
+        { Item: 'Family Ticket (2+2)', Category: 'Tickets', Quantity: 50, Price: 22.00 },
+        { Item: 'Railway Guidebook', Category: 'Shop', Quantity: 40, Price: 5.00 },
+        { Item: 'Souvenir Mug', Category: 'Shop', Quantity: 25, Price: 7.50 },
+        { Item: 'Tea / Coffee', Category: 'Tearoom', Quantity: 200, Price: 2.00 },
+        { Item: 'Piece of Cake', Category: 'Tearoom', Quantity: 80, Price: 3.00 },
+        { Item: 'Ice Cream', Category: 'Tearoom', Quantity: 120, Price: 2.50 }
+      ];
+
+      const stockItems = (db.stock && db.stock.length > 0) ? db.stock : defaultItems;
+      let subtotal = posCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>POS Terminal</h2>
+            <p>Process shop sales, museum tickets, and tearoom purchases.</p>
+          </div>
+        </div>
+
+        <div class="pos-layout">
+          <div class="card" style="padding: 1.25rem;">
+            <div style="font-weight: 700; margin-bottom: 0.75rem; font-size: 0.9rem; color: var(--text-muted);">Quick Catalog</div>
+            <div class="pos-catalog">
+              ${stockItems.map(item => {
+                const name = item.Item || item.name || 'Item';
+                const price = item.Price !== undefined ? Number(item.Price) : (item.price !== undefined ? Number(item.price) : 5.00);
+                return `
+                  <div class="pos-item-card" onclick="addToPosCart('${name.replace(/'/g, "\\'")}', ${price})">
+                    <div class="pos-item-name">${name}</div>
+                    <div class="pos-item-price">£${price.toFixed(2)}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="pos-cart-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.65rem;">
+              <h3 style="font-size: 1rem; font-weight: 700; margin:0;">Current Sale</h3>
+              <button class="btn btn-subtle btn-sm" onclick="clearPosCart()" style="color: #dc2626;"><i data-lucide="trash-2"></i> Clear</button>
+            </div>
+
+            <div class="cart-items-list">
+              ${posCart.length === 0 ? '<div style="text-align: center; color: var(--text-muted); padding: 1.5rem; font-size: 0.85rem;">Cart is empty. Click items from the catalog.</div>' :
+                posCart.map((item, idx) => `
+                  <div class="cart-item-row">
+                    <div>
+                      <div style="font-weight: 600;">${item.name}</div>
+                      <div style="font-size: 0.75rem; color: var(--text-muted);">£${item.price.toFixed(2)} x ${item.qty}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.4rem;">
+                      <button class="btn btn-secondary btn-sm" style="padding: 1px 6px;" onclick="updatePosQty(${idx}, -1)">-</button>
+                      <span style="font-weight: 600; width: 16px; text-align: center;">${item.qty}</span>
+                      <button class="btn btn-secondary btn-sm" style="padding: 1px 6px;" onclick="updatePosQty(${idx}, 1)">+</button>
+                    </div>
+                  </div>
+                `).join('')}
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              <div class="cart-summary-row">
+                <span>Subtotal</span>
+                <span>£${subtotal.toFixed(2)}</span>
+              </div>
+              <div class="cart-summary-row" style="border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.2rem;">
+                <span>Total Due</span>
+                <span class="cart-summary-total">£${subtotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+              <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #0284c7; border-color: #0284c7;" onclick="processPosPayment('Card / Square Terminal')">
+                <i data-lucide="credit-card"></i> Charge via Square Terminal
+              </button>
+              <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="processPosPayment('Cash')">
+                <i data-lucide="banknote"></i> Pay with Cash (£)
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    /* Generic Add/Edit Framework */
+    const moduleSchemas = {
+      actions: {
+        title: 'Action Item',
+        fields: [
+          { key: 'Title', label: 'Action Title', type: 'text', required: true },
+          { key: 'AssignedTo', label: 'Assigned To', type: 'text', required: false },
+          { key: 'DueDate', label: 'Due Date', type: 'date', required: false },
+          { key: 'Status', label: 'Status', type: 'select', options: ['Open', 'In Progress', 'Completed'], required: true }
+        ]
+      },
+      maintenance: {
+        title: 'Maintenance Task',
+        fields: [
+          { key: 'Asset', label: 'Asset / Equipment', type: 'text', required: true },
+          { key: 'Task', label: 'Maintenance Description', type: 'textarea', required: true },
+          { key: 'Priority', label: 'Priority', type: 'select', options: ['Low', 'Medium', 'High', 'Critical'], required: true },
+          { key: 'Status', label: 'Status', type: 'select', options: ['Scheduled', 'In Progress', 'Completed'], required: true }
+        ]
+      },
+      events: {
+        title: 'Event / Running Day',
+        fields: [
+          { key: 'Title', label: 'Event Name', type: 'text', required: true },
+          { key: 'StartDate', label: 'Start Date', type: 'date', required: true },
+          { key: 'EndDate', label: 'End Date', type: 'date', required: false },
+          { key: 'Description', label: 'Description', type: 'textarea', required: false }
+        ]
+      },
+      assets: {
+        title: 'Asset',
+        fields: [
+          { key: 'Name', label: 'Asset Name / Number', type: 'text', required: true },
+          { key: 'Type', label: 'Category (Loco, Carriage, Track, etc.)', type: 'text', required: true },
+          { key: 'Status', label: 'Operational Status', type: 'select', options: ['Operational', 'Maintenance Required', 'Out of Service'], required: true }
+        ]
+      },
+      stock: {
+        title: 'Stock Item',
+        fields: [
+          { key: 'Item', label: 'Item Name', type: 'text', required: true },
+          { key: 'Category', label: 'Category', type: 'text', required: false },
+          { key: 'Quantity', label: 'Quantity in Stock', type: 'number', required: true },
+          { key: 'Price', label: 'Unit Price (£)', type: 'number', required: true }
+        ]
+      },
+      suppliers: {
+        title: 'Supplier',
+        fields: [
+          { key: 'Name', label: 'Supplier / Company Name', type: 'text', required: true },
+          { key: 'Contact', label: 'Contact Person', type: 'text', required: false }
+        ]
+      },
+      enquiries: {
+        title: 'Enquiry',
+        fields: [
+          { key: 'Enquirer', label: 'Enquirer Name', type: 'text', required: true },
+          { key: 'Details', label: 'Enquiry Details', type: 'textarea', required: true },
+          { key: 'Status', label: 'Status', type: 'select', options: ['New', 'Responded', 'Closed'], required: true }
+        ]
+      },
+      documents: {
+        title: 'Document',
+        fields: [
+          { key: 'Title', label: 'Document Title', type: 'text', required: true },
+          { key: 'Category', label: 'Category / Rulebook', type: 'text', required: false },
+          { key: 'Link', label: 'URL / Reference', type: 'text', required: false }
+        ]
+      },
+      notes: {
+        title: 'Note',
+        fields: [
+          { key: 'Author', label: 'Author Name', type: 'text', required: true },
+          { key: 'Content', label: 'Handover Note / Log', type: 'textarea', required: true }
+        ]
+      }
+    };
+
+    function openGenericModal(moduleKey, index = null) {
+      if (moduleKey === 'volunteers') {
+        openVolunteerModal(index);
+        return;
+      }
+
+      editingIndex = index;
+      const schema = moduleSchemas[moduleKey];
+      document.getElementById('genericModalTitle').innerText = (index !== null ? 'Edit ' : 'Add ') + schema.title;
+      
+      const container = document.getElementById('genericFormFields');
+      const itemData = (index !== null && db[moduleKey]) ? db[moduleKey][index] : {};
+
+      container.innerHTML = schema.fields.map(f => {
+        const val = itemData[f.key] !== undefined ? itemData[f.key] : '';
+        if (f.type === 'select') {
+          return `
+            <div class="form-group">
+              <label>${f.label}</label>
+              <select id="gen_${f.key}" ${f.required ? 'required' : ''}>
+                ${f.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+              </select>
+            </div>
+          `;
+        } else if (f.type === 'textarea') {
+          return `
+            <div class="form-group">
+              <label>${f.label}</label>
+              <textarea id="gen_${f.key}" rows="3" ${f.required ? 'required' : ''}>${val}</textarea>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="form-group">
+              <label>${f.label}</label>
+              <input type="${f.type}" id="gen_${f.key}" value="${val}" ${f.required ? 'required' : ''}>
+            </div>
+          `;
+        }
+      }).join('');
+
+      document.getElementById('genericModal').style.display = 'flex';
+    }
+
+    function openVolunteerModal(index = null) {
+      editingIndex = index;
+      document.getElementById('genericModalTitle').innerText = (index !== null ? 'Edit Volunteer' : 'Add Volunteer');
+      const container = document.getElementById('genericFormFields');
+      const itemData = (index !== null && db.volunteers) ? db.volunteers[index] : {};
+
+      const nameVal = itemData.Name || itemData.name || '';
+      const dbsVal = itemData['DBS Status'] || itemData.dbsStatus || 'Pending';
+      const notesVal = itemData.Notes || itemData.notes || '';
+
+      let currentRoles = itemData.Roles || itemData.roles || [];
+      if (typeof currentRoles === 'string') currentRoles = currentRoles.split(',').map(s => s.trim());
+
+      container.innerHTML = `
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="vol_name" value="${nameVal}" required>
+        </div>
+        <div class="form-group">
+          <label>Roles / Qualified Areas</label>
+          <div class="checkbox-group">
+            ${AVAILABLE_ROLES.map(role => `
+              <label>
+                <input type="checkbox" name="volRole" value="${role}" ${currentRoles.includes(role) ? 'checked' : ''}>
+                ${role}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>DBS Status</label>
+          <select id="vol_dbs">
+            <option value="Pending" ${dbsVal === 'Pending' ? 'selected' : ''}>Pending</option>
+            <option value="Cleared" ${dbsVal === 'Cleared' ? 'selected' : ''}>Cleared</option>
+            <option value="N/A" ${dbsVal === 'N/A' ? 'selected' : ''}>N/A</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Volunteer Notes</label>
+          <textarea id="vol_notes" rows="3">${notesVal}</textarea>
+        </div>
+      `;
+
+      document.getElementById('genericModal').style.display = 'flex';
+    }
+
+    function saveGenericItem(e) {
+      e.preventDefault();
+      if (currentView === 'volunteers') {
+        const name = document.getElementById('vol_name').value;
+        const selectedRoles = [];
+        document.querySelectorAll('input[name="volRole"]:checked').forEach(cb => selectedRoles.push(cb.value));
+        const dbsStatus = document.getElementById('vol_dbs').value;
+        const notes = document.getElementById('vol_notes').value;
+
+        const newVol = {
+          Name: name,
+          Roles: selectedRoles.join(', '),
+          'DBS Status': dbsStatus,
+          Notes: notes
+        };
+
+        if (!db.volunteers) db.volunteers = [];
+        if (editingIndex !== null) {
+          db.volunteers[editingIndex] = newVol;
+        } else {
+          db.volunteers.push(newVol);
+        }
+
+        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        closeModal('genericModal');
+        navigate('volunteers');
+        return;
+      }
+
+      const schema = moduleSchemas[currentView];
+      if (!schema) return;
+
+      const newItem = {};
+      schema.fields.forEach(f => {
+        newItem[f.key] = document.getElementById(`gen_${f.key}`).value;
+      });
+
+      if (!db[currentView]) db[currentView] = [];
+      if (editingIndex !== null) {
+        db[currentView][editingIndex] = newItem;
+      } else {
+        db[currentView].push(newItem);
+      }
+
+      database.ref(`EVLT_ADMIN_DB/${currentView}`).set(db[currentView]);
+      closeModal('genericModal');
+      navigate(currentView);
+    }
+
+    function deleteItem(moduleKey, index) {
+      if (confirm('Are you sure you want to delete this item?')) {
+        if (db[moduleKey]) {
+          db[moduleKey].splice(index, 1);
+          database.ref(`EVLT_ADMIN_DB/${moduleKey}`).set(db[moduleKey]);
+          navigate(currentView);
+        }
+      }
+    }
+
+    /* Views Rendering */
+    function renderDashboard() {
+      const content = document.getElementById('content');
+      const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
+      const openIncidents = (db.incidents || []).filter(i => String(i.Status).toLowerCase() !== 'resolved').length;
+      const pendingMaintenance = (db.maintenance || []).filter(m => String(m.Status || m.status).toLowerCase() !== 'completed').length;
+      const daily = db.dailyChecks || { trackWalk: {}, testRun: {} };
+
+      const renderResultIcon = (res) => {
+        if (res === 'Pass') return '<div class="result-badge result-pass"><i data-lucide="check" style="width:16px;height:16px;"></i></div>';
+        if (res === 'Fail') return '<div class="result-badge result-fail"><i data-lucide="x" style="width:16px;height:16px;"></i></div>';
+        return '<div class="result-badge result-none">-</div>';
+      };
+
+      const trackWalkPassed = daily.trackWalk && daily.trackWalk.result === 'Pass';
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Operations Dashboard</h2>
+            <p>Railway daily safety inspections and site activity overview (${getTodayString()}).</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openIncidentModal()">
+            <i data-lucide="alert-triangle"></i> Report Defect / Red Tag
+          </button>
+        </div>
+
+        <div class="section-group">
+          <div class="section-header">Daily Safety Inspections (Resets Daily)</div>
+          <div class="card">
+            <div class="table-container">
+              <table class="checks-table">
+                <thead>
+                  <tr>
+                    <th>Check Type</th>
+                    <th>Inspected By</th>
+                    <th style="text-align:center;">Result</th>
+                    <th>Notes / Running Locos</th>
+                    <th style="text-align:right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="checks-row" onclick="openOpCheckModal('trackWalk')">
+                    <td><strong>Track Walk</strong></td>
+                    <td>${daily.trackWalk?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                    <td style="text-align:center;">${renderResultIcon(daily.trackWalk?.result)}</td>
+                    <td>${daily.trackWalk?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.trackWalk.notes || 'None'}</span>` : '<em style="color:var(--text-muted); font-size:0.8rem;">Completed on foot</em>'}</td>
+                    <td style="text-align:right;"><button class="btn btn-subtle btn-sm"><i data-lucide="edit-2"></i> Edit</button></td>
+                  </tr>
+                  <tr class="checks-row" onclick="openOpCheckModal('testRun')" style="${!trackWalkPassed ? 'opacity: 0.6;' : ''}">
+                    <td><strong>Test Run ${!trackWalkPassed ? '(Locked)' : ''}</strong></td>
+                    <td>${daily.testRun?.inspector || '<span style="color:var(--text-muted);">' + (trackWalkPassed ? 'Unassigned' : 'Locked: Needs Track Walk Pass') + '</span>'}</td>
+                    <td style="text-align:center;">${renderResultIcon(daily.testRun?.result)}</td>
+                    <td>
+                      ${(daily.testRun?.trains || []).map(t => `<span class="train-tag">${t}</span>`).join('') || '<span style="color:var(--text-muted); font-size:0.8rem;">No train set</span>'}
+                      ${daily.testRun?.result === 'Fail' ? `<div class="fail-reason">Reason: ${daily.testRun.notes}</div>` : ''}
+                    </td>
+                    <td style="text-align:right;"><button class="btn btn-subtle btn-sm"><i data-lucide="edit-2"></i> Edit</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-group">
+          <div class="section-header">Operational Summary</div>
+          <div class="grid-stats">
+            <div class="stat-card" onclick="navigate('clock')">
+              <div class="stat-header"><span>On Site Now</span><div class="stat-icon"><i data-lucide="clock"></i></div></div>
+              <div class="stat-value">${activeClockIns}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('incidents')">
+              <div class="stat-header"><span>Open Defects / Hazards</span><div class="stat-icon"><i data-lucide="alert-triangle"></i></div></div>
+              <div class="stat-value">${openIncidents}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('maintenance')">
+              <div class="stat-header"><span>Pending Maintenance</span><div class="stat-icon"><i data-lucide="wrench"></i></div></div>
+              <div class="stat-value">${pendingMaintenance}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('volunteers')">
+              <div class="stat-header"><span>Registered Volunteers</span><div class="stat-icon"><i data-lucide="users"></i></div></div>
+              <div class="stat-value">${(db.volunteers || []).length}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderClock() {
+      const content = document.getElementById('content');
+      const volunteers = db.volunteers || [];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Volunteer Clock In / Out</h2>
+            <p>Record site arrivals and departures for safety accountability.</p>
+          </div>
+        </div>
+
+        <div style="max-width: 500px; margin: 0 auto;">
+          <div class="card" style="padding: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 1.25rem;">Record Action</h3>
+            <form onsubmit="handleClockAction(event)">
+              <div class="form-group">
+                <label>Select Volunteer</label>
+                <select id="clockVolunteer" required>
+                  <option value="">-- Choose Volunteer --</option>
+                  ${volunteers.map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Action Type</label>
+                <select id="clockActionType" required>
+                  <option value="In">Clock In</option>
+                  <option value="Out">Clock Out</option>
+                </select>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.75rem;">Submit</button>
+            </form>
+          </div>
+        </div>`;
+    }
+
+    function changeCalendarMonth(direction) {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+      renderCalendarView();
+    }
+
+    function calculateHours(clockIn, clockOut) {
+      if (!clockIn || !clockOut || clockIn === '-' || clockOut === '-') return 0;
+      const [inH, inM] = clockIn.split(':').map(Number);
+      const [outH, outM] = clockOut.split(':').map(Number);
+      const diffMinutes = (outH * 60 + outM) - (inH * 60 + inM);
+      return diffMinutes > 0 ? diffMinutes / 60 : 0;
+    }
+
+    function openDayDetailModal(dateKey, dayNumber) {
+      const logsByDate = {};
+      (db.clockLogs || []).forEach(l => {
+        if (!l.date) return;
+        if (!logsByDate[l.date]) logsByDate[l.date] = [];
+        logsByDate[l.date].push(l);
+      });
+
+      const dayLogs = logsByDate[dateKey] || [];
+      document.getElementById('dayDetailTitle').innerText = `Daily Attendance Aggregation for ${dateKey}`;
+      const container = document.getElementById('dayDetailContent');
+
+      if (dayLogs.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1rem;">No attendance records for this date.</div>`;
+      } else {
+        const personSummary = {};
+        dayLogs.forEach(l => {
+          const hrs = calculateHours(l.clockIn, l.clockOut);
+          if (!personSummary[l.name]) {
+            personSummary[l.name] = { totalHours: 0, sessions: 0, active: false };
+          }
+          personSummary[l.name].totalHours += hrs;
+          personSummary[l.name].sessions += 1;
+          if (l.status === 'Clocked In') {
+            personSummary[l.name].active = true;
+          }
+        });
+
+        container.innerHTML = Object.keys(personSummary).map(name => {
+          const data = personSummary[name];
+          return `
+            <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--text);">${name}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">${data.sessions} session(s) recorded</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary);">${data.totalHours > 0 ? data.totalHours.toFixed(2) + ' total hrs' : '-'}</div>
+                <span style="font-weight: 600; font-size: 0.675rem; color: ${data.active ? '#16a34a' : '#64748b'};">${data.active ? 'Clocked In' : 'Completed'}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('dayDetailModal').style.display = 'flex';
+    }
+
+    function renderCalendarView() {
+      const content = document.getElementById('content');
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      const totalDays = new Date(year, month + 1, 0).getDate();
+      const adjustedFirstDay = (firstDayIndex + 6) % 7;
+
+      const logsByDate = {};
+      const monthlyHours = {};
+      const yearlyHours = {};
+
+      (db.clockLogs || []).forEach(l => {
+        if (!l.date) return;
+        const [lYear, lMonth, lDay] = l.date.split('-').map(Number);
+        const hrs = calculateHours(l.clockIn, l.clockOut);
+
+        if (!logsByDate[l.date]) logsByDate[l.date] = [];
+        logsByDate[l.date].push({ name: l.name, hours: hrs });
+
+        if (lYear === year) {
+          yearlyHours[l.name] = (yearlyHours[l.name] || 0) + hrs;
+          if (lMonth === (month + 1)) {
+            monthlyHours[l.name] = (monthlyHours[l.name] || 0) + hrs;
+          }
+        }
+      });
+
+      const aggregatedLogsByDate = {};
+      Object.keys(logsByDate).forEach(dateKey => {
+        const personMap = {};
+        logsByDate[dateKey].forEach(item => {
+          personMap[item.name] = (personMap[item.name] || 0) + item.hours;
+        });
+        aggregatedLogsByDate[dateKey] = Object.keys(personMap).map(name => ({
+          name: name,
+          totalHours: personMap[name]
+        }));
+      });
+
+      const allVolunteers = new Set(Object.keys(yearlyHours));
+      (db.volunteers || []).forEach(v => allVolunteers.add(getVolunteerName(v)));
+      (db.clockLogs || []).forEach(l => { if (l.name) allVolunteers.add(l.name); });
+
+      let calendarGridHtml = '';
+      const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      
+      dayHeaders.forEach(d => {
+        calendarGridHtml += `<div style="font-weight: 700; text-align: center; padding: 0.5rem; font-size: 0.75rem; color: var(--text-muted); background: #f8fafc; border-bottom: 1px solid var(--border);">${d}</div>`;
+      });
+
+      for (let i = 0; i < adjustedFirstDay; i++) {
+        calendarGridHtml += `<div style="background: #f8fafc; border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle); min-height: 90px; opacity: 0.3;"></div>`;
+      }
+
+      for (let day = 1; day <= totalDays; day++) {
+        const monthStr = String(month + 1).padStart(2, '0');
+        const dayStr = String(day).padStart(2, '0');
+        const dateKey = `${year}-${monthStr}-${dayStr}`;
+        const dayLogs = aggregatedLogsByDate[dateKey] || [];
+
+        calendarGridHtml += `
+          <div onclick="openDayDetailModal('${dateKey}', ${day})" style="background: white; border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle); min-height: 90px; padding: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem; overflow: hidden; cursor: pointer; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+            <div style="font-weight: 700; font-size: 0.775rem; color: var(--text);">${day}</div>
+            <div style="display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 70px;">
+              ${dayLogs.map(item => {
+                return `
+                  <div style="background: var(--primary-light); color: var(--primary); font-size: 0.675rem; padding: 2px 4px; border-radius: 3px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.name}: ${item.totalHours > 0 ? item.totalHours.toFixed(2) + ' total hrs' : 'Active/Incomplete'}">
+                    ${item.name} (${item.totalHours > 0 ? item.totalHours.toFixed(2) + 'h' : '-'})
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      let summaryTableRows = '';
+      const sortedVolunteers = Array.from(allVolunteers).sort();
+
+      if (sortedVolunteers.length === 0) {
+        summaryTableRows = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No attendance data recorded yet.</td></tr>`;
+      } else {
+        sortedVolunteers.forEach(name => {
+          const mHrs = monthlyHours[name] || 0;
+          const yHrs = yearlyHours[name] || 0;
+          summaryTableRows += `
+            <tr>
+              <td><strong>${name}</strong></td>
+              <td>${mHrs.toFixed(2)} hrs</td>
+              <td>${yHrs.toFixed(2)} hrs</td>
+            </tr>
+          `;
+        });
+      }
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Attendance Calendar & Hours</h2>
+            <p>Monthly overview of aggregated daily volunteer hours. Click any date to view records.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(-1)"><i data-lucide="chevron-left"></i> Prev</button>
+            <span style="font-weight: 700; font-size: 0.9rem; min-width: 130px; text-align: center;">${monthNames[month]} ${year}</span>
+            <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(1)">Next <i data-lucide="chevron-right"></i></button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 2rem;">
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--border); border-left: 1px solid var(--border);">
+            ${calendarGridHtml}
+          </div>
+        </div>
+
+        <div class="section-group">
+          <div class="section-header">Volunteer Hours Summary (${monthNames[month]} ${year} & ${year})</div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Volunteer Name</th>
+                    <th>Monthly Hours (${monthNames[month]})</th>
+                    <th>Yearly Hours (${year})</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${summaryTableRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    function renderIncidents() {
+      const content = document.getElementById('content');
+      const incidents = db.incidents || [];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Incident & Defect Log</h2>
+            <p>Track defects, photos, and lock out out-of-service equipment.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openIncidentModal()">
+            <i data-lucide="plus"></i> Report Defect
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Asset / Location</th>
+                  <th>Description</th>
+                  <th>Red Tag Status</th>
+                  <th>Photo</th>
+                  <th>Status</th>
+                  <th style="text-align:right;">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${incidents.length === 0 ? `
+                  <tr><td colspan="7"><div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No defects logged</div></td></tr>` :
+                  incidents.map((i, idx) => `
+                    <tr>
+                      <td>${i.Date || '-'}</td>
+                      <td><strong>${i.asset || i['Asset / Location'] || 'Unknown'}</strong></td>
+                      <td>${i.Description || i.desc || '-'}</td>
+                      <td>
+                        ${i['Red Tag Status'] === 'Out of Service' 
+                          ? '<span class="badge-out-of-service">Out of Service</span>' 
+                          : '<span style="color:#16a34a; font-weight:600; font-size:0.75rem;">Operational</span>'}
+                      </td>
+                      <td>${i.Photo ? `<a href="${i.Photo}" target="_blank" style="color:var(--primary); font-weight:600;">View Photo</a>` : '-'}</td>
+                      <td><strong>${i.Status || 'Open'}</strong></td>
+                      <td style="text-align:right;">
+                        ${i.Status !== 'Resolved' ? `<button class="btn btn-subtle btn-sm" onclick="resolveIncident(${idx})"><i data-lucide="check-circle"></i> Resolve</button>` : '<span style="color:var(--text-muted);">Resolved</span>'}
+                      </td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function renderVolunteers() {
+      const content = document.getElementById('content');
+      const volunteers = db.volunteers || [];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Volunteers</h2>
+            <p>Manage railway roster, qualifications, and profiles.</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-primary btn-sm" onclick="openGenericModal('volunteers')">
+              <i data-lucide="plus"></i> Add Volunteer
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('excelFileInput').click()">
+              <i data-lucide="upload"></i> Import Excel
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Roles / Qualified Areas</th>
+                  <th>DBS</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${volunteers.length === 0 ? `
+                  <tr><td colspan="4"><div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No volunteers found. Import an Excel spreadsheet or click Add Volunteer.</div></td></tr>` :
+                  volunteers.map((v, idx) => `
+                    <tr>
+                      <td><strong>${getVolunteerName(v)}</strong></td>
+                      <td>${v.Roles || v.roles || '-'}</td>
+                      <td>${v['DBS Status'] || v.dbsStatus || '-'}</td>
+                      <td style="text-align:right;">
+                        <button class="btn btn-subtle btn-sm" onclick="openGenericModal('volunteers', ${idx})"><i data-lucide="edit-2"></i></button>
+                        <button class="btn btn-subtle btn-sm" onclick="deleteItem('volunteers', ${idx})" style="color:#dc2626;"><i data-lucide="trash-2"></i></button>
+                      </td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function renderCompetencyMatrix() {
+      const content = document.getElementById('content');
+      const volunteers = db.volunteers || [];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Qualifications & Competency Matrix</h2>
+            <p>Line clearing sign-offs, duty qualifications, and team roles.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Volunteer Name</th>
+                  <th>Roles / Qualified Areas</th>
+                  <th>DBS Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${volunteers.length === 0 ? `
+                  <tr><td colspan="3"><div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No volunteer qualifications found. Import an Excel file via the top bar.</div></td></tr>` :
+                  volunteers.map(v => `
+                    <tr>
+                      <td><strong>${getVolunteerName(v)}</strong></td>
+                      <td>${v.Roles || v.roles || '-'}</td>
+                      <td>${v['DBS Status'] || v.dbsStatus || '-'}</td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function renderArchives() {
+      const content = document.getElementById('content');
+      const archives = db.historicalArchive || [];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>Historical Archives</h2>
+            <p>Review past daily inspection logs and records preserved from previous days.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Archive Date</th>
+                  <th>Track Walk Status</th>
+                  <th>Test Run Status</th>
+                  <th>Recorded Sessions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${archives.length === 0 ? `
+                  <tr><td colspan="4"><div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No historical archives recorded yet. Archives are automatically saved daily.</div></td></tr>` :
+                  archives.map(arch => `
+                    <tr>
+                      <td><strong>${arch.date || '-'}</strong></td>
+                      <td>${arch.checks?.trackWalk?.result || 'N/A'} (${arch.checks?.trackWalk?.inspector || 'None'})</td>
+                      <td>${arch.checks?.testRun?.result || 'N/A'} (${arch.checks?.testRun?.inspector || 'None'})</td>
+                      <td>${(arch.logs || []).length} session(s)</td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function renderGenericModule(title, description, moduleKey) {
+      const content = document.getElementById('content');
+      const items = db[moduleKey] || [];
+      const schema = moduleSchemas[moduleKey];
+
+      content.innerHTML = `
+        <div class="page-header">
+          <div class="page-title">
+            <h2>${title}</h2>
+            <p>${description}</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')">
+            <i data-lucide="plus"></i> Add ${schema.title}
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  ${schema.fields.map(f => `<th>${f.label}</th>`).join('')}
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.length === 0 ? `
+                  <tr><td colspan="${schema.fields.length + 1}"><div style="padding:1.5rem; text-align:center; color:var(--text-muted);">No items recorded yet. Click 'Add ${schema.title}' to create one.</div></td></tr>` :
+                  items.map((item, idx) => `
+                    <tr>
+                      ${schema.fields.map(f => `<td>${item[f.key] !== undefined ? item[f.key] : '-'}</td>`).join('')}
+                      <td style="text-align:right;">
+                        <button class="btn btn-subtle btn-sm" onclick="openGenericModal('${moduleKey}', ${idx})"><i data-lucide="edit-2"></i></button>
+                        <button class="btn btn-subtle btn-sm" onclick="deleteItem('${moduleKey}', ${idx})" style="color:#dc2626;"><i data-lucide="trash-2"></i></button>
+                      </td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function navigate(view) {
+      currentView = view;
+      document.querySelectorAll('sidebar a').forEach(a => a.classList.remove('active'));
+      const activeLink = document.querySelector(`sidebar a[onclick="navigate('${view}')"]`);
+      if (activeLink) activeLink.classList.add('active');
+
+      if (document.getElementById('sidebar').classList.contains('active')) toggleMenu();
+
+      if (view === 'dashboard') renderDashboard();
+      else if (view === 'clock') renderClock();
+      else if (view === 'calendar') renderCalendarView();
+      else if (view === 'incidents') renderIncidents();
+      else if (view === 'competency') renderCompetencyMatrix();
+      else if (view === 'volunteers') renderVolunteers();
+      else if (view === 'archives') renderArchives();
+      else if (view === 'pos') renderPOS();
+      else if (view === 'actions') renderGenericModule('Actions', 'Track operational action items and assignments.', 'actions');
+      else if (view === 'maintenance') renderGenericModule('Maintenance', 'Locomotive and infrastructure maintenance schedules.', 'maintenance');
+      else if (view === 'events') renderGenericModule('Events', 'Museum events, running days, and public bookings.', 'events');
+      else if (view === 'assets') renderGenericModule('Assets', 'Railway assets, rolling stock, and infrastructure inventory.', 'assets');
+      else if (view === 'stock') renderGenericModule('Stock', 'Gift shop, cafe, and stores inventory tracking.', 'stock');
+      else if (view === 'suppliers') renderGenericModule('Suppliers', 'Vendor and contractor contacts.', 'suppliers');
+      else if (view === 'enquiries') renderGenericModule('Enquiries', 'Public and group visit enquiries.', 'enquiries');
+      else if (view === 'documents') renderGenericModule('Documents', 'Safety rulebooks, risk assessments, and policies.', 'documents');
+      else if (view === 'notes') renderGenericModule('Notes', 'Operational handover notes and logbook.', 'notes');
+      
+      lucide.createIcons();
+    }
+
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+  </script>
+                  </body>
+                </html>
