@@ -1,0 +1,3251 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVLT Operations Platform</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      :root { 
+        --primary: #1e3a1e; 
+        --primary-hover: #152915;
+        --primary-light: #f0f4f0;
+        --accent: #2d5a2d;
+        
+        --bg: #f8fafc; 
+        --card-bg: #ffffff; 
+        --sidebar-bg: #0f172a;
+        --sidebar-hover: #1e293b;
+        --sidebar-text: #94a3b8;
+        --sidebar-text-active: #ffffff;
+        
+        --text: #0f172a; 
+        --text-muted: #64748b;
+        --border: #e2e8f0; 
+        --border-subtle: #f1f5f9;
+        
+        --radius-sm: 4px;
+        --radius: 6px;
+        --radius-lg: 8px;
+        
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+        --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08);
+        --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-sans); }
+      body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; min-height: 100vh; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+      
+      header { 
+        background: var(--primary); 
+        color: white; 
+        padding: 0 1rem; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        position: sticky; 
+        top: 0; 
+        z-index: 1001; 
+        height: 56px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        width: 100%;
+      }
+      .header-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+      .header-right { display: flex; align-items: center; gap: 1rem; }
+      
+      .header-logo { width: 34px; height: 34px; flex-shrink: 0; display: block; }
+      .brand-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.9rem; letter-spacing: -0.01em; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      
+      .menu-btn { display: none; background: none; border: none; color: white; cursor: pointer; padding: 0.25rem; border-radius: var(--radius-sm); flex-shrink: 0; }
+      .menu-btn:hover { background: rgba(255,255,255,0.1); }
+      
+      .user-select-container { display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.1); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.2); font-size: 0.8rem; font-weight: 600; color: #fff; }
+
+      .app-container { display: flex; flex: 1; position: relative; width: 100%; }
+      
+      sidebar { 
+        width: 230px; 
+        background: var(--sidebar-bg); 
+        color: var(--sidebar-text); 
+        padding: 0.85rem 0.65rem 4rem 0.65rem; 
+        flex-shrink: 0; 
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        transition: transform 0.2s ease; 
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(100vh - 56px);
+        border-right: 1px solid var(--border);
+      }
+      .sidebar-section-label { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: #64748b; padding: 0.65rem 0.65rem 0.25rem 0.65rem; }
+      sidebar a { 
+        display: flex; 
+        align-items: center; 
+        gap: 0.65rem; 
+        padding: 0.5rem 0.65rem; 
+        color: var(--sidebar-text); 
+        text-decoration: none; 
+        font-weight: 500; 
+        font-size: 0.85rem; 
+        border-radius: var(--radius-sm);
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      sidebar a:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+      sidebar a.active { background: var(--primary); color: var(--sidebar-text-active); font-weight: 600; }
+      sidebar a i { width: 16px; height: 16px; opacity: 0.85; flex-shrink: 0; }
+      
+      .overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); z-index: 999; }
+      
+      main { flex: 1; padding: 1.25rem 1.5rem; max-width: 1300px; width: 100%; margin: 0 auto; min-width: 0; overflow-x: hidden; }
+      
+      .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; flex-wrap: wrap; }
+      .page-title h2 { font-size: 1.25rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.2; }
+      .page-title p { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem; }
+      
+      .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.85rem; border-radius: var(--radius); font-size: 0.825rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap; }
+      .btn i { width: 15px; height: 15px; flex-shrink: 0; }
+      .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+      .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+      .btn-secondary { background: white; border-color: var(--border); color: var(--text); }
+      .btn-secondary:hover { background: var(--bg); border-color: #cbd5e1; }
+      .btn-subtle { background: transparent; border-color: transparent; color: var(--text-muted); padding: 0.3rem 0.5rem; }
+      .btn-subtle:hover { background: var(--border-subtle); color: var(--text); }
+      .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.775rem; }
+      .btn-danger { background: #dc2626; color: white; border-color: #dc2626; }
+      .btn-danger:hover { background: #b91c1c; }
+
+      .section-group { margin-bottom: 1.75rem; }
+      .section-header { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 0.5rem; }
+      .section-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+      .grid-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem; }
+      .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0.85rem 1rem; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 0.15s ease; display: flex; flex-direction: column; justify-content: space-between; }
+      .stat-card:hover { border-color: var(--primary); }
+      .stat-header { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: 0.775rem; font-weight: 600; }
+      .stat-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+      .stat-icon i { width: 14px; height: 14px; }
+      .stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; margin-top: 0.4rem; }
+
+      .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
+      .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; white-space: nowrap; }
+      th { background: #f8fafc; font-weight: 600; color: var(--text-muted); padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+      td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border-subtle); color: var(--text); vertical-align: middle; }
+      tbody tr:last-child td { border-bottom: none; }
+      tbody tr:hover { background: #f8fafc; }
+
+      .checks-table { width: 100%; border-collapse: collapse; }
+      .checks-row { cursor: pointer; transition: background 0.15s ease; }
+      .checks-row:hover { background: #f1f5f9 !important; }
+      .result-badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; color: white; font-weight: 700; flex-shrink: 0; }
+      .result-pass { background: #16a34a; }
+      .result-fail { background: #dc2626; }
+      .result-none { background: #cbd5e1; color: #475569; }
+      .train-tag { display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-right: 3px; margin-top: 2px; }
+
+      .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 1rem; }
+      .modal { background: white; padding: 1.25rem; border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
+      .modal h3 { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+      .form-group { margin-bottom: 0.75rem; }
+      .form-group label { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.2rem; color: var(--text); }
+      .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; outline: none; background: white; transition: border-color 0.15s; }
+      .modal-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
+
+      .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; margin-top: 0.5rem; width: 100%; }
+      .cal-header { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 6px 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cal-day { background: white; border: 1px solid var(--border); border-radius: var(--radius); min-height: 60px; min-width: 0; padding: 4px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: all 0.15s; font-size: 0.8rem; position: relative; overflow: hidden; }
+      .cal-day:hover { border-color: var(--primary); background: var(--primary-light); }
+      .cal-day.empty { background: transparent; border: none; cursor: default; }
+      .cal-day.selected { border-color: var(--primary); background: var(--primary-light); font-weight: bold; }
+      .cal-day.has-event { background: #fefce8; border-color: #fde047; }
+      .cal-badge { font-size: 0.65rem; background: var(--primary); color: white; padding: 1px 4px; border-radius: 4px; margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
+      .cal-event-dot { font-size: 0.6rem; background: #ca8a04; color: white; padding: 1px 3px; border-radius: 3px; margin-top: 1px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
+
+      @media (max-width: 480px) {
+        .cal-day { min-height: 44px; padding: 3px; font-size: 0.7rem; }
+        .cal-header { font-size: 0.6rem; padding: 4px 0; }
+        .cal-badge, .cal-event-dot { font-size: 0.52rem; padding: 1px 2px; }
+        .calendar-grid { gap: 2px; }
+      }
+
+      .calendar-layout { display: grid; grid-template-columns: 1fr 350px; gap: 1.25rem; align-items: start; }
+      .preview-thumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: var(--radius); margin-top: 0.4rem; border: 1px solid var(--border); }
+
+      #print-area { display: none; }
+      @media print {
+        body * { visibility: hidden !important; }
+        #print-area, #print-area * { visibility: visible !important; }
+        #print-area { display: block; position: absolute; left: 0; top: 0; width: 100%; padding: 20px; background: white; color: black; }
+        .print-data-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .print-data-table th, .print-data-table td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+      }
+
+      @media (max-width: 900px) {
+        .calendar-layout { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 768px) {
+        .menu-btn { display: block; }
+        sidebar { 
+          position: fixed; top: 56px; left: 0; bottom: 0; height: calc(100vh - 56px); z-index: 1000; 
+          transform: translateX(-100%); width: 230px; padding-top: 0.85rem; padding-bottom: 4rem; overflow-y: auto; 
+        }
+        sidebar.active { transform: translateX(0); }
+        .overlay.active { display: block; }
+        main { padding: 0.85rem; }
+        .calendar-layout .card { padding: 0.75rem !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-14</div>
+    <div id="print-area"></div>
+    <header>
+      <div class="header-left">
+        <button class="menu-btn" onclick="toggleMenu()" aria-label="Toggle navigation menu">
+          <i data-lucide="menu"></i>
+        </button>
+        <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+          <defs>
+            <path id="topArc" d="M 15,50 A 35,35 0 0,1 85,50" />
+            <path id="bottomArc" d="M 85,50 A 35,35 0 0,1 15,50" />
+          </defs>
+          <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+            <textPath href="#topArc" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+          </text>
+          <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+            <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+          </text>
+          <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+          <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+          <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+          <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+        </svg>
+        <div class="brand-title">
+          <span>EVLT Operations</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="user-select-container" id="currentUserBadge" style="cursor: pointer;" onclick="openLoginModal()" title="Switch Account">
+          <i data-lucide="user" style="width: 14px; height: 14px; color: white;"></i>
+          <span id="currentUserDisplayName">Not Logged In</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+    <div class="app-container">
+      <sidebar id="sidebar">
+        <!-- Dynamically rendered -->
+      </sidebar>
+      <main id="content">
+        <!-- Renders instantly -->
+      </main>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+      <div class="modal" style="max-width: 380px;">
+        <h3>Sign In to EVLT Operations</h3>
+        <form onsubmit="handleUserLogin(event)">
+          <div class="form-group">
+            <label>Select Account</label>
+            <select id="loginUserSelect" required class="form-group">
+              <option value="">-- Choose Account --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>PIN Code / Password</label>
+            <input type="password" id="loginUserPin" placeholder="Enter PIN" required>
+          </div>
+          <div id="loginErrorMsg" style="color: #dc2626; font-size: 0.75rem; margin-bottom: 0.5rem; display: none;">Incorrect PIN. Please try again.</div>
+          <div class="form-group" style="display:flex; align-items:center; gap:0.5rem;">
+            <input type="checkbox" id="rememberDeviceCheckbox" style="width:auto;" checked>
+            <label for="rememberDeviceCheckbox" style="margin:0; font-weight:500;">Remember this device (skip sign-in next time)</label>
+          </div>
+          <div class="modal-actions" style="border:none; padding:0; margin-top:1rem;">
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Sign In</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Page Access Control Modal (Admin) -->
+    <div class="modal-overlay" id="accessControlModal">
+      <div class="modal">
+        <h3 id="accessControlTitle">Manage Page Permissions</h3>
+        <form onsubmit="saveUserPermissions(event)">
+          <input type="hidden" id="accessControlUserName" value="">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check the pages this user is allowed to access in the sidebar menu.</p>
+          <div id="permissionsCheckboxesList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc; max-height: 250px; overflow-y: auto;">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('accessControlModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Permissions</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="opCheckModal">
+      <div class="modal">
+        <h3 id="opCheckTitle">Log Inspection Check</h3>
+        <form onsubmit="saveOpCheck(event)">
+          <input type="hidden" id="opCheckKey" value="">
+          <div class="form-group">
+            <label>Inspected By (Volunteer)</label>
+            <select id="opCheckInspector" required></select>
+          </div>
+          <div class="form-group">
+            <label>Inspection Outcome</label>
+            <select id="opCheckResult" required onchange="toggleOpCheckReason(this.value)">
+              <option value="Pass">Pass</option>
+              <option value="Fail">Fail</option>
+              <option value="Not Completed">Not Completed</option>
+            </select>
+          </div>
+          <div class="form-group" id="reasonSelectionGroup" style="display: none;">
+            <label id="reasonLabel">Reason for Failure</label>
+            <textarea id="opCheckReason" rows="3" placeholder="Specify failure reason or defect..."></textarea>
+          </div>
+          <div class="form-group" id="trainSelectionGroup">
+            <label>Locomotives Used</label>
+            <select id="opCheckLocoSelect" class="form-group">
+              <option value="">-- Select Locomotive --</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('opCheckModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Check</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="incidentModal">
+      <div class="modal">
+        <h3 id="incidentModalTitle">Log Incident / Defect</h3>
+        <form id="incidentForm" onsubmit="saveIncident(event); return false;">
+          <div class="form-group">
+            <label>Asset / Locomotive / Location</label>
+            <input type="text" id="incidentAsset" placeholder="e.g. Canadian Pacific, North Turnout" required>
+          </div>
+          <div class="form-group">
+            <label>Defect Description</label>
+            <textarea id="incidentDesc" rows="3" placeholder="Describe the issue or defect..." required></textarea>
+          </div>
+          <div class="form-group">
+            <label>Red Tag Status (Out of Service)</label>
+            <select id="incidentRedTag">
+              <option value="Operational">Operational (Minor Issue)</option>
+              <option value="Out of Service">Out of Service (LOCKOUT / RED TAG)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Defect Photo (Optional)</label>
+            <input type="file" id="incidentPhoto" accept="image/*" onchange="previewIncidentPhoto(event)">
+            <img id="incidentPhotoPreview" class="preview-thumb" style="display:none;" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="incidentSubmitBtn">Report Defect</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="fleetModal">
+      <div class="modal">
+        <h3 id="fleetModalTitle">Add / Edit Fleet Item</h3>
+        <form onsubmit="saveFleetItem(event)">
+          <input type="hidden" id="fleetEditIndex" value="">
+          <div class="form-group">
+            <label>Name / Identifier</label>
+            <input type="text" id="fleetName" placeholder="e.g. Canadian Pacific" required>
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select id="fleetType" required>
+              <option value="Steam">Steam</option>
+              <option value="Diesel">Diesel</option>
+              <option value="Electric">Electric</option>
+              <option value="Coach">Coach</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Gauge</label>
+            <select id="fleetGauge" required>
+              <option value="7 1/4''">7 1/4''</option>
+              <option value="5''">5''</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>State / Operational Status</label>
+            <select id="fleetState" required>
+              <option value="In Service">In Service</option>
+              <option value="Out of Service">Out of Service</option>
+              <option value="Overhaul">Overhaul</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('fleetModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Fleet Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="maintLogModal">
+      <div class="modal">
+        <h3>Add Maintenance Log</h3>
+        <form onsubmit="saveMaintenanceLogEntry(event)">
+          <input type="hidden" id="maintLogAsset" value="">
+          <div class="form-group">
+            <label>Work Done / Description</label>
+            <textarea id="maintWorkDone" rows="3" placeholder="Describe the maintenance or repairs performed..." required></textarea>
+          </div>
+          <div class="form-group" style="display: flex; gap: 0.5rem;">
+            <div style="flex:1;">
+              <label>Start Date</label>
+              <input type="date" id="maintStartDate" required>
+            </div>
+            <div style="flex:1;">
+              <label>End Date</label>
+              <input type="date" id="maintEndDate" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Performed By (Select all volunteers who worked on it)</label>
+            <div id="maintVolunteersList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Update Asset State</label>
+            <select id="maintUpdateState">
+              <option value="">-- Keep Current State --</option>
+              <option value="In Service">In Service</option>
+              <option value="Out of Service">Out of Service</option>
+              <option value="Overhaul">Overhaul</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Photo (Optional)</label>
+            <input type="file" id="maintPhoto" accept="image/*" onchange="previewMaintPhoto(event)">
+            <img id="maintPhotoPreview" class="preview-thumb" style="display:none;" />
+          </div>
+
+          <div class="form-group">
+            <label>Additional Notes / Parts Used</label>
+            <textarea id="maintNotes" rows="2" placeholder="Optional notes..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('maintLogModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Log Entry</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="addRoleModal">
+      <div class="modal">
+        <h3>Add New Role / Qualification</h3>
+        <form onsubmit="saveNewRole(event)">
+          <div class="form-group">
+            <label>Role or Qualification Name</label>
+            <input type="text" id="newRoleName" placeholder="e.g. Social Media, Signalman, Guard" required>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('addRoleModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Role</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Archive Data Modal -->
+    <div class="modal-overlay" id="editArchiveModal">
+      <div class="modal" style="max-width: 600px;">
+        <h3>Edit Archive Record (<span id="editArchiveDateTxt"></span>)</h3>
+        <form onsubmit="saveArchiveEdit(event)">
+          <input type="hidden" id="editArchiveIndex" value="">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Select the correct records for this day, the same way they're recorded elsewhere in the app.</p>
+
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Track Walk Result</label>
+              <select id="editArch_TrackWalkResult">
+                <option value="">Not recorded</option>
+                <option value="Pass">Pass</option>
+                <option value="Fail">Fail</option>
+                <option value="Not Completed">Not Completed</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label>Inspected By</label>
+              <select id="editArch_TrackWalkInspector"><option value="">-- Unassigned --</option></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Track Walk Notes</label>
+            <input type="text" id="editArch_TrackWalkNotes" placeholder="Optional notes...">
+          </div>
+
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Test Run Result</label>
+              <select id="editArch_TestRunResult">
+                <option value="">Not recorded</option>
+                <option value="Pass">Pass</option>
+                <option value="Fail">Fail</option>
+                <option value="Not Completed">Not Completed</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label>Inspected By</label>
+              <select id="editArch_TestRunInspector"><option value="">-- Unassigned --</option></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Test Run Notes</label>
+            <input type="text" id="editArch_TestRunNotes" placeholder="Optional notes...">
+          </div>
+
+          <div class="form-group">
+            <label>Trains That Ran (select all that ran)</label>
+            <div id="editArch_TrainsList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Volunteers On Site (select all who were present)</label>
+            <div id="editArch_VolunteersList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Incidents / Issues (select all that apply to this day)</label>
+            <div id="editArch_IncidentsList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Maintenance Completed (select all that apply to this day)</label>
+            <div id="editArch_MaintenanceList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Actions Added (select all that apply to this day)</label>
+            <div id="editArch_ActionsAddedList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group">
+            <label>Actions Completed (select all that apply to this day)</label>
+            <div id="editArch_ActionsCompletedList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('editArchiveModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Generic Modal for modules like Assets, Stock, etc. -->
+    <div class="modal-overlay" id="genericModal">
+      <div class="modal">
+        <h3 id="genericModalTitle">Add Item</h3>
+        <form id="genericForm" onsubmit="saveGenericItem(event)">
+          <div id="genericFormFields"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('genericModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dedicated Action Modal -->
+    <div class="modal-overlay" id="actionModal">
+      <div class="modal">
+        <h3 id="actionModalTitle">Add Action / Task</h3>
+        <form id="actionForm" onsubmit="saveActionItem(event)">
+          <input type="hidden" id="actionEditIndex" value="">
+          <div class="form-group">
+            <label>Action Title</label>
+            <input type="text" id="act_title" placeholder="e.g. Monthly carriage service" required>
+          </div>
+          <div class="form-group">
+            <label>Description / Details</label>
+            <textarea id="act_desc" rows="2" placeholder="Detailed instructions or parts required..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Related Asset / Locomotive / Carriage (Optional)</label>
+            <select id="act_asset">
+              <option value="">-- None / General Site --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Assigned To (Optional — select all that apply)</label>
+            <div id="act_assignedList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" id="act_duedate" required>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Recurrence</label>
+              <select id="act_recurrence">
+                <option value="None">One-off Task</option>
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+                <option value="3 Monthly">3 Monthly</option>
+                <option value="6 Monthly">6 Monthly</option>
+                <option value="Yearly">Yearly</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label>Priority</label>
+              <select id="act_priority">
+                <option value="Normal">Normal</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('actionModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Action</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dedicated Event Modal -->
+    <div class="modal-overlay" id="eventModal">
+      <div class="modal">
+        <h3 id="eventModalTitle">Add Event</h3>
+        <form onsubmit="saveEventItem(event)">
+          <input type="hidden" id="eventEditIndex" value="">
+          <div class="form-group">
+            <label>Event Name</label>
+            <input type="text" id="evt_title" placeholder="e.g. Steam Gala Weekend" required>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Start Date</label>
+              <input type="date" id="evt_start" required>
+            </div>
+            <div style="flex:1;">
+              <label>End Date</label>
+              <input type="date" id="evt_end" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="evt_desc" rows="2" placeholder="Event details..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('eventModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Photo/Document Upload Modal -->
+    <div class="modal-overlay" id="archiveUploadModal">
+      <div class="modal">
+        <h3>Upload Photo or Document</h3>
+        <form onsubmit="saveArchiveUpload(event)">
+          <div class="form-group">
+            <label>Title / Caption</label>
+            <input type="text" id="up_title" placeholder="e.g. 1994 Opening Day Photo" required>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="up_category">
+              <option value="Photo">Photo</option>
+              <option value="Document">Document / PDF</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Select File</label>
+            <input type="file" id="up_file" accept="image/*,.pdf,.doc,.docx" required onchange="previewArchiveFile(event)">
+            <img id="up_preview" class="preview-thumb" style="display:none;" />
+          </div>
+          <input type="hidden" id="up_filedata" value="">
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('archiveUploadModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
+        authDomain: "evlt-admin.firebaseapp.com",
+        databaseURL: "https://evlt-admin-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "evlt-admin",
+        storageBucket: "evlt-admin.firebasestorage.app",
+        messagingSenderId: "603418741774",
+        appId: "1:603418741774:web:b9d4717f3dc4a3ede5805f"
+      };
+
+      let db = {
+        volunteers: [
+          { Name: 'Louie Hull', Pin: '1234', Roles: 'Admin, Driver', 'DBS Status': 'Cleared' }
+        ],
+        fleetItems: [
+          { name: 'Canadian Pacific', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+          { name: 'DB', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+          { name: 'Santa Fe', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+          { name: 'George', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+          { name: 'Edward', type: 'Steam', gauge: "5''", state: 'In Service' },
+          { name: 'Dylan', type: 'Electric', gauge: "5''", state: 'In Service' },
+          { name: 'June', type: 'Coach', gauge: "7 1/4''", state: 'In Service' },
+          { name: 'Daphne', type: 'Coach', gauge: "7 1/4''", state: 'In Service' }
+        ],
+        incidents: [],
+        maintenanceLogs: [],
+        clockLogs: [],
+        actions: [],
+        events: [],
+        archiveUploads: []
+      };
+
+      let currentView = 'dashboard';
+      let currentUser = null; 
+      let tempPhotoBase64 = '';
+      let tempMaintPhotoBase64 = '';
+      let editingIndex = null;
+      let editingIncidentIndex = null;
+      let editingModuleKey = null;
+      let calendarCurrentDate = new Date();
+      let selectedCalendarDateStr = getTodayString();
+      let archiveSubView = 'historical';
+
+      const AVAILABLE_TRAINS = ["Canadian Pacific", "DB", "Santa Fe", "George", "Edward", "Dylan", "June", "Daphne"];
+      const DEFAULT_ROLES = ["Admin", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom"];
+
+      const ALL_PAGES = [
+        { key: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', section: 'Main' },
+        { key: 'clock', label: 'Clock In/Out', icon: 'clock', section: 'Main' },
+        { key: 'calendar', label: 'Attendance & Hours', icon: 'calendar', section: 'Main' },
+        { key: 'clockLogs', label: 'Clock Log Records', icon: 'list-checks', section: 'Main' },
+        { key: 'incidents', label: 'Incident & Defect Log', icon: 'alert-triangle', section: 'Safety & Competency' },
+        { key: 'competency', label: 'Qualifications Matrix', icon: 'award', section: 'Safety & Competency' },
+        { key: 'volunteers', label: 'Volunteers', icon: 'users', section: 'Operations' },
+        { key: 'actions', label: 'Actions', icon: 'check-square', section: 'Operations' },
+        { key: 'maintenance', label: 'Maintenance & Fleet', icon: 'wrench', section: 'Operations' },
+        { key: 'events', label: 'Events', icon: 'calendar-range', section: 'Operations' },
+        { key: 'assets', label: 'Assets', icon: 'box', section: 'Management' },
+        { key: 'stock', label: 'Euro Tunnel', icon: 'train-front', section: 'Management' },
+        { key: 'suppliers', label: 'Suppliers', icon: 'truck', section: 'Management' },
+        { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
+        { key: 'documents', label: 'Documents', icon: 'file-text', section: 'Management' },
+        { key: 'notes', label: 'Notes', icon: 'sticky-note', section: 'Management' },
+        { key: 'archives', label: 'Historical Archives', icon: 'archive', section: 'Archives' }
+      ];
+
+      function getAvailableRoles() {
+        const customRoles = db.customRoles || [];
+        return Array.from(new Set([...DEFAULT_ROLES, ...customRoles]));
+      }
+
+      function getTodayString() {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+      }
+
+      function toISODate(dateStr) {
+        if (!dateStr) return null;
+        if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+        const m = String(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        return null;
+      }
+
+      function checkExpiredEvents() {
+        if (!db.events || db.events.length === 0) return;
+        const now = new Date();
+        let changed = false;
+        db.events = db.events.filter(ev => {
+          if (!ev.EndDate) return true;
+          const endDateTime = new Date(ev.EndDate + 'T20:00:00');
+          if (now > endDateTime) {
+            changed = true;
+            return false;
+          }
+          return true;
+        });
+        if (changed && database) {
+          database.ref('EVLT_ADMIN_DB/events').set(db.events);
+        }
+      }
+
+      function archiveAndResetIfNewDay() {
+        checkExpiredEvents();
+        const todayStr = getTodayString();
+        if (!db.dailyChecks) db.dailyChecks = {};
+        const lastDate = db.dailyChecks.lastCheckDate;
+
+        if (!lastDate) {
+          db.dailyChecks.lastCheckDate = todayStr;
+          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          return;
+        }
+        if (lastDate === todayStr) return;
+
+        const daily = db.dailyChecks;
+        const dayClockLogs = (db.clockLogs || []).filter(l => l.date === lastDate);
+        const dayIncidents = (db.incidents || []).filter(i => toISODate(i.Date) === lastDate);
+        const dayMaintenance = (db.maintenanceLogs || []).filter(m => toISODate(m.endDate) === lastDate || toISODate(m.startDate) === lastDate);
+        const dayActionsAdded = (db.actions || []).filter(a => a.createdDate === lastDate);
+        const dayActionsCompleted = (db.actions || []).filter(a => a.completedDate === lastDate);
+
+        const trackWalkDone = daily.trackWalk && daily.trackWalk.result;
+        const testRunDone = daily.testRun && daily.testRun.result;
+        const trainsRan = (daily.runningTrains || []).length > 0;
+
+        const somethingHappened = trackWalkDone || testRunDone || trainsRan ||
+          dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0 ||
+          dayActionsAdded.length > 0 || dayActionsCompleted.length > 0;
+
+        if (somethingHappened) {
+          if (!db.historicalArchive) db.historicalArchive = [];
+          const existingIndex = db.historicalArchive.findIndex(a => a.date === lastDate);
+          
+          const archiveEntry = {
+            date: lastDate,
+            trackWalk: trackWalkDone ? daily.trackWalk : null,
+            testRun: testRunDone ? daily.testRun : null,
+            runningTrains: daily.runningTrains || [],
+            attendance: dayClockLogs.map(l => ({ name: l.name, clockIn: l.clockIn, clockOut: l.clockOut })),
+            incidents: dayIncidents.map(i => ({ asset: i.asset, description: i.Description, status: i.Status, redTagStatus: i['Red Tag Status'] })),
+            maintenance: dayMaintenance.map(m => ({ asset: m.assetName, workDone: m.workDone, performedBy: m.performedBy })),
+            actionsAdded: dayActionsAdded.map(a => a.Title),
+            actionsCompleted: dayActionsCompleted.map(a => a.Title)
+          };
+
+          if (existingIndex > -1) {
+            // Overwrite existing entry if it's already there to prevent duplicates
+            db.historicalArchive[existingIndex] = { ...db.historicalArchive[existingIndex], ...archiveEntry };
+          } else {
+            db.historicalArchive.push(archiveEntry);
+          }
+          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        }
+
+        db.dailyChecks = { lastCheckDate: todayStr, trackWalk: {}, testRun: {}, runningTrains: [] };
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+      }
+
+      function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+      }
+
+      let database, auth;
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        auth = firebase.auth();
+      } catch (e) {
+        console.error("Firebase init error", e);
+      }
+
+      function normaliseDb() {
+        if (!db || typeof db !== 'object') db = {};
+        
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads']
+          .forEach(key => {
+            const val = db[key];
+            if (Array.isArray(val)) return;
+            if (val && typeof val === 'object') {
+              db[key] = Object.keys(val).sort((a, b) => Number(a) - Number(b)).map(k => val[k]).filter(v => v !== null && v !== undefined);
+            } else if (!db[key]) {
+              db[key] = [];
+            }
+          });
+
+        // Dedup Archive Entries (fixes the duplication bug immediately)
+        if (db.historicalArchive && Array.isArray(db.historicalArchive)) {
+          const uniqueArchives = {};
+          db.historicalArchive.forEach(a => {
+            uniqueArchives[a.date] = a; // keeps the latest one for each date
+          });
+          db.historicalArchive = Object.values(uniqueArchives).sort((a,b) => a.date.localeCompare(b.date));
+        }
+
+        if (!db.userPermissions || typeof db.userPermissions !== 'object' || Array.isArray(db.userPermissions)) {
+          db.userPermissions = {};
+        }
+
+        if (!db.fleetItems || db.fleetItems.length === 0) {
+          db.fleetItems = [
+            { name: 'Canadian Pacific', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'DB', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Santa Fe', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'George', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Edward', type: 'Steam', gauge: "5''", state: 'In Service' },
+            { name: 'Dylan', type: 'Electric', gauge: "5''", state: 'In Service' },
+            { name: 'June', type: 'Coach', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Daphne', type: 'Coach', gauge: "7 1/4''", state: 'In Service' }
+          ];
+        }
+      }
+
+      function attachDatabaseListener() {
+        if (!database) {
+          renderInitialApp();
+          return;
+        }
+        database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+          const val = snapshot.val();
+          if (val) {
+            db = val;
+            normaliseDb();
+          }
+          archiveAndResetIfNewDay();
+          renderInitialApp();
+        }, (err) => {
+          console.error("Database connection error:", err);
+        });
+      }
+
+      const REMEMBER_KEY = 'evltRememberedUser';
+
+      function saveRememberedUser() {
+        if (!currentUser) return;
+        const record = currentUser.isSystemAdmin
+          ? { type: 'admin' }
+          : currentUser.isShopKiosk
+            ? { type: 'kiosk' }
+            : { type: 'volunteer', name: currentUser.name };
+        try { localStorage.setItem(REMEMBER_KEY, JSON.stringify(record)); } catch (e) {}
+      }
+
+      function clearRememberedUser() {
+        try { localStorage.removeItem(REMEMBER_KEY); } catch (e) {}
+      }
+
+      function tryRestoreRememberedUser() {
+        let record = null;
+        try { record = JSON.parse(localStorage.getItem(REMEMBER_KEY)); } catch (e) {}
+        if (!record) return false;
+
+        if (record.type === 'admin') {
+          currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
+          return true;
+        }
+        if (record.type === 'kiosk') {
+          currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
+          return true;
+        }
+        if (record.type === 'volunteer') {
+          const vols = db.volunteers || [];
+          const vol = vols.find(v => getVolunteerName(v) === record.name);
+          if (vol) {
+            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
+            return true;
+          }
+        }
+        clearRememberedUser();
+        return false;
+      }
+
+      function logoutDevice() {
+        clearRememberedUser();
+        currentUser = null;
+        document.getElementById('currentUserDisplayName').innerText = 'Not Logged In';
+        openLoginModal();
+      }
+
+      function renderInitialApp() {
+        updateLoginUserDropdown();
+        if (!currentUser) {
+          if (tryRestoreRememberedUser()) {
+            document.getElementById('currentUserDisplayName').innerText = currentUser.name;
+            renderSidebar();
+            navigate(currentUser.isShopKiosk ? 'clock' : currentView);
+            return;
+          }
+          openLoginModal();
+        } else {
+          renderSidebar();
+          navigate(currentView);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        renderDashboard();
+
+        if (auth) {
+          auth.signInAnonymously().then(() => {
+            attachDatabaseListener();
+          }).catch((err) => {
+            console.error("Auth failed:", err);
+            attachDatabaseListener();
+          });
+        } else {
+          attachDatabaseListener();
+        }
+      });
+
+      function updateLoginUserDropdown() {
+        const select = document.getElementById('loginUserSelect');
+        if (!select) return;
+        const vols = db.volunteers || [];
+        
+        let html = '<option value="">-- Choose Account --</option>';
+        html += '<option value="SYSTEM_ADMIN">System Administrator (Full Access)</option>';
+        html += '<option value="SHOP_IPAD">Shop iPad / Kiosk (Clock-In Station)</option>';
+        
+        html += vols.map(v => {
+          const name = getVolunteerName(v);
+          return `<option value="${name}">${name}</option>`;
+        }).join('');
+
+        const currentVal = select.value;
+        select.innerHTML = html;
+        select.value = currentVal;
+      }
+
+      function openLoginModal() {
+        updateLoginUserDropdown();
+        document.getElementById('loginUserPin').value = '';
+        document.getElementById('loginErrorMsg').style.display = 'none';
+        document.getElementById('loginModal').style.display = 'flex';
+      }
+
+      function handleUserLogin(e) {
+        e.preventDefault();
+        const accountVal = document.getElementById('loginUserSelect').value;
+        const pinVal = document.getElementById('loginUserPin').value.trim();
+        const errDiv = document.getElementById('loginErrorMsg');
+
+        if (!accountVal) return;
+
+        if (accountVal === 'SYSTEM_ADMIN') {
+          if (pinVal === '2026') {
+            currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+          return;
+        }
+
+        if (accountVal === 'SHOP_IPAD') {
+          if (pinVal === '2026' || pinVal === '5678') {
+            currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+          return;
+        }
+
+        const vols = db.volunteers || [];
+        const vol = vols.find(v => getVolunteerName(v) === accountVal);
+        if (vol) {
+          const userPin = vol.Pin || vol.pin || '1234';
+          if (pinVal === userPin || pinVal === '2026') {
+            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+        } else {
+          errDiv.style.display = 'block';
+        }
+      }
+
+      function finishLogin() {
+        const rememberBox = document.getElementById('rememberDeviceCheckbox');
+        if (rememberBox && rememberBox.checked) {
+          saveRememberedUser();
+        } else {
+          clearRememberedUser();
+        }
+        closeModal('loginModal');
+        document.getElementById('currentUserDisplayName').innerText = currentUser.name;
+        renderSidebar();
+        navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
+      }
+
+      function userHasAccess(pageKey) {
+        if (pageKey === 'myAccount') return !!(currentUser && currentUser.volData);
+        if (!currentUser) return true;
+        if (currentUser.isSystemAdmin) return true;
+        if (currentUser.isShopKiosk) return pageKey === 'clock';
+
+        const permsMap = db.userPermissions || {};
+        const userPerms = permsMap[currentUser.name];
+        if (Array.isArray(userPerms)) {
+          return userPerms.includes(pageKey);
+        }
+
+        return ['dashboard', 'clock', 'incidents', 'maintenance', 'calendar', 'actions', 'events'].includes(pageKey);
+      }
+
+      function renderSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        if (!currentUser) return;
+
+        const sections = {};
+        ALL_PAGES.forEach(p => {
+          if (!userHasAccess(p.key)) return;
+          if (!sections[p.section]) sections[p.section] = [];
+          sections[p.section].push(p);
+        });
+
+        let html = '';
+        Object.entries(sections).forEach(([secName, pages]) => {
+          html += `<div class="sidebar-section-label">${secName}</div>`;
+          pages.forEach(p => {
+            html += `
+              <a href="#" class="${currentView === p.key ? 'active' : ''}" onclick="navigate('${p.key}'); return false;">
+                <i data-lucide="${p.icon}"></i> ${p.label}
+              </a>
+            `;
+          });
+        });
+
+        html += `
+          <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
+          ${currentUser.volData ? `
+            <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
+              <i data-lucide="user-cog"></i> My Account
+            </a>
+          ` : ''}
+          <a href="#" onclick="openLoginModal(); return false;">
+            <i data-lucide="repeat"></i> Switch Account
+          </a>
+          <a href="#" onclick="logoutDevice(); return false;" style="color: #f87171;">
+            <i data-lucide="log-out"></i> Log Out (forget this device)
+          </a>
+        `;
+
+        sidebar.innerHTML = html;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function toggleMenu() {
+        document.getElementById('sidebar').classList.toggle('active');
+        document.getElementById('overlay').classList.toggle('active');
+      }
+
+      function getVolunteerName(v) {
+        return v.Name || v.name || v['Volunteer Name'] || v['Volunteer ID'] || 'Unknown';
+      }
+
+      function getRedTaggedAssets() {
+        return (db.incidents || [])
+          .filter(i => String(i['Red Tag Status']).toLowerCase() === 'out of service' && String(i.Status).toLowerCase() !== 'resolved')
+          .map(i => String(i.asset || i['Asset / Location'] || '').toLowerCase());
+      }
+
+      function navigate(view) {
+        if (!userHasAccess(view)) {
+          alert('You do not have permission to access this page.');
+          return;
+        }
+        currentView = view;
+        renderSidebar();
+
+        switch(view) {
+          case 'dashboard': renderDashboard(); break;
+          case 'clock': renderClock(); break;
+          case 'calendar': renderCalendarView(); break;
+          case 'clockLogs': renderGenericModule('Clock Log Records', 'Raw attendance logs.', 'clockLogs'); break;
+          case 'incidents': renderIncidents(); break;
+          case 'competency': renderCompetencyMatrix(); break;
+          case 'volunteers': renderVolunteers(); break;
+          case 'actions': renderActionsPage(); break;
+          case 'maintenance': renderMaintenancePage(); break;
+          case 'events': renderEventsPage(); break;
+          case 'assets': renderGenericModule('Assets', 'Rolling stock and equipment.', 'assets'); break;
+          case 'stock': renderGenericModule('Euro Tunnel', 'Everything to do with our Eurotunnel operations, including the N gauge model layout.', 'stock'); break;
+          case 'suppliers': renderGenericModule('Suppliers', 'Vendor contacts.', 'suppliers'); break;
+          case 'enquiries': renderGenericModule('Enquiries', 'Customer questions.', 'enquiries'); break;
+          case 'documents': renderGenericModule('Documents', 'Rulebooks and guides.', 'documents'); break;
+          case 'notes': renderGenericModule('Notes', 'Handover notes.', 'notes'); break;
+          case 'archives': renderArchives(); break;
+          case 'myAccount': renderMyAccount(); break;
+          default: renderDashboard();
+        }
+      }
+
+      function getDriverStatusHtml() {
+        const activeLogs = (db.clockLogs || []).filter(l => l.status === 'Clocked In');
+        const volunteers = db.volunteers || [];
+        let driverCount = 0;
+        activeLogs.forEach(log => {
+          const vol = volunteers.find(v => getVolunteerName(v) === log.name);
+          if (vol && (vol.Roles || vol.roles || '').includes('Driver')) driverCount++;
+        });
+
+        if (driverCount >= 2) {
+          return `<div style="background: #dcfce7; color: #166534; padding: 0.75rem; border-radius: var(--radius); border: 1px solid #bbf7d0; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i data-lucide="check-circle"></i> Qualified drivers currently on site: ${driverCount} — Safety Requirement Met</div>`;
+        } else {
+          return `<div style="background: #fef2f2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius); border: 1px solid #fecaca; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i data-lucide="alert-triangle"></i> WARNING: Only ${driverCount} qualified driver(s) currently on site. A minimum of 2 drivers is required for operations.</div>`;
+        }
+      }
+
+      function renderDashboard() {
+        const content = document.getElementById('content');
+        const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
+        const openIncidents = (db.incidents || []).filter(i => String(i.Status).toLowerCase() !== 'resolved').length;
+        const pendingMaintenance = (db.maintenanceLogs || []).length;
+        const daily = db.dailyChecks || { trackWalk: {}, testRun: {}, runningTrains: [] };
+        const runningTrains = daily.runningTrains || [];
+
+        // Check if today falls in any active event
+        const todayStr = getTodayString();
+        const activeEvents = (db.events || []).filter(ev => {
+          const start = ev.StartDate || ev.startDate;
+          const end = ev.EndDate || ev.endDate || start;
+          return todayStr >= start && todayStr <= end;
+        });
+
+        const eventBannerHtml = activeEvents.length > 0 ? `
+          <div style="background: linear-gradient(135deg, #fef08a, #fde047); color: #713f12; padding: 0.85rem 1rem; border-radius: var(--radius-lg); border: 1px solid #facc15; font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm);">
+            <i data-lucide="calendar-range" style="width:20px; height:20px; flex-shrink:0;"></i>
+            <div>Active Event Today: <strong>${activeEvents.map(e => e.Title || e.title).join(', ')}</strong></div>
+          </div>
+        ` : '';
+
+        const renderResultIcon = (res) => {
+          if (res === 'Pass') return '<div class="result-badge result-pass"><i data-lucide="check" style="width:14px;height:14px;"></i></div>';
+          if (res === 'Fail') return '<div class="result-badge result-fail"><i data-lucide="x" style="width:14px;height:14px;"></i></div>';
+          return '<div class="result-badge result-none">-</div>';
+        };
+
+        const trackWalkPassed = daily.trackWalk && daily.trackWalk.result === 'Pass';
+
+        content.innerHTML = `
+          ${eventBannerHtml}
+          ${getDriverStatusHtml()}
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Operations Dashboard</h2>
+              <p>Railway daily safety inspections and site activity overview (${todayStr}).</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openIncidentModal()">
+              <i data-lucide="alert-triangle"></i> Report Defect / Red Tag
+            </button>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">Today's Running Trains (Resets Daily)</div>
+            <div class="card" style="padding: 1rem;">
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
+                ${runningTrains.length === 0 ? '<span style="color: var(--text-muted); font-size: 0.8rem;">No trains added for running today.</span>' :
+                  runningTrains.map(train => `
+                    <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: var(--radius); font-weight: 600; font-size: 0.8rem;">
+                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${train}
+                      <button type="button" onclick="removeRunningTrain('${train}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
+                    </div>
+                  `).join('')}
+              </div>
+              <div style="display: flex; gap: 0.5rem; max-width: 350px;">
+                <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
+                  <option value="">-- Add Loco to Today's Run --</option>
+                  ${AVAILABLE_TRAINS.map(t => `<option value="${t}">${t}</option>`).join('')}
+                </select>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">Daily Safety Inspections (Resets Daily)</div>
+            <div class="card">
+              <div class="table-container">
+                <table class="checks-table">
+                  <thead>
+                    <tr>
+                      <th>Check Type</th>
+                      <th>Inspected By</th>
+                      <th style="text-align:center;">Result</th>
+                      <th>Notes / Running Locos</th>
+                      <th style="text-align:right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="checks-row" onclick="openOpCheckModal('trackWalk')">
+                      <td><strong>Track Walk</strong></td>
+                      <td>${daily.trackWalk?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td style="text-align:center;">${renderResultIcon(daily.trackWalk?.result)}</td>
+                      <td>${daily.trackWalk?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.trackWalk?.notes}</span>` : (daily.trackWalk?.notes || '-') }</td>
+                      <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('trackWalk')">Edit Check</button></td>
+                    </tr>
+                    <tr class="checks-row" onclick="openOpCheckModal('testRun')">
+                      <td><strong>Test Run</strong></td>
+                      <td>${daily.testRun?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td style="text-align:center;">${renderResultIcon(daily.testRun?.result)}</td>
+                      <td>
+                        ${daily.testRun?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.testRun?.notes}</span>` : 
+                          (daily.testRun?.trains || []).map(t => `<span class="train-tag">${t}</span>`).join('') || daily.testRun?.notes || '-'}
+                      </td>
+                      <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('testRun')" ${!trackWalkPassed ? 'disabled title="Requires passed Track Walk first"' : ''}>Edit Check</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-stats">
+            <div class="stat-card" onclick="navigate('clock')">
+              <div class="stat-header"><span>Active Staff On Site</span><div class="stat-icon"><i data-lucide="users"></i></div></div>
+              <div class="stat-value">${activeClockIns}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('incidents')">
+              <div class="stat-header"><span>Open Defects</span><div class="stat-icon"><i data-lucide="alert-triangle"></i></div></div>
+              <div class="stat-value" style="color: ${openIncidents > 0 ? '#dc2626' : 'inherit'}">${openIncidents}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('maintenance')">
+              <div class="stat-header"><span>Maintenance Logs</span><div class="stat-icon"><i data-lucide="wrench"></i></div></div>
+              <div class="stat-value">${pendingMaintenance}</div>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addRunningTrain() {
+        const select = document.getElementById('newRunningTrainSelect');
+        const trainName = select.value;
+        if (!trainName) return;
+        if (!db.dailyChecks.runningTrains) db.dailyChecks.runningTrains = [];
+        if (!db.dailyChecks.runningTrains.includes(trainName)) {
+          db.dailyChecks.runningTrains.push(trainName);
+          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          renderDashboard();
+        }
+      }
+
+      function removeRunningTrain(trainName) {
+        if (!db.dailyChecks.runningTrains) return;
+        db.dailyChecks.runningTrains = db.dailyChecks.runningTrains.filter(t => t !== trainName);
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        renderDashboard();
+      }
+
+      function openOpCheckModal(checkKey) {
+        const daily = db.dailyChecks || { trackWalk: {}, testRun: {} };
+        if (checkKey === 'testRun') {
+          if (!daily.trackWalk || daily.trackWalk.result !== 'Pass') {
+            alert('Cannot complete Test Run until a Track Walk has been successfully completed and passed.');
+            return;
+          }
+        }
+        const checkData = daily[checkKey] ? daily[checkKey] : { inspector: '', result: 'Pass', notes: '', trains: [] };
+        document.getElementById('opCheckKey').value = checkKey;
+        document.getElementById('opCheckTitle').innerText = checkKey === 'trackWalk' ? 'Log Track Walk' : 'Log Test Run';
+
+        const volunteers = db.volunteers || [];
+        const inspectorSelect = document.getElementById('opCheckInspector');
+        inspectorSelect.innerHTML = '<option value="">-- Select Qualified Volunteer --</option>' + 
+          volunteers.map(v => {
+            const name = getVolunteerName(v);
+            return `<option value="${name}" ${checkData.inspector === name ? 'selected' : ''}>${name}</option>`;
+          }).join('');
+
+        document.getElementById('opCheckResult').value = checkData.result || 'Pass';
+        document.getElementById('opCheckReason').value = checkData.notes || '';
+        toggleOpCheckReason(checkData.result || 'Pass');
+
+        const trainGroup = document.getElementById('trainSelectionGroup');
+        if (checkKey === 'testRun') {
+          trainGroup.style.display = 'block';
+          const redTagged = getRedTaggedAssets();
+          const locoSelect = document.getElementById('opCheckLocoSelect');
+          const activeLoco = (checkData.trains && checkData.trains.length > 0) ? checkData.trains[0] : '';
+          locoSelect.innerHTML = '<option value="">-- Select Running Locomotive --</option>' + 
+            AVAILABLE_TRAINS.map(train => {
+              if (redTagged.some(rt => rt.includes(train.toLowerCase()))) return '';
+              return `<option value="${train}" ${activeLoco === train ? 'selected' : ''}>${train}</option>`;
+            }).join('');
+        } else {
+          trainGroup.style.display = 'none';
+        }
+        document.getElementById('opCheckModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveOpCheck(e) {
+        e.preventDefault();
+        const checkKey = document.getElementById('opCheckKey').value;
+        const inspector = document.getElementById('opCheckInspector').value;
+        const result = document.getElementById('opCheckResult').value;
+        const notes = document.getElementById('opCheckReason').value;
+
+        const selectedTrains = [];
+        if (checkKey === 'testRun') {
+          const chosenLoco = document.getElementById('opCheckLocoSelect').value;
+          if (chosenLoco) selectedTrains.push(chosenLoco);
+        }
+
+        if (!db.dailyChecks) db.dailyChecks = {};
+        db.dailyChecks.lastCheckDate = getTodayString();
+        db.dailyChecks[checkKey] = { inspector, result, notes, trains: selectedTrains, recordedBy: currentUser ? currentUser.name : 'User' };
+
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        closeModal('opCheckModal');
+        renderDashboard();
+      }
+
+      function toggleOpCheckReason(resultVal) {
+        const reasonGroup = document.getElementById('reasonSelectionGroup');
+        const reasonInput = document.getElementById('opCheckReason');
+        if (resultVal === 'Fail') {
+          reasonGroup.style.display = 'block';
+          reasonInput.required = true;
+        } else {
+          reasonGroup.style.display = 'none';
+          reasonInput.required = false;
+        }
+      }
+
+      function renderIncidents() {
+        const content = document.getElementById('content');
+        const incidents = db.incidents || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Incident & Defect Log</h2>
+              <p>Reported defects, red tags, and safety incidents across the fleet and site.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openIncidentModal()"><i data-lucide="alert-triangle"></i> Report Defect / Red Tag</button>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Asset / Location</th>
+                    <th>Description</th>
+                    <th>Red Tag Status</th>
+                    <th>Status</th>
+                    <th>Reported By</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${incidents.length === 0 ? `<tr><td colspan="7" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No incidents or defects logged.</td></tr>` :
+                    incidents.slice().reverse().map((inc, revIdx) => {
+                      const idx = incidents.length - 1 - revIdx;
+                      const isOutOfService = String(inc['Red Tag Status']).toLowerCase() === 'out of service';
+                      return `
+                        <tr>
+                          <td>${inc.Date || '-'}</td>
+                          <td><strong>${inc.asset || inc['Asset / Location'] || '-'}</strong></td>
+                          <td style="white-space:normal; max-width:260px;">${inc.Description || inc.desc || '-'}${inc.Photo ? `<br><img src="${inc.Photo}" style="width:40px; height:40px; object-fit:cover; border-radius:4px; border:1px solid var(--border); margin-top:4px;" />` : ''}</td>
+                          <td><span style="font-weight:600; color:${isOutOfService ? '#dc2626' : '#16a34a'};">${inc['Red Tag Status'] || 'Operational'}</span></td>
+                          <td>${String(inc.Status).toLowerCase() === 'resolved' ? '<span style="color:#16a34a; font-weight:600;">Resolved</span>' : '<span style="color:#eab308; font-weight:600;">Open</span>'}</td>
+                          <td>${inc.reportedBy || '-'}</td>
+                          <td style="text-align:right;">
+                            ${String(inc.Status).toLowerCase() !== 'resolved' ? `<button class="btn btn-primary btn-sm" onclick="resolveIncident(${idx})">Resolve</button>` : ''}
+                            <button class="btn btn-secondary btn-sm" onclick="openIncidentModal(${idx})"><i data-lucide="edit"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteIncident(${idx})"><i data-lucide="trash-2"></i></button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openIncidentModal(index = null) {
+        editingIncidentIndex = index;
+        const existing = (index !== null && db.incidents) ? db.incidents[index] : null;
+        tempPhotoBase64 = existing ? (existing.Photo || '') : '';
+        document.getElementById('incidentAsset').value = existing ? (existing.asset || existing['Asset / Location'] || '') : '';
+        document.getElementById('incidentDesc').value = existing ? (existing.Description || existing.desc || '') : '';
+        document.getElementById('incidentRedTag').value = existing ? (existing['Red Tag Status'] || 'Operational') : 'Operational';
+        document.getElementById('incidentPhoto').value = '';
+        document.getElementById('incidentModal').style.display = 'flex';
+      }
+
+      function previewIncidentPhoto(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            tempPhotoBase64 = evt.target.result;
+            const img = document.getElementById('incidentPhotoPreview');
+            img.src = tempPhotoBase64;
+            img.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function saveIncident(e) {
+        e.preventDefault();
+        const asset = document.getElementById('incidentAsset').value;
+        const desc = document.getElementById('incidentDesc').value;
+        const redTag = document.getElementById('incidentRedTag').value;
+
+        if (!db.incidents) db.incidents = [];
+        if (editingIncidentIndex !== null && db.incidents[editingIncidentIndex]) {
+          db.incidents[editingIncidentIndex].asset = asset;
+          db.incidents[editingIncidentIndex].Description = desc;
+          db.incidents[editingIncidentIndex]['Red Tag Status'] = redTag;
+          db.incidents[editingIncidentIndex].Photo = tempPhotoBase64;
+        } else {
+          db.incidents.push({
+            id: Date.now(),
+            asset: asset,
+            Description: desc,
+            'Red Tag Status': redTag,
+            Status: 'Open',
+            Date: new Date().toLocaleDateString('en-GB'),
+            Photo: tempPhotoBase64,
+            reportedBy: currentUser ? currentUser.name : 'User'
+          });
+        }
+        closeModal('incidentModal');
+        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+        navigate(currentView);
+      }
+
+      function resolveIncident(idx) {
+        if (db.incidents && db.incidents[idx]) {
+          db.incidents[idx].Status = 'Resolved';
+          database.ref(`EVLT_ADMIN_DB/incidents/${idx}`).set(db.incidents[idx]);
+          renderIncidents();
+        }
+      }
+
+      function deleteIncident(idx) {
+        if (confirm('Delete this record?')) {
+          db.incidents.splice(idx, 1);
+          database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+          renderIncidents();
+        }
+      }
+
+      function handleClockAction(e) {
+        e.preventDefault();
+        if (currentUser && !currentUser.isSystemAdmin && !currentUser.isShopKiosk) {
+          alert('Clock-in actions are restricted to System Admin or Shop iPad accounts only.');
+          return;
+        }
+
+        const name = document.getElementById('clockVolunteer').value;
+        const action = document.getElementById('clockActionType').value;
+        if (!name) return;
+
+        const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = getTodayString();
+
+        if (!db.clockLogs) db.clockLogs = [];
+        let updatedLogs = [...db.clockLogs];
+
+        if (action === 'In') {
+          updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: timeStr, clockOut: '-', status: 'Clocked In' });
+        } else {
+          const activeLog = updatedLogs.slice().reverse().find(l => l.name === name && l.status === 'Clocked In');
+          if (activeLog) {
+            const target = updatedLogs.find(l => l.id === activeLog.id);
+            target.clockOut = timeStr;
+            target.status = 'Completed';
+          } else {
+            updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: '-', clockOut: timeStr, status: 'Completed' });
+          }
+        }
+
+        database.ref('EVLT_ADMIN_DB/clockLogs').set(updatedLogs);
+        renderClock();
+      }
+
+      function renderClock() {
+        const content = document.getElementById('content');
+        const activeLogs = (db.clockLogs || []).filter(l => l.status === 'Clocked In');
+        const volunteers = db.volunteers || [];
+        const canOperate = currentUser && (currentUser.isSystemAdmin || currentUser.isShopKiosk);
+
+        const clockFormHtml = canOperate ? `
+          <div class="card" style="padding: 1.25rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Record Attendance</h3>
+            <form onsubmit="handleClockAction(event)">
+              <div class="form-group">
+                <label>Select Volunteer</label>
+                <select id="clockVolunteer" required>
+                  <option value="">-- Choose Name --</option>
+                  ${volunteers.filter(v => !v.disabled).map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)} (${v.Roles || v.roles || 'Standard'})</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Action Type</label>
+                <select id="clockActionType" required>
+                  <option value="In">Clock In (Arrived on Site)</option>
+                  <option value="Out">Clock Out (Leaving Site)</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Submit Attendance</button>
+            </form>
+          </div>
+        ` : `
+          <div class="card" style="padding: 1.25rem; text-align:center;">
+            <i data-lucide="shield-alert" style="width:36px; height:36px; color:#dc2626; margin-bottom:0.75rem;"></i>
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem;">Restricted</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Attendance can only be recorded from the Shop iPad account, or by a System Admin.</p>
+          </div>
+        `;
+
+        content.innerHTML = `
+          ${getDriverStatusHtml()}
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Volunteer Clock In / Out</h2>
+              <p>Record your attendance for health, safety, and insurance tracking.</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+            ${clockFormHtml}
+
+            <div class="card" style="padding: 1.25rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Currently On Site (${activeLogs.length})</h3>
+              <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                ${activeLogs.length === 0 ? '<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:1.5rem;">No volunteers currently clocked in.</div>' :
+                  activeLogs.map(l => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.6rem 0.75rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.825rem;">
+                      <div>
+                        <div style="font-weight: 600;">${l.name}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Clocked In at ${l.clockIn}</div>
+                      </div>
+                      <span style="background: #dcfce7; color: #166534; font-weight: 700; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">Active</span>
+                    </div>
+                  `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function deleteClockLog(id) {
+        if (currentUser && !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete attendance records.');
+          return;
+        }
+        if (!confirm('Are you sure you want to delete this attendance record?')) return;
+        db.clockLogs = (db.clockLogs || []).filter(l => l.id !== id);
+        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+        renderCalendarView();
+      }
+
+      function changeCalendarMonth(dir) {
+        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + dir);
+        renderCalendarView();
+      }
+
+      function selectCalendarDate(dateStr) {
+        selectedCalendarDateStr = dateStr;
+        renderCalendarView();
+      }
+
+      function renderCalendarView() {
+        const content = document.getElementById('content');
+        const year = calendarCurrentDate.getFullYear();
+        const month = calendarCurrentDate.getMonth();
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+
+        const logs = db.clockLogs || [];
+        const events = db.events || [];
+
+        // Calculate hours for selected date
+        const dayLogs = logs.filter(l => l.date === selectedCalendarDateStr);
+        const volunteerHours = {};
+        dayLogs.forEach(l => {
+          if (!volunteerHours[l.name]) volunteerHours[l.name] = 0;
+          if (l.clockIn && l.clockOut && l.clockIn !== '-' && l.clockOut !== '-') {
+            const [inH, inM] = l.clockIn.split(':').map(Number);
+            const [outH, outM] = l.clockOut.split(':').map(Number);
+            let diff = (outH * 60 + outM) - (inH * 60 + inM);
+            if (diff < 0) diff += 24 * 60;
+            volunteerHours[l.name] += diff / 60;
+          }
+        });
+
+        // Calculate hours for current month & year
+        const monthlyVolunteerHours = {};
+        const yearlyVolunteerHours = {};
+        logs.forEach(l => {
+          if (!l.date) return;
+          const [lYear, lMonth] = l.date.split('-').map(Number);
+          if (lYear !== year) return;
+
+          let diffHrs = 0;
+          if (l.clockIn && l.clockOut && l.clockIn !== '-' && l.clockOut !== '-') {
+            const [inH, inM] = l.clockIn.split(':').map(Number);
+            const [outH, outM] = l.clockOut.split(':').map(Number);
+            let diff = (outH * 60 + outM) - (inH * 60 + inM);
+            if (diff < 0) diff += 24 * 60;
+            diffHrs = diff / 60;
+          }
+
+          if (!yearlyVolunteerHours[l.name]) yearlyVolunteerHours[l.name] = 0;
+          yearlyVolunteerHours[l.name] += diffHrs;
+
+          if (lMonth === (month + 1)) {
+            if (!monthlyVolunteerHours[l.name]) monthlyVolunteerHours[l.name] = 0;
+            monthlyVolunteerHours[l.name] += diffHrs;
+          }
+        });
+
+        let daysHtml = '';
+        for (let i = 0; i < firstDayIndex; i++) {
+          daysHtml += '<div class="cal-day empty"></div>';
+        }
+
+        for (let d = 1; d <= totalDays; d++) {
+          const mStr = String(month + 1).padStart(2, '0');
+          const dStr = String(d).padStart(2, '0');
+          const dateStr = `${year}-${mStr}-${dStr}`;
+          const isSelected = dateStr === selectedCalendarDateStr;
+          const countForDay = logs.filter(l => l.date === dateStr).length;
+
+          // Check if any event falls on this date
+          const dayEvents = events.filter(ev => {
+            const start = ev.StartDate || ev.startDate;
+            const end = ev.EndDate || ev.endDate || start;
+            return dateStr >= start && dateStr <= end;
+          });
+
+          daysHtml += `
+            <div class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" onclick="selectCalendarDate('${dateStr}')">
+              <div style="font-weight:700;">${d}</div>
+              <div>
+                ${dayEvents.map(e => `<div class="cal-event-dot" title="${e.Title || e.title}">${e.Title || e.title}</div>`).join('')}
+                ${countForDay > 0 ? `<div class="cal-badge">${countForDay} log(s)</div>` : ''}
+              </div>
+            </div>
+          `;
+        }
+
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Attendance & Hours Calendar</h2>
+              <p>Select any date on the calendar to audit shifts and hours worked.</p>
+            </div>
+          </div>
+
+          <div class="calendar-layout">
+            <div class="card" style="padding: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(-1)"><i data-lucide="chevron-left"></i> Prev</button>
+                <h3 style="font-size: 1rem; font-weight: 700; margin:0;">${monthNames[month]} ${year}</h3>
+                <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(1)">Next <i data-lucide="chevron-right"></i></button>
+              </div>
+
+              <div class="calendar-grid">
+                <div class="cal-header">Sun</div>
+                <div class="cal-header">Mon</div>
+                <div class="cal-header">Tue</div>
+                <div class="cal-header">Wed</div>
+                <div class="cal-header">Thu</div>
+                <div class="cal-header">Fri</div>
+                <div class="cal-header">Sat</div>
+                ${daysHtml}
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                  <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.2rem;">Date: ${selectedCalendarDateStr}</h3>
+                  <p style="font-size: 0.75rem; color: var(--text-muted);">Summary of volunteer hours for this date.</p>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto;">
+                  <div style="font-size: 0.775rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 0.2rem;">Daily Hours Summary</div>
+                  ${Object.keys(volunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded for this date.</div>' :
+                    Object.entries(volunteerHours).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.825rem;">
+                        <span style="font-weight: 600;">${name}</span>
+                        <span style="background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 4px; font-weight: 700;">${hrs.toFixed(1)} hrs</span>
+                      </div>
+                    `).join('')}
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+                  <div style="font-size: 0.775rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Detailed Shift Logs</div>
+                  <div style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem;">
+                    ${dayLogs.length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No individual shift entries for this date.</div>' :
+                      dayLogs.map(l => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.4rem 0.6rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.775rem;">
+                          <div>
+                            <div style="font-weight: 600;">${l.name}</div>
+                            <div style="color: var(--text-muted);">${l.clockIn} → ${l.clockOut}</div>
+                          </div>
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" style="padding: 2px 6px;" onclick="deleteClockLog(${l.id})"><i data-lucide="trash-2"></i></button>` : ''}
+                        </div>
+                      `).join('')}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Monthly Totals Card -->
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;">Monthly Total Hours (${monthNames[month]} ${year})</h3>
+                <div style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem;">
+                  ${Object.keys(monthlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded for this month.</div>' :
+                    Object.entries(monthlyVolunteerHours).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.825rem; background: var(--bg); padding: 0.35rem 0.6rem; border-radius: var(--radius);">
+                        <span style="font-weight: 600;">${name}</span>
+                        <span style="background: var(--primary); color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: 700;">${hrs.toFixed(1)} hrs</span>
+                      </div>
+                    `).join('')}
+                </div>
+              </div>
+
+              <!-- Yearly Totals Card -->
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;">Yearly Total Hours (${year})</h3>
+                <div style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem;">
+                  ${Object.keys(yearlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded for this year.</div>' :
+                    Object.entries(yearlyVolunteerHours).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.825rem; background: var(--bg); padding: 0.35rem 0.6rem; border-radius: var(--radius);">
+                        <span style="font-weight: 600;">${name}</span>
+                        <span style="background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: 700;">${hrs.toFixed(1)} hrs</span>
+                      </div>
+                    `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      // Fleet & Maintenance Page Logic
+      function renderMaintenancePage() {
+        const content = document.getElementById('content');
+        const fleetItems = db.fleetItems || [];
+        const maintLogs = db.maintenanceLogs || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Maintenance & Fleet Management</h2>
+              <p>Locomotive and carriage specifications, operational states, and maintenance logs.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openFleetModal()"><i data-lucide="plus"></i> Add Loco / Carriage</button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            ${fleetItems.map((item, fIdx) => {
+              const itemLogs = maintLogs.filter(l => l.assetName === item.name);
+              return `
+                <div class="card" style="padding: 1.25rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                    <div>
+                      <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary);">${item.name}</h3>
+                      <div style="font-size: 0.75rem; color: var(--text-muted);">Type: <strong>${item.type}</strong> | Gauge: <strong>${item.gauge}</strong> | State: <span style="font-weight: 700; color: ${item.state === 'In Service' ? '#16a34a' : item.state === 'Overhaul' ? '#eab308' : '#dc2626'}">${item.state}</span></div>
+                    </div>
+                    <div style="display: flex; gap: 0.4rem;">
+                      <button class="btn btn-secondary btn-sm" onclick="openMaintLogModal('${item.name}')"><i data-lucide="wrench"></i> Add Log</button>
+                      <button class="btn btn-secondary btn-sm" onclick="openFleetModal(${fIdx})"><i data-lucide="edit"></i></button>
+                      ${currentUser.isSystemAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteFleetItem(${fIdx})"><i data-lucide="trash-2"></i></button>` : ''}
+                    </div>
+                  </div>
+
+                  <div style="font-size: 0.775rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Maintenance History & Logs</div>
+                  <div class="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date / Period</th>
+                          <th>Work Performed</th>
+                          <th>Performed By</th>
+                          <th>Photo</th>
+                          <th>Notes</th>
+                          <th style="text-align:right;">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${itemLogs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:1rem; color:var(--text-muted);">No maintenance logs recorded for this item.</td></tr>' :
+                          itemLogs.map(log => {
+                            const canDelete = currentUser.isSystemAdmin || (log.performedBy && log.performedBy.includes(currentUser.name));
+                            return `
+                              <tr>
+                                <td>${log.startDate === log.endDate ? log.startDate : `${log.startDate} → ${log.endDate}`}</td>
+                                <td style="white-space:normal; max-width:200px;">${log.workDone}</td>
+                                <td style="white-space:normal; max-width:150px;">${log.performedBy || '-'}</td>
+                                <td>${log.photo ? `<img src="${log.photo}" style="width:40px; height:40px; object-fit:cover; border-radius:4px; border:1px solid var(--border);" />` : '-'}</td>
+                                <td style="white-space:normal; max-width:150px;">${log.notes || '-'}</td>
+                                <td style="text-align:right;">
+                                  ${canDelete ? `<button class="btn btn-danger btn-sm" style="padding: 2px 6px;" onclick="deleteMaintLog(${log.id})"><i data-lucide="trash-2"></i></button>` : ''}
+                                </td>
+                              </tr>
+                            `;
+                          }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openFleetModal(index = null) {
+        document.getElementById('fleetEditIndex').value = index !== null ? index : '';
+        const item = (index !== null && db.fleetItems) ? db.fleetItems[index] : {};
+        document.getElementById('fleetName').value = item.name || '';
+        document.getElementById('fleetType').value = item.type || 'Steam';
+        document.getElementById('fleetGauge').value = item.gauge || "7 1/4''";
+        document.getElementById('fleetState').value = item.state || 'In Service';
+        document.getElementById('fleetModalTitle').innerText = index !== null ? 'Edit Fleet Item' : 'Add Loco / Carriage';
+        document.getElementById('fleetModal').style.display = 'flex';
+      }
+
+      function saveFleetItem(e) {
+        e.preventDefault();
+        const idx = document.getElementById('fleetEditIndex').value;
+        const newItem = {
+          name: document.getElementById('fleetName').value,
+          type: document.getElementById('fleetType').value,
+          gauge: document.getElementById('fleetGauge').value,
+          state: document.getElementById('fleetState').value
+        };
+
+        if (!db.fleetItems) db.fleetItems = [];
+        if (idx !== '') {
+          db.fleetItems[Number(idx)] = newItem;
+        } else {
+          db.fleetItems.push(newItem);
+        }
+
+        database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+        closeModal('fleetModal');
+        renderMaintenancePage();
+      }
+
+      function deleteFleetItem(idx) {
+        if (!currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete fleet items.');
+          return;
+        }
+        if (confirm('Delete this fleet item and its logs?')) {
+          db.fleetItems.splice(idx, 1);
+          database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+          renderMaintenancePage();
+        }
+      }
+
+      function openMaintLogModal(assetName) {
+        document.getElementById('maintLogAsset').value = assetName;
+        document.getElementById('maintWorkDone').value = '';
+        document.getElementById('maintStartDate').value = getTodayString();
+        document.getElementById('maintEndDate').value = getTodayString();
+        document.getElementById('maintUpdateState').value = '';
+        document.getElementById('maintNotes').value = '';
+        tempMaintPhotoBase64 = '';
+        document.getElementById('maintPhoto').value = '';
+        document.getElementById('maintPhotoPreview').style.display = 'none';
+
+        const vols = db.volunteers || [];
+        const container = document.getElementById('maintVolunteersList');
+        if (vols.length === 0) {
+          container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted);">No registered volunteers found.</div>';
+        } else {
+          container.innerHTML = vols.map(v => {
+            const name = getVolunteerName(v);
+            const isCurrent = currentUser && currentUser.name === name;
+            return `
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" name="maintVolCheckbox" value="${name}" ${isCurrent ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+                ${name}
+              </label>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('maintLogModal').style.display = 'flex';
+      }
+
+      function previewMaintPhoto(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            tempMaintPhotoBase64 = evt.target.result;
+            const img = document.getElementById('maintPhotoPreview');
+            img.src = tempMaintPhotoBase64;
+            img.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function saveMaintenanceLogEntry(e) {
+        e.preventDefault();
+        const assetName = document.getElementById('maintLogAsset').value;
+        const selectedVols = [];
+        document.querySelectorAll('input[name="maintVolCheckbox"]:checked').forEach(cb => selectedVols.push(cb.value));
+
+        const updatedState = document.getElementById('maintUpdateState').value;
+
+        const logEntry = {
+          id: Date.now(),
+          assetName: assetName,
+          workDone: document.getElementById('maintWorkDone').value,
+          startDate: document.getElementById('maintStartDate').value,
+          endDate: document.getElementById('maintEndDate').value,
+          performedBy: selectedVols.join(', ') || (currentUser ? currentUser.name : 'User'),
+          photo: tempMaintPhotoBase64,
+          notes: document.getElementById('maintNotes').value
+        };
+
+        if (!db.maintenanceLogs) db.maintenanceLogs = [];
+        db.maintenanceLogs.push(logEntry);
+
+        if (updatedState && db.fleetItems) {
+          const fleetItem = db.fleetItems.find(f => f.name === assetName);
+          if (fleetItem) {
+            fleetItem.state = updatedState;
+            database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+          }
+        }
+
+        database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+        closeModal('maintLogModal');
+        renderMaintenancePage();
+      }
+
+      function deleteMaintLog(logId) {
+        if (confirm('Delete this maintenance log entry?')) {
+          db.maintenanceLogs = (db.maintenanceLogs || []).filter(l => l.id !== logId);
+          database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+          renderMaintenancePage();
+        }
+      }
+
+      // Events Page Logic
+      function renderEventsPage() {
+        checkExpiredEvents();
+        const content = document.getElementById('content');
+        const events = db.events || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Events & Running Days</h2>
+              <p>Special events, galas, and railway running schedules.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Event Title</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Description</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${events.length === 0 ? `<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No upcoming events found.</td></tr>` :
+                    events.map((ev, idx) => `
+                      <tr>
+                        <td><strong>${ev.Title || ev.title}</strong></td>
+                        <td>${ev.StartDate || ev.startDate || '-'}</td>
+                        <td>${ev.EndDate || ev.endDate || '-'}</td>
+                        <td style="max-width:250px; white-space:normal;">${ev.Description || ev.description || '-'}</td>
+                        <td style="text-align:right;">
+                          <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})"><i data-lucide="edit"></i></button>
+                          <button class="btn btn-danger btn-sm" onclick="deleteEvent(${idx})"><i data-lucide="trash-2"></i></button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openEventModal(index = null) {
+        document.getElementById('eventEditIndex').value = index !== null ? index : '';
+        const ev = (index !== null && db.events) ? db.events[index] : {};
+
+        document.getElementById('eventModalTitle').innerText = index !== null ? 'Edit Event' : 'Add Event';
+        document.getElementById('evt_title').value = ev.Title || ev.title || '';
+        document.getElementById('evt_start').value = ev.StartDate || ev.startDate || getTodayString();
+        document.getElementById('evt_end').value = ev.EndDate || ev.endDate || getTodayString();
+        document.getElementById('evt_desc').value = ev.Description || ev.description || '';
+
+        document.getElementById('eventModal').style.display = 'flex';
+      }
+
+      function saveEventItem(e) {
+        e.preventDefault();
+        const idxVal = document.getElementById('eventEditIndex').value;
+        const title = document.getElementById('evt_title').value;
+        const start = document.getElementById('evt_start').value;
+        const end = document.getElementById('evt_end').value;
+        const desc = document.getElementById('evt_desc').value;
+
+        if (!db.events) db.events = [];
+
+        if (idxVal !== '') {
+          const idx = Number(idxVal);
+          db.events[idx] = { Title: title, StartDate: start, EndDate: end, Description: desc };
+        } else {
+          db.events.push({ id: Date.now(), Title: title, StartDate: start, EndDate: end, Description: desc });
+        }
+
+        database.ref('EVLT_ADMIN_DB/events').set(db.events);
+        closeModal('eventModal');
+        renderEventsPage();
+      }
+
+      function deleteEvent(idx) {
+        if (confirm('Delete this event?')) {
+          db.events.splice(idx, 1);
+          database.ref('EVLT_ADMIN_DB/events').set(db.events);
+          renderEventsPage();
+        }
+      }
+
+      // Actions Page & Linked Recurring Maintenance Logic
+      function renderActionsPage() {
+        const content = document.getElementById('content');
+        const actions = db.actions || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Actions & Tasks</h2>
+              <p>Task management with support for recurring maintenance and automatic locomotive log syncing.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openActionModal()"><i data-lucide="plus"></i> Add Action / Task</button>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Asset / Loco</th>
+                    <th>Assigned To</th>
+                    <th>Due Date</th>
+                    <th>Recurrence</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${actions.length === 0 ? `<tr><td colspan="8" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No action items found.</td></tr>` :
+                    actions.map((act, idx) => `
+                      <tr>
+                        <td><strong>${act.Title}</strong>${act.Description ? `<br><small style="color:var(--text-muted);">${act.Description}</small>` : ''}</td>
+                        <td>${act.asset || act.Asset || '-'}</td>
+                        <td>${act.AssignedTo || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                        <td>${act.DueDate || '-'}</td>
+                        <td>${act.Recurrence && act.Recurrence !== 'None' ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 6px; border-radius:4px; font-weight:600; font-size:0.7rem;">${act.Recurrence}</span>` : 'One-off'}</td>
+                        <td><span style="font-weight:600; color:${act.Priority === 'High' ? '#dc2626' : act.Priority === 'Medium' ? '#d97706' : '#16a34a'}">${act.Priority || 'Normal'}</span></td>
+                        <td>${act.Status === 'Completed' ? '<span style="color:#16a34a; font-weight:600;">Completed</span>' : '<span style="color:#eab308; font-weight:600;">Open</span>'}</td>
+                        <td style="text-align:right;">
+                          ${act.Status !== 'Completed' ? `<button class="btn btn-primary btn-sm" onclick="completeAction(${idx})">Complete</button>` : `<button class="btn btn-secondary btn-sm" onclick="reopenAction(${idx})">Reopen</button>`}
+                          <button class="btn btn-secondary btn-sm" onclick="openActionModal(${idx})"><i data-lucide="edit"></i></button>
+                          <button class="btn btn-danger btn-sm" onclick="deleteAction(${idx})"><i data-lucide="trash-2"></i></button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openActionModal(index = null) {
+        document.getElementById('actionEditIndex').value = index !== null ? index : '';
+        const act = (index !== null && db.actions) ? db.actions[index] : {};
+        const fleetItems = db.fleetItems || [];
+
+        document.getElementById('actionModalTitle').innerText = index !== null ? 'Edit Action Item' : 'Add Action / Task';
+
+        const assetSelect = document.getElementById('act_asset');
+        assetSelect.innerHTML = '<option value="">-- None / General Site --</option>' +
+          fleetItems.map(f => `<option value="${f.name}" ${act.asset === f.name ? 'selected' : ''}>${f.name} (${f.type})</option>`).join('');
+
+        document.getElementById('act_title').value = act.Title || '';
+        document.getElementById('act_desc').value = act.Description || '';
+
+        const assignedNames = (act.AssignedTo || '').split(',').map(s => s.trim()).filter(Boolean);
+        const assignOptions = ['Maintenance Team', ...(db.volunteers || []).map(v => getVolunteerName(v))];
+        const assignedList = document.getElementById('act_assignedList');
+        assignedList.innerHTML = assignOptions.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No volunteers found.</div>' :
+          assignOptions.map(name => `
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+              <input type="checkbox" name="actAssignedCheckbox" value="${name}" ${assignedNames.includes(name) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+              ${name}
+            </label>
+          `).join('');
+
+        document.getElementById('act_duedate').value = act.DueDate || getTodayString();
+        document.getElementById('act_recurrence').value = act.Recurrence || 'None';
+        document.getElementById('act_priority').value = act.Priority || 'Normal';
+
+        document.getElementById('actionModal').style.display = 'flex';
+      }
+
+      function saveActionItem(e) {
+        e.preventDefault();
+        const idxVal = document.getElementById('actionEditIndex').value;
+        const title = document.getElementById('act_title').value;
+        const desc = document.getElementById('act_desc').value;
+        const asset = document.getElementById('act_asset').value;
+        const selectedAssignees = [];
+        document.querySelectorAll('input[name="actAssignedCheckbox"]:checked').forEach(cb => selectedAssignees.push(cb.value));
+        const assigned = selectedAssignees.join(', ');
+        const dueDate = document.getElementById('act_duedate').value;
+        const recurrence = document.getElementById('act_recurrence').value;
+        const priority = document.getElementById('act_priority').value;
+
+        if (!db.actions) db.actions = [];
+
+        if (idxVal !== '') {
+          const idx = Number(idxVal);
+          const existing = db.actions[idx] || {};
+          db.actions[idx] = {
+            ...existing,
+            Title: title,
+            Description: desc,
+            asset: asset,
+            AssignedTo: assigned,
+            DueDate: dueDate,
+            Recurrence: recurrence,
+            Priority: priority
+          };
+        } else {
+          db.actions.push({
+            id: Date.now(),
+            Title: title,
+            Description: desc,
+            asset: asset,
+            AssignedTo: assigned,
+            DueDate: dueDate,
+            Recurrence: recurrence,
+            Priority: priority,
+            Status: 'Open',
+            createdDate: getTodayString()
+          });
+        }
+
+        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        closeModal('actionModal');
+        renderActionsPage();
+      }
+
+      function completeAction(idx) {
+        const act = db.actions[idx];
+        if (!act) return;
+
+        // If linked to loco/carriage, add maintenance log first
+        if (act.asset) {
+          if (!db.maintenanceLogs) db.maintenanceLogs = [];
+          db.maintenanceLogs.push({
+            id: Date.now(),
+            assetName: act.asset,
+            workDone: `Completed Action: ${act.Title}${act.Description ? ' - ' + act.Description : ''}`,
+            startDate: act.DueDate || getTodayString(),
+            endDate: getTodayString(),
+            performedBy: act.AssignedTo || (currentUser ? currentUser.name : 'Volunteer'),
+            photo: '',
+            notes: 'Automatically generated from Action item completion.'
+          });
+          database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+        }
+
+        if (act.Recurrence && act.Recurrence !== 'None') {
+          const currentDue = new Date(act.DueDate || getTodayString());
+          if (act.Recurrence === 'Daily') currentDue.setDate(currentDue.getDate() + 1);
+          else if (act.Recurrence === 'Weekly') currentDue.setDate(currentDue.getDate() + 7);
+          else if (act.Recurrence === 'Monthly') currentDue.setMonth(currentDue.getMonth() + 1);
+          else if (act.Recurrence === '3 Monthly') currentDue.setMonth(currentDue.getMonth() + 3);
+          else if (act.Recurrence === '6 Monthly') currentDue.setMonth(currentDue.getMonth() + 6);
+          else if (act.Recurrence === 'Yearly') currentDue.setFullYear(currentDue.getFullYear() + 1);
+
+          act.Status = 'Open';
+          act.DueDate = currentDue.toISOString().split('T')[0];
+          database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        } else {
+          db.actions.splice(idx, 1);
+          database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        }
+
+        renderActionsPage();
+      }
+
+      function reopenAction(idx) {
+        if (db.actions[idx]) {
+          db.actions[idx].Status = 'Open';
+          database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+          renderActionsPage();
+        }
+      }
+
+      function deleteAction(idx) {
+        if (confirm('Delete this action item?')) {
+          db.actions.splice(idx, 1);
+          database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+          renderActionsPage();
+        }
+      }
+
+      // Archives Logic
+      function getArchiveFieldText(day, field) {
+        const ov = day['override' + field];
+        // Backwards-compatible: any override saved previously as a plain typed string just displays as-is.
+        if (typeof ov === 'string') return ov;
+
+        switch(field) {
+          case 'TrackWalk': {
+            const tw = ov !== undefined ? ov : day.trackWalk;
+            return tw ? `${tw.result} — ${tw.inspector || 'Unassigned'}${tw.notes ? ` (${tw.notes})` : ''}` : 'Not recorded';
+          }
+          case 'TestRun': {
+            const tr = ov !== undefined ? ov : day.testRun;
+            return tr ? `${tr.result} — ${tr.inspector || 'Unassigned'}${tr.notes ? ` (${tr.notes})` : ''}` : 'Not recorded';
+          }
+          case 'Trains': {
+            const t = ov !== undefined ? ov : (day.runningTrains || []);
+            return t.length ? t.join(', ') : 'None recorded';
+          }
+          case 'Volunteers': {
+            if (ov !== undefined) return ov.length ? ov.join(', ') : 'None recorded';
+            return (day.attendance || []).length === 0 ? 'None recorded' : day.attendance.map(a => `${a.name} (${a.clockIn}–${a.clockOut})`).join(', ');
+          }
+          case 'Incidents': {
+            const inc = ov !== undefined ? ov : (day.incidents || []);
+            return inc.length === 0 ? 'None' : inc.map(i => `${i.asset}: ${i.description} (${i.status})`).join('; ');
+          }
+          case 'Maintenance': {
+            const m = ov !== undefined ? ov : (day.maintenance || []);
+            return m.length === 0 ? 'None' : m.map(x => `${x.asset}: ${x.workDone} (${x.performedBy})`).join('; ');
+          }
+          case 'ActionsAdded': {
+            const a = ov !== undefined ? ov : (day.actionsAdded || []);
+            return a.length === 0 ? 'None' : a.join(', ');
+          }
+          case 'ActionsCompleted': {
+            const a = ov !== undefined ? ov : (day.actionsCompleted || []);
+            return a.length === 0 ? 'None' : a.join(', ');
+          }
+        }
+        return '';
+      }
+
+      function renderArchives() {
+        const content = document.getElementById('content');
+        const archive = db.historicalArchive || [];
+        const uploads = db.archiveUploads || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Historical Archives</h2>
+              <p>Past daily safety checks, running-day records, photos, and uploaded documents.</p>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="btn ${archiveSubView === 'historical' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="archiveSubView='historical'; renderArchives();">Historical Logs</button>
+              <button class="btn ${archiveSubView === 'media' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="archiveSubView='media'; renderArchives();">Photos & Documents</button>
+            </div>
+          </div>
+
+          ${archiveSubView === 'media' ? `
+            <div style="margin-bottom: 1rem; display: flex; justify-content: flex-end;">
+              <button class="btn btn-primary btn-sm" onclick="openArchiveUploadModal()"><i data-lucide="upload"></i> Upload Photo or Document</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem;">
+              ${uploads.length === 0 ? '<div style="color:var(--text-muted); font-size:0.85rem; padding:2rem; grid-column: 1/-1; text-align:center;">No photos or documents uploaded yet.</div>' :
+                uploads.map((up, uIdx) => `
+                  <div class="card" style="padding:1rem; display:flex; flex-direction:column; justify-content:space-between; gap:0.5rem;">
+                    <div>
+                      <div style="font-weight:700; font-size:0.9rem; margin-bottom:0.2rem;">${up.title}</div>
+                      <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">Category: <strong>${up.category}</strong></div>
+                      ${up.category === 'Photo' ? `<img src="${up.fileData}" style="width:100%; height:140px; object-fit:cover; border-radius:var(--radius); border:1px solid var(--border);" />` : 
+                        `<div style="background:#f1f5f9; padding:1.5rem; text-align:center; border-radius:var(--radius); border:1px solid var(--border); font-weight:600; font-size:0.8rem;"><i data-lucide="file-text" style="width:24px;height:24px;display:block;margin:0 auto 0.4rem;"></i> Document File</div>`}
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:0.5rem;">
+                      <a href="${up.fileData}" download="${up.title}" class="btn btn-secondary btn-sm" target="_blank"><i data-lucide="download"></i> Download</a>
+                      ${currentUser && currentUser.isSystemAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteArchiveUpload(${uIdx})"><i data-lucide="trash-2"></i></button>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+            </div>
+          ` : `
+            ${currentUser.isSystemAdmin && archive.length > 0 ? `<div style="margin-bottom:1rem; display:flex; justify-content:flex-end;"><button class="btn btn-danger btn-sm" onclick="clearAllArchiveData()"><i data-lucide="trash-2"></i> Clear All Archive Data</button></div>` : ''}
+            ${archive.length === 0 ? `
+              <div class="card" style="padding: 2rem; text-align:center; color: var(--text-muted);">No archived days yet. A day appears here once it ends with something recorded on it.</div>
+            ` : archive.slice().reverse().map((day, revIdx) => {
+              const realIdx = archive.length - 1 - revIdx;
+              return `
+                <div class="card" style="padding: 1.25rem; margin-bottom: 1rem;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:1.05rem; margin-bottom:0.85rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">
+                    ${day.date}
+                    ${currentUser.isSystemAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openEditArchiveModal(${realIdx})"><i data-lucide="edit"></i> Edit</button>` : ''}
+                  </div>
+                  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; font-size:0.8rem;">
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Track Walk</div>
+                      <div>${getArchiveFieldText(day, 'TrackWalk')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Test Run</div>
+                      <div>${getArchiveFieldText(day, 'TestRun')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Trains That Ran</div>
+                      <div>${getArchiveFieldText(day, 'Trains')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Volunteers On Site</div>
+                      <div>${getArchiveFieldText(day, 'Volunteers')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Incidents / Issues</div>
+                      <div>${getArchiveFieldText(day, 'Incidents')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Maintenance Completed</div>
+                      <div>${getArchiveFieldText(day, 'Maintenance')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Actions Added</div>
+                      <div>${getArchiveFieldText(day, 'ActionsAdded')}</div>
+                    </div>
+                    <div>
+                      <div style="font-weight:600; color:var(--text-muted); margin-bottom:0.25rem;">Actions Completed</div>
+                      <div>${getArchiveFieldText(day, 'ActionsCompleted')}</div>
+                    </div>
+                  </div>
+                </div>
+              `
+            }).join('')}
+          `}
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openEditArchiveModal(idx) {
+        if (!currentUser.isSystemAdmin) return;
+        const day = db.historicalArchive[idx];
+        if (!day) return;
+
+        document.getElementById('editArchiveIndex').value = idx;
+        document.getElementById('editArchiveDateTxt').innerText = day.date;
+
+        const vols = db.volunteers || [];
+        const fleetItems = db.fleetItems || [];
+        const incidents = db.incidents || [];
+        const maintLogs = db.maintenanceLogs || [];
+        const actions = db.actions || [];
+
+        const twOv = day.overrideTrackWalk;
+        const trackWalk = (twOv !== undefined && typeof twOv === 'object' && twOv !== null) ? twOv : (typeof twOv === 'string' ? {} : (day.trackWalk || {}));
+        document.getElementById('editArch_TrackWalkResult').value = trackWalk.result || '';
+        document.getElementById('editArch_TrackWalkNotes').value = trackWalk.notes || '';
+        const twInspSelect = document.getElementById('editArch_TrackWalkInspector');
+        twInspSelect.innerHTML = '<option value="">-- Unassigned --</option>' +
+          vols.map(v => { const n = getVolunteerName(v); return `<option value="${n}" ${trackWalk.inspector === n ? 'selected' : ''}>${n}</option>`; }).join('');
+
+        const trOv = day.overrideTestRun;
+        const testRun = (trOv !== undefined && typeof trOv === 'object' && trOv !== null) ? trOv : (typeof trOv === 'string' ? {} : (day.testRun || {}));
+        document.getElementById('editArch_TestRunResult').value = testRun.result || '';
+        document.getElementById('editArch_TestRunNotes').value = testRun.notes || '';
+        const trInspSelect = document.getElementById('editArch_TestRunInspector');
+        trInspSelect.innerHTML = '<option value="">-- Unassigned --</option>' +
+          vols.map(v => { const n = getVolunteerName(v); return `<option value="${n}" ${testRun.inspector === n ? 'selected' : ''}>${n}</option>`; }).join('');
+
+        const selectedTrains = Array.isArray(day.overrideTrains) ? day.overrideTrains : (day.runningTrains || []);
+        const trainsList = document.getElementById('editArch_TrainsList');
+        trainsList.innerHTML = fleetItems.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No fleet items found.</div>' :
+          fleetItems.map(f => `
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+              <input type="checkbox" name="editArchTrainCheckbox" value="${f.name}" ${selectedTrains.includes(f.name) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+              ${f.name}
+            </label>
+          `).join('');
+
+        const selectedVolNames = Array.isArray(day.overrideVolunteers) ? day.overrideVolunteers : (day.attendance || []).map(a => a.name);
+        const volsList = document.getElementById('editArch_VolunteersList');
+        volsList.innerHTML = vols.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No volunteers found.</div>' :
+          vols.map(v => {
+            const name = getVolunteerName(v);
+            return `
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" name="editArchVolCheckbox" value="${name}" ${selectedVolNames.includes(name) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+                ${name}
+              </label>
+            `;
+          }).join('');
+
+        const selectedIncidents = Array.isArray(day.overrideIncidents) ? day.overrideIncidents : (day.incidents || []);
+        const incList = document.getElementById('editArch_IncidentsList');
+        incList.innerHTML = incidents.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No incident records found.</div>' :
+          incidents.map((i, iIdx) => {
+            const assetName = i.asset || i['Asset / Location'];
+            const checked = selectedIncidents.some(si => si.asset === assetName && si.description === i.Description);
+            return `
+              <label style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" name="editArchIncidentCheckbox" value="${iIdx}" ${checked ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary); margin-top:2px;">
+                <span>${assetName}: ${i.Description} (${i.Status})</span>
+              </label>
+            `;
+          }).join('');
+
+        const selectedMaint = Array.isArray(day.overrideMaintenance) ? day.overrideMaintenance : (day.maintenance || []);
+        const maintList = document.getElementById('editArch_MaintenanceList');
+        maintList.innerHTML = maintLogs.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No maintenance log records found.</div>' :
+          maintLogs.map((m, mIdx) => {
+            const checked = selectedMaint.some(sm => sm.asset === m.assetName && sm.workDone === m.workDone);
+            return `
+              <label style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" name="editArchMaintCheckbox" value="${mIdx}" ${checked ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary); margin-top:2px;">
+                <span>${m.assetName}: ${m.workDone} (${m.performedBy || '-'})</span>
+              </label>
+            `;
+          }).join('');
+
+        const selectedActionsAdded = Array.isArray(day.overrideActionsAdded) ? day.overrideActionsAdded : (day.actionsAdded || []);
+        const actAddedList = document.getElementById('editArch_ActionsAddedList');
+        actAddedList.innerHTML = actions.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No action records found.</div>' :
+          actions.map((a, aIdx) => `
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+              <input type="checkbox" name="editArchActionsAddedCheckbox" value="${aIdx}" ${selectedActionsAdded.includes(a.Title) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+              ${a.Title}
+            </label>
+          `).join('');
+
+        const selectedActionsCompleted = Array.isArray(day.overrideActionsCompleted) ? day.overrideActionsCompleted : (day.actionsCompleted || []);
+        const actCompletedList = document.getElementById('editArch_ActionsCompletedList');
+        actCompletedList.innerHTML = actions.length === 0 ? '<div style="font-size:0.75rem; color:var(--text-muted);">No action records found.</div>' :
+          actions.map((a, aIdx) => `
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; cursor: pointer;">
+              <input type="checkbox" name="editArchActionsCompletedCheckbox" value="${aIdx}" ${selectedActionsCompleted.includes(a.Title) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+              ${a.Title}
+            </label>
+          `).join('');
+
+        document.getElementById('editArchiveModal').style.display = 'flex';
+      }
+
+      function saveArchiveEdit(e) {
+        e.preventDefault();
+        const idx = document.getElementById('editArchiveIndex').value;
+        if (!db.historicalArchive || !db.historicalArchive[idx]) return;
+
+        const day = db.historicalArchive[idx];
+        const incidents = db.incidents || [];
+        const maintLogs = db.maintenanceLogs || [];
+        const actions = db.actions || [];
+
+        const twResult = document.getElementById('editArch_TrackWalkResult').value;
+        day.overrideTrackWalk = twResult ? {
+          result: twResult,
+          inspector: document.getElementById('editArch_TrackWalkInspector').value,
+          notes: document.getElementById('editArch_TrackWalkNotes').value
+        } : null;
+
+        const trResult = document.getElementById('editArch_TestRunResult').value;
+        day.overrideTestRun = trResult ? {
+          result: trResult,
+          inspector: document.getElementById('editArch_TestRunInspector').value,
+          notes: document.getElementById('editArch_TestRunNotes').value
+        } : null;
+
+        const selectedTrains = [];
+        document.querySelectorAll('input[name="editArchTrainCheckbox"]:checked').forEach(cb => selectedTrains.push(cb.value));
+        day.overrideTrains = selectedTrains;
+
+        const selectedVols = [];
+        document.querySelectorAll('input[name="editArchVolCheckbox"]:checked').forEach(cb => selectedVols.push(cb.value));
+        day.overrideVolunteers = selectedVols;
+
+        const selectedIncidentIdx = [];
+        document.querySelectorAll('input[name="editArchIncidentCheckbox"]:checked').forEach(cb => selectedIncidentIdx.push(Number(cb.value)));
+        day.overrideIncidents = selectedIncidentIdx.map(i => {
+          const inc = incidents[i];
+          return { asset: inc.asset || inc['Asset / Location'], description: inc.Description, status: inc.Status };
+        });
+
+        const selectedMaintIdx = [];
+        document.querySelectorAll('input[name="editArchMaintCheckbox"]:checked').forEach(cb => selectedMaintIdx.push(Number(cb.value)));
+        day.overrideMaintenance = selectedMaintIdx.map(i => {
+          const m = maintLogs[i];
+          return { asset: m.assetName, workDone: m.workDone, performedBy: m.performedBy };
+        });
+
+        const selectedActionsAddedIdx = [];
+        document.querySelectorAll('input[name="editArchActionsAddedCheckbox"]:checked').forEach(cb => selectedActionsAddedIdx.push(Number(cb.value)));
+        day.overrideActionsAdded = selectedActionsAddedIdx.map(i => actions[i].Title);
+
+        const selectedActionsCompletedIdx = [];
+        document.querySelectorAll('input[name="editArchActionsCompletedCheckbox"]:checked').forEach(cb => selectedActionsCompletedIdx.push(Number(cb.value)));
+        day.overrideActionsCompleted = selectedActionsCompletedIdx.map(i => actions[i].Title);
+
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        closeModal('editArchiveModal');
+        renderArchives();
+      }
+
+      function openArchiveUploadModal() {
+        document.getElementById('up_title').value = '';
+        document.getElementById('up_file').value = '';
+        document.getElementById('up_preview').style.display = 'none';
+        document.getElementById('up_filedata').value = '';
+        document.getElementById('archiveUploadModal').style.display = 'flex';
+      }
+
+      function previewArchiveFile(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            const base64 = evt.target.result;
+            document.getElementById('up_filedata').value = base64;
+            if (file.type.startsWith('image/')) {
+              const img = document.getElementById('up_preview');
+              img.src = base64;
+              img.style.display = 'block';
+            } else {
+              document.getElementById('up_preview').style.display = 'none';
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function saveArchiveUpload(e) {
+        e.preventDefault();
+        const title = document.getElementById('up_title').value;
+        const category = document.getElementById('up_category').value;
+        const fileData = document.getElementById('up_filedata').value;
+        if (!fileData) return;
+
+        if (!db.archiveUploads) db.archiveUploads = [];
+        db.archiveUploads.push({
+          id: Date.now(),
+          title: title,
+          category: category,
+          fileData: fileData,
+          uploadedBy: currentUser ? currentUser.name : 'Volunteer'
+        });
+
+        database.ref('EVLT_ADMIN_DB/archiveUploads').set(db.archiveUploads);
+        closeModal('archiveUploadModal');
+        renderArchives();
+      }
+
+      function deleteArchiveUpload(idx) {
+        if (!confirm('Delete this file?')) return;
+        db.archiveUploads.splice(idx, 1);
+        database.ref('EVLT_ADMIN_DB/archiveUploads').set(db.archiveUploads);
+        renderArchives();
+      }
+
+      const moduleSchemas = {
+        assets: { title: 'Asset', fields: [{ key: 'Name', label: 'Asset Name', type: 'text', required: true }, { key: 'Type', label: 'Category', type: 'text', required: true }, { key: 'Status', label: 'Status', type: 'select', options: ['Operational', 'Maintenance Required', 'Out of Service'], required: true }] },
+        stock: { title: 'Euro Tunnel Item', fields: [{ key: 'Item', label: 'Item Name', type: 'text', required: true }, { key: 'Category', label: 'Category', type: 'text', required: false }, { key: 'Quantity', label: 'Quantity', type: 'number', required: true }, { key: 'Price', label: 'Price (£)', type: 'number', required: true }] },
+        suppliers: { title: 'Supplier', fields: [{ key: 'Name', label: 'Company Name', type: 'text', required: true }, { key: 'Contact', label: 'Contact', type: 'text', required: false }] },
+        enquiries: { title: 'Enquiry', fields: [{ key: 'Enquirer', label: 'Name', type: 'text', required: true }, { key: 'Details', label: 'Details', type: 'textarea', required: true }, { key: 'Status', label: 'Status', type: 'select', options: ['New', 'Responded', 'Closed'], required: true }] },
+        documents: { title: 'Document', fields: [{ key: 'Title', label: 'Title', type: 'text', required: true }, { key: 'Category', label: 'Category', type: 'text', required: false }, { key: 'Link', label: 'Link', type: 'text', required: false }] },
+        notes: { title: 'Note', fields: [{ key: 'Author', label: 'Author', type: 'text', required: true }, { key: 'Content', label: 'Content', type: 'textarea', required: true }] },
+        clockLogs: { title: 'Clock Log Entry', fields: [{ key: 'name', label: 'Volunteer Name', type: 'text', required: true }, { key: 'date', label: 'Date', type: 'date', required: true }, { key: 'clockIn', label: 'Clock In', type: 'text', required: false }, { key: 'clockOut', label: 'Clock Out', type: 'text', required: false }, { key: 'status', label: 'Status', type: 'select', options: ['Clocked In', 'Completed'], required: true }] }
+      };
+
+      function renderGenericModule(title, description, moduleKey) {
+        const content = document.getElementById('content');
+        const items = db[moduleKey] || [];
+        const schema = moduleSchemas[moduleKey];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>${title}</h2>
+              <p>${description}</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')"><i data-lucide="plus"></i> Add ${schema.title}</button>
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    ${schema.fields.map(f => `<th>${f.label}</th>`).join('')}
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.length === 0 ? `<tr><td colspan="${schema.fields.length + 1}" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No records found.</td></tr>` :
+                    items.map((item, idx) => `
+                      <tr>
+                        ${schema.fields.map(f => `<td>${item[f.key] || '-'}</td>`).join('')}
+                        <td style="text-align:right;">
+                          <button class="btn btn-secondary btn-sm" onclick="openGenericModal('${moduleKey}', ${idx})"><i data-lucide="edit"></i></button>
+                          <button class="btn btn-danger btn-sm" onclick="deleteItem('${moduleKey}', ${idx})"><i data-lucide="trash-2"></i></button>
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function renderVolunteers() {
+        const content = document.getElementById('content');
+        const items = db.volunteers || [];
+        const pendingRequests = (db.nameChangeRequests || []).filter(r => r.status === 'pending');
+
+        const pendingRequestsHtml = (currentUser.isSystemAdmin && pendingRequests.length > 0) ? `
+          <div class="card" style="padding: 1rem; margin-bottom: 1rem; border-color: #f59e0b;">
+            <div style="font-size:0.85rem; font-weight:700; margin-bottom:0.75rem;"><i data-lucide="user-cog" style="width:14px;height:14px;vertical-align:-2px;"></i> Pending Name Change Requests</div>
+            ${pendingRequests.map(req => `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px dashed var(--border); font-size:0.825rem;">
+                <div><strong>${req.currentName}</strong> wants to be renamed to <strong>${req.requestedName}</strong></div>
+                <div style="display:flex; gap:0.4rem;">
+                  <button class="btn btn-primary btn-sm" onclick="approveNameChange(${req.id})">Approve</button>
+                  <button class="btn btn-secondary btn-sm" onclick="denyNameChange(${req.id})">Deny</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '';
+
+        content.innerHTML = `
+          ${pendingRequestsHtml}
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Volunteers</h2>
+              <p>Manage volunteer accounts, PIN codes, and page permissions.</p>
+            </div>
+            ${currentUser.isSystemAdmin ? `<button class="btn btn-primary btn-sm" onclick="openVolunteerModal()"><i data-lucide="plus"></i> Add Volunteer</button>` : ''}
+          </div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Full Name</th>
+                    <th>PIN</th>
+                    <th>Roles</th>
+                    <th>DBS Status</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.length === 0 ? `<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">No volunteers found.</td></tr>` :
+                    items.map((item, idx) => `
+                      <tr>
+                        <td><strong>${getVolunteerName(item)}</strong></td>
+                        <td>${currentUser.isSystemAdmin ? (item.Pin || item.pin || '1234') : '••••'}</td>
+                        <td>${item.Roles || '-'}</td>
+                        <td>${item['DBS Status'] || 'Pending'}</td>
+                        <td style="text-align:right;">
+                          ${currentUser.isSystemAdmin ? `
+                            <button class="btn btn-secondary btn-sm" onclick="openAccessControlModal('${getVolunteerName(item)}')"><i data-lucide="shield"></i> Permissions</button>
+                            <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit PIN</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteItem('volunteers', ${idx})"><i data-lucide="trash-2"></i></button>
+                          ` : '<span style="color:var(--text-muted); font-size:0.75rem;">View Only</span>'}
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function getMyVolunteerRecord() {
+        return (db.volunteers || []).find(v => getVolunteerName(v) === currentUser.name) || null;
+      }
+
+      function renderMyAccount() {
+        const content = document.getElementById('content');
+        const vol = getMyVolunteerRecord();
+        if (!vol) {
+          content.innerHTML = `<div class="card" style="padding:1.5rem;">Your account record could not be found — please sign in again.</div>`;
+          return;
+        }
+        const myPendingRequest = (db.nameChangeRequests || []).find(r => r.currentName === currentUser.name && r.status === 'pending');
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>My Account</h2>
+              <p>Manage your own login details.</p>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+            <div class="card" style="padding: 1.25rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Name</h3>
+              <p style="font-size:0.85rem; margin-bottom:0.75rem;">Current name: <strong>${getVolunteerName(vol)}</strong></p>
+              ${myPendingRequest ? `
+                <div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:0.8rem; padding:0.75rem; border-radius:6px;">
+                  Your request to change your name to <strong>${myPendingRequest.requestedName}</strong> is waiting for admin approval.
+                </div>
+              ` : `
+                <form onsubmit="requestNameChange(event)">
+                  <div class="form-group">
+                    <label>Requested New Name</label>
+                    <input type="text" id="requestedNewName" placeholder="e.g. Louis Hull" required>
+                  </div>
+                  <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Request Name Change</button>
+                </form>
+                <p style="font-size:0.7rem; color:var(--text-muted); margin-top:0.5rem;">Name changes need admin approval before they take effect.</p>
+              `}
+            </div>
+
+            <div class="card" style="padding: 1.25rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">PIN</h3>
+              <form onsubmit="submitPinChange(event)">
+                <div class="form-group">
+                  <label>New PIN</label>
+                  <input type="text" id="newPinValue" placeholder="e.g. 4321" required>
+                </div>
+                <div class="form-group">
+                  <label>Confirm New PIN</label>
+                  <input type="text" id="confirmPinValue" placeholder="Re-enter new PIN" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Update PIN</button>
+              </form>
+              <p style="font-size:0.7rem; color:var(--text-muted); margin-top:0.5rem;">Your PIN updates immediately — no approval needed.</p>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function requestNameChange(e) {
+        e.preventDefault();
+        const requestedName = document.getElementById('requestedNewName').value.trim();
+        if (!requestedName) return;
+
+        if (!db.nameChangeRequests) db.nameChangeRequests = [];
+        const alreadyPending = db.nameChangeRequests.some(r => r.currentName === currentUser.name && r.status === 'pending');
+        if (alreadyPending) {
+          alert('You already have a pending name change request.');
+          return;
+        }
+
+        db.nameChangeRequests.push({
+          id: Date.now(),
+          currentName: currentUser.name,
+          requestedName: requestedName,
+          status: 'pending',
+          requestedAt: new Date().toISOString()
+        });
+        database.ref('EVLT_ADMIN_DB/nameChangeRequests').set(db.nameChangeRequests);
+        renderMyAccount();
+      }
+
+      function approveNameChange(requestId) {
+        if (!currentUser.isSystemAdmin) return;
+        const req = (db.nameChangeRequests || []).find(r => r.id === requestId);
+        if (!req) return;
+
+        const vol = (db.volunteers || []).find(v => getVolunteerName(v) === req.currentName);
+        if (vol) {
+          vol.Name = req.requestedName;
+          database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        } else {
+          alert('That volunteer record could not be found — it may have been renamed or removed already.');
+        }
+
+        req.status = 'approved';
+        database.ref('EVLT_ADMIN_DB/nameChangeRequests').set(db.nameChangeRequests);
+        renderVolunteers();
+      }
+
+      function denyNameChange(requestId) {
+        if (!currentUser.isSystemAdmin) return;
+        const req = (db.nameChangeRequests || []).find(r => r.id === requestId);
+        if (!req) return;
+        req.status = 'denied';
+        database.ref('EVLT_ADMIN_DB/nameChangeRequests').set(db.nameChangeRequests);
+        renderVolunteers();
+      }
+
+      function submitPinChange(e) {
+        e.preventDefault();
+        const newPin = document.getElementById('newPinValue').value.trim();
+        const confirmPin = document.getElementById('confirmPinValue').value.trim();
+        if (!newPin || newPin !== confirmPin) {
+          alert('PINs do not match — please try again.');
+          return;
+        }
+        const vol = getMyVolunteerRecord();
+        if (!vol) return;
+        vol.Pin = newPin;
+        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        alert('Your PIN has been updated.');
+        renderMyAccount();
+      }
+
+      function openAccessControlModal(userName) {
+        if (!currentUser.isSystemAdmin) {
+          alert('Only the System Admin can configure page permissions.');
+          return;
+        }
+        document.getElementById('accessControlUserName').value = userName;
+        const permsMap = db.userPermissions || {};
+        const userPerms = permsMap[userName] || ['dashboard', 'clock', 'incidents', 'maintenance', 'calendar', 'actions', 'events'];
+
+        const container = document.getElementById('permissionsCheckboxesList');
+        container.innerHTML = ALL_PAGES.map(p => `
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.825rem; font-weight: 500; cursor: pointer;">
+            <input type="checkbox" name="userPermCheckbox" value="${p.key}" ${userPerms.includes(p.key) ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary);">
+            ${p.label} <span style="color:var(--text-muted); font-size:0.7rem;">(${p.section})</span>
+          </label>
+        `).join('');
+
+        document.getElementById('accessControlModal').style.display = 'flex';
+      }
+
+      function saveUserPermissions(e) {
+        e.preventDefault();
+        if (!currentUser.isSystemAdmin) return;
+        const userName = document.getElementById('accessControlUserName').value;
+        const selectedPerms = [];
+        document.querySelectorAll('input[name="userPermCheckbox"]:checked').forEach(cb => selectedPerms.push(cb.value));
+
+        if (/[.#$\[\]]/.test(userName)) {
+          alert(`Cannot save permissions: "${userName}" contains a character (. # $ [ or ]) that Firebase database keys aren't allowed to have. Please rename this volunteer (removing that character) before setting their permissions.`);
+          return;
+        }
+
+        if (!db.userPermissions) db.userPermissions = {};
+        db.userPermissions[userName] = selectedPerms;
+
+        database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions)
+          .then(() => {
+            closeModal('accessControlModal');
+            alert(`Permissions updated successfully for ${userName}!`);
+          })
+          .catch(err => {
+            alert(`Permissions were NOT saved — the database rejected the write: ${err.message}`);
+          });
+      }
+
+      function openVolunteerModal(index = null) {
+        if (!currentUser.isSystemAdmin) {
+          alert('Only the System Admin can add or edit volunteer accounts and PINs.');
+          return;
+        }
+        editingIndex = index;
+        editingModuleKey = 'volunteers';
+        const itemData = (index !== null && index !== undefined && db.volunteers) ? db.volunteers[index] : {};
+        const nameVal = itemData.Name || itemData.name || '';
+        const pinVal = itemData.Pin || itemData.pin || '1234';
+        const dbsVal = itemData['DBS Status'] || itemData.dbsStatus || 'Pending';
+        let currentRoles = itemData.Roles || itemData.roles || '';
+        if (typeof currentRoles === 'string') currentRoles = currentRoles.split(',').map(s => s.trim());
+        if (!Array.isArray(currentRoles)) currentRoles = [];
+
+        const availableRoles = getAvailableRoles();
+
+        document.getElementById('genericModalTitle').innerText = (index !== null && index !== undefined) ? 'Edit Volunteer' : 'Add Volunteer';
+        const container = document.getElementById('genericFormFields');
+
+        container.innerHTML = `
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="vol_name" value="${nameVal}" placeholder="e.g. Louie Hull" required>
+          </div>
+          <div class="form-group">
+            <label>Login PIN Code</label>
+            <input type="text" id="vol_pin" value="${pinVal}" placeholder="e.g. 1234" required>
+          </div>
+          <div class="form-group">
+            <label>Roles (Select all that apply)</label>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc;">
+              ${availableRoles.map(role => `
+                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 500; cursor: pointer;">
+                  <input type="checkbox" name="volRoleCheckbox" value="${role}" ${currentRoles.includes(role) ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--primary);">
+                  ${role}
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>DBS Status</label>
+            <select id="vol_dbs">
+              <option value="Pending" ${dbsVal === 'Pending' ? 'selected' : ''}>Pending</option>
+              <option value="Cleared" ${dbsVal === 'Cleared' ? 'selected' : ''}>Cleared</option>
+              <option value="N/A" ${dbsVal === 'N/A' ? 'selected' : ''}>N/A</option>
+            </select>
+          </div>
+        `;
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function openAddRoleModal() {
+        if (!currentUser.isSystemAdmin) {
+          alert('Only the System Admin can add roles.');
+          return;
+        }
+        document.getElementById('newRoleName').value = '';
+        document.getElementById('addRoleModal').style.display = 'flex';
+      }
+
+      function saveNewRole(e) {
+        e.preventDefault();
+        if (!currentUser.isSystemAdmin) return;
+        const roleName = document.getElementById('newRoleName').value.trim();
+        if (!roleName) return;
+
+        if (!db.customRoles) db.customRoles = [];
+        if (!getAvailableRoles().includes(roleName)) {
+          db.customRoles.push(roleName);
+          database.ref('EVLT_ADMIN_DB/customRoles').set(db.customRoles);
+        }
+
+        closeModal('addRoleModal');
+        renderCompetencyMatrix();
+      }
+
+      function deleteCustomRole(roleName) {
+        if (!currentUser.isSystemAdmin) return;
+        if (confirm(`Remove custom role "${roleName}"?`)) {
+          db.customRoles = (db.customRoles || []).filter(r => r !== roleName);
+          database.ref('EVLT_ADMIN_DB/customRoles').set(db.customRoles);
+          renderCompetencyMatrix();
+        }
+      }
+
+      function renderCompetencyMatrix() {
+        const content = document.getElementById('content');
+        const volunteers = db.volunteers || [];
+        const customRoles = db.customRoles || [];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Qualifications & Competency Matrix</h2>
+              <p>Overview of volunteer roles, safety certifications, and DBS clearances.</p>
+            </div>
+            ${currentUser.isSystemAdmin ? `<button class="btn btn-primary btn-sm" onclick="document.getElementById('addRoleModal').style.display='flex'"><i data-lucide="plus"></i> Add Role / Qualification</button>` : ''}
+          </div>
+
+          ${currentUser.isSystemAdmin && customRoles.length > 0 ? `
+            <div class="card" style="padding: 1rem; margin-bottom: 1rem;">
+              <div style="font-size:0.8rem; font-weight:700; margin-bottom:0.5rem;">Custom Roles</div>
+              <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                ${customRoles.map(r => `
+                  <span style="display:inline-flex; align-items:center; gap:0.4rem; background:var(--primary-light); color:var(--primary); padding:4px 8px; border-radius:var(--radius); font-size:0.8rem; font-weight:600;">
+                    ${r}
+                    <button type="button" onclick="deleteCustomRole('${r}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold;">&times;</button>
+                  </span>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Volunteer Name</th>
+                    <th>Roles / Qualifications</th>
+                    <th>DBS Status</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${volunteers.length === 0 ? '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">No volunteer accounts found.</td></tr>' :
+                    volunteers.map((vol, idx) => `
+                      <tr>
+                        <td style="font-weight: 600;">${getVolunteerName(vol)}</td>
+                        <td>${vol.Roles || vol.roles || 'Standard'}</td>
+                        <td>
+                          <span style="font-weight: 600; font-size: 0.75rem; color: ${vol['DBS Status'] === 'Cleared' ? '#16a34a' : '#d97706'};">
+                            ${vol['DBS Status'] || 'Pending'}
+                          </span>
+                        </td>
+                        <td style="text-align: right;">
+                          ${currentUser.isSystemAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})">Edit</button>` : ''}
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveGenericItem(e) {
+        e.preventDefault();
+        if (editingModuleKey === 'volunteers') {
+          if (!currentUser.isSystemAdmin) {
+            alert('Only the System Admin can edit volunteers.');
+            return;
+          }
+          const name = document.getElementById('vol_name').value;
+          const pin = document.getElementById('vol_pin').value;
+          const selectedRoles = [];
+          document.querySelectorAll('input[name="volRoleCheckbox"]:checked').forEach(cb => selectedRoles.push(cb.value));
+          const dbsStatus = document.getElementById('vol_dbs').value;
+
+          const newVol = {
+            Name: name,
+            Pin: pin,
+            Roles: selectedRoles.join(', '),
+            'DBS Status': dbsStatus
+          };
+
+          if (!db.volunteers) db.volunteers = [];
+          if (editingIndex !== null && editingIndex !== undefined && editingIndex !== '') {
+            db.volunteers[editingIndex] = newVol;
+          } else {
+            db.volunteers.push(newVol);
+          }
+
+          database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+          closeModal('genericModal');
+          renderVolunteers();
+          return;
+        }
+
+        const schema = moduleSchemas[editingModuleKey];
+        if (!schema) return;
+        const newItem = {};
+        schema.fields.forEach(f => {
+          newItem[f.key] = document.getElementById(`gen_${f.key}`).value;
+        });
+
+        if (!db[editingModuleKey]) db[editingModuleKey] = [];
+        if (editingIndex !== null && editingIndex !== undefined && editingIndex !== '') {
+          db[editingModuleKey][editingIndex] = newItem;
+        } else {
+          db[editingModuleKey].push(newItem);
+        }
+
+        database.ref(`EVLT_ADMIN_DB/${editingModuleKey}`).set(db[editingModuleKey]);
+        closeModal('genericModal');
+        navigate(currentView);
+      }
+
+      function openGenericModal(moduleKey, index = null) {
+        if (moduleKey === 'volunteers') {
+          openVolunteerModal(index);
+          return;
+        }
+        editingIndex = index;
+        editingModuleKey = moduleKey;
+        const schema = moduleSchemas[moduleKey];
+        if (!schema) return;
+        const itemData = (index !== null && index !== undefined && db[moduleKey]) ? db[moduleKey][index] : {};
+
+        document.getElementById('genericModalTitle').innerText = (index !== null && index !== undefined) ? `Edit ${schema.title}` : `Add ${schema.title}`;
+        const container = document.getElementById('genericFormFields');
+
+        container.innerHTML = schema.fields.map(f => {
+          const val = itemData[f.key] || '';
+          if (f.type === 'select') {
+            return `
+              <div class="form-group">
+                <label>${f.label}</label>
+                <select id="gen_${f.key}" ${f.required ? 'required' : ''}>
+                  ${f.options.map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>
+              </div>`;
+          }
+          if (f.type === 'textarea') {
+            return `
+              <div class="form-group">
+                <label>${f.label}</label>
+                <textarea id="gen_${f.key}" rows="3" ${f.required ? 'required' : ''}>${val}</textarea>
+              </div>`;
+          }
+          return `
+            <div class="form-group">
+              <label>${f.label}</label>
+              <input type="${f.type || 'text'}" id="gen_${f.key}" value="${val}" ${f.required ? 'required' : ''}>
+            </div>`;
+        }).join('');
+
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function deleteItem(moduleKey, index) {
+        if (moduleKey === 'volunteers' && !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete volunteers.');
+          return;
+        }
+        if (!confirm('Are you sure you want to delete this record? This cannot be undone.')) return;
+
+        if (moduleKey === 'volunteers') {
+          db.volunteers.splice(index, 1);
+          database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+          renderVolunteers();
+          return;
+        }
+
+        if (!db[moduleKey]) return;
+        db[moduleKey].splice(index, 1);
+        database.ref(`EVLT_ADMIN_DB/${moduleKey}`).set(db[moduleKey]);
+        navigate(currentView);
+      }
+
+      function clearAllArchiveData() {
+        if (!currentUser.isSystemAdmin) return;
+        if (!confirm('This will permanently delete ALL historical archive data. This cannot be undone. Continue?')) return;
+        db.historicalArchive = [];
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set([])
+          .then(() => { alert('Archive cleared.'); renderArchives(); })
+          .catch(err => { alert('Failed to clear archive: ' + err.message); });
+      }
+    </script>
+  </body>
+</html>
