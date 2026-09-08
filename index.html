@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EVLT Operations Platform</title>
-    <!-- External Dependencies -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <style>
       :root { 
         --primary: #1e3a1e; 
@@ -155,13 +153,8 @@
       .modal h3 { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
       .form-group { margin-bottom: 0.75rem; }
       .form-group label { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.2rem; color: var(--text); }
-      .form-group input:not([type="checkbox"]):not([type="radio"]), .form-group textarea, .form-group select { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; outline: none; background: white; transition: border-color 0.15s; }
+      .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; outline: none; background: white; transition: border-color 0.15s; }
       .modal-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
-
-      /* Improved Checkbox Label Styling for better mobile tapping */
-      .checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.4rem; padding: 0.2rem 0; }
-      .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--primary); }
-      .checkbox-label span { font-size: 0.85rem; font-weight: 500; color: var(--text); line-height: 1.2; user-select: none; }
 
       .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; margin-top: 0.5rem; width: 100%; }
       .cal-header { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 6px 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -259,17 +252,6 @@
       </main>
     </div>
 
-    <!-- Message Box Modal (Replaces alert) -->
-    <div class="modal-overlay" id="msgBoxModal" style="z-index: 10000;">
-      <div class="modal" style="max-width: 350px; text-align: center;">
-        <h3 id="msgBoxTitle" style="border:none; padding:0; margin-bottom: 0.5rem; color: var(--primary);">Notice</h3>
-        <p id="msgBoxText" style="font-size: 0.9rem; color: var(--text); margin-bottom: 1.2rem;"></p>
-        <div class="modal-actions" style="justify-content: center; border:none; padding:0; margin:0;">
-          <button type="button" class="btn btn-primary" onclick="closeModal('msgBoxModal')" style="width: 100%;">OK</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Login Modal -->
     <div class="modal-overlay" id="loginModal">
       <div class="modal" style="max-width: 380px;">
@@ -286,36 +268,28 @@
             <input type="password" id="loginUserPin" placeholder="Enter PIN" required>
           </div>
           <div id="loginErrorMsg" style="color: #dc2626; font-size: 0.75rem; margin-bottom: 0.5rem; display: none;">Incorrect PIN. Please try again.</div>
-          <label class="checkbox-label" style="margin-top: 0.5rem;">
-            <input type="checkbox" id="rememberDeviceCheckbox" checked>
-            <span>Remember this device (skip sign-in next time)</span>
-          </label>
-          <div class="modal-actions" style="border:none; padding:0; margin-top:1.5rem;">
+          <div class="form-group" style="display:flex; align-items:center; gap:0.5rem;">
+            <input type="checkbox" id="rememberDeviceCheckbox" style="width:auto;" checked>
+            <label for="rememberDeviceCheckbox" style="margin:0; font-weight:500;">Remember this device (skip sign-in next time)</label>
+          </div>
+          <div class="modal-actions" style="border:none; padding:0; margin-top:1rem;">
             <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Sign In</button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Role Permissions Modal (Admin) -->
-    <div class="modal-overlay" id="roleAccessModal">
+    <!-- Page Access Control Modal (Admin) -->
+    <div class="modal-overlay" id="accessControlModal">
       <div class="modal">
-        <h3>Manage Role Page Access</h3>
-        <form onsubmit="saveRolePermissions(event)">
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Select a role to manage which pages its members can access.</p>
-          <div class="form-group">
-            <label>Select Role</label>
-            <select id="roleAccessSelect" required onchange="loadRolePermissionsForSelected()">
-              <!-- populated dynamically -->
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Allowed Pages</label>
-            <div id="permissionsCheckboxesList" style="display: flex; flex-direction: column; gap: 0.2rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc; max-height: 250px; overflow-y: auto;">
-            </div>
+        <h3 id="accessControlTitle">Manage Page Permissions</h3>
+        <form onsubmit="saveUserPermissions(event)">
+          <input type="hidden" id="accessControlUserName" value="">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check the pages this user is allowed to access in the sidebar menu.</p>
+          <div id="permissionsCheckboxesList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc; max-height: 250px; overflow-y: auto;">
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeModal('roleAccessModal')">Cancel</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal('accessControlModal')">Cancel</button>
             <button type="submit" class="btn btn-primary">Save Permissions</button>
           </div>
         </form>
@@ -338,7 +312,7 @@
           </div>
           <div class="form-group">
             <label>Roles & Qualifications (Select all that apply)</label>
-            <div id="volRolesCheckboxes" style="display:flex; flex-direction:column; gap:0.2rem; border:1px solid var(--border); padding:0.6rem; border-radius:var(--radius); background:#f8fafc; max-height:140px; overflow-y:auto;">
+            <div id="volRolesCheckboxes" style="display:flex; flex-direction:column; gap:0.4rem; border:1px solid var(--border); padding:0.6rem; border-radius:var(--radius); background:#f8fafc; max-height:140px; overflow-y:auto;">
             </div>
           </div>
           <div class="form-group">
@@ -468,7 +442,6 @@
       </div>
     </div>
 
-    <!-- Maintenance Log Modal -->
     <div class="modal-overlay" id="maintLogModal">
       <div class="modal">
         <h3 id="maintLogModalTitle">Add / Edit Maintenance Log</h3>
@@ -497,7 +470,7 @@
           </div>
           <div class="form-group">
             <label>Performed By (Select all volunteers involved)</label>
-            <div id="maintVolunteersList" style="display: flex; flex-direction: column; gap: 0.2rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;">
+            <div id="maintVolunteersList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;">
             </div>
           </div>
           <div class="form-group">
@@ -508,6 +481,15 @@
               <option value="Out of Service">Out of Service</option>
               <option value="Overhaul">Overhaul</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label>Photo (Optional)</label>
+            <input type="file" id="maintPhoto" accept="image/*" onchange="previewMaintPhoto(event)">
+            <img id="maintPhotoPreview" class="preview-thumb" style="display:none;" />
+          </div>
+          <div class="form-group">
+            <label>Additional Notes / Parts Used</label>
+            <textarea id="maintNotes" rows="2" placeholder="Optional notes..."></textarea>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('maintLogModal')">Cancel</button>
@@ -570,7 +552,7 @@
       <div class="modal" style="max-width: 700px; max-height: 90vh;">
         <h3>Edit Archive Record (<span id="editArchiveDateTxt"></span>)</h3>
         <form onsubmit="saveArchiveEdit(event)">
-          <input type="hidden" id="editArchiveDateVal" value="">
+          <input type="hidden" id="editArchiveIndex" value="">
           <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.85rem;">Use structured selection menus below to update this date's inspections, shifts, locos, defects, and maintenance.</p>
 
           <!-- Section 1: Track Walk Inspection -->
@@ -592,7 +574,7 @@
                 <select id="editArch_TW_Inspector"></select>
               </div>
             </div>
-            <div class="form-group" id="editArch_TW_NotesGroup" style="margin-top:0.5rem; margin-bottom:0; display:none;">
+            <div class="form-group" id="editArch_TW_NotesGroup" style="margin-top:0.5rem; margin-bottom:0;">
               <label>Track Walk Defect / Notes</label>
               <input type="text" id="editArch_TW_Notes" placeholder="Details or defect reason...">
             </div>
@@ -632,6 +614,7 @@
             </div>
             <div id="editArch_ShiftsContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
             </div>
+            <p style="font-size:0.7rem; color:var(--text-muted); margin-top:0.4rem;">Note: Saving changes here also updates the Clock Log Records page for this date.</p>
           </div>
 
           <!-- Section 4: Incidents & Defects -->
@@ -657,6 +640,35 @@
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('editArchiveModal')">Cancel</button>
             <button type="submit" class="btn btn-primary">Save All Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Role Page Access Modal (Admin) -->
+    <div class="modal-overlay" id="roleAccessModal">
+      <div class="modal" style="max-width: 640px; max-height: 90vh;">
+        <h3>Qualification-Based Page Access</h3>
+        <form onsubmit="saveRolePageAccess(event)">
+          <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">For each qualification/role, check which pages volunteers with that qualification can access. Changes apply to all volunteers with that role.</p>
+          <div id="roleAccessContainer" style="max-height:55vh; overflow-y:auto;"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('roleAccessModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Access Rules</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Generic Modal for modules like Assets, Stock, etc. -->
+    <div class="modal-overlay" id="genericModal">
+      <div class="modal">
+        <h3 id="genericModalTitle">Add Item</h3>
+        <form id="genericForm" onsubmit="saveGenericItem(event)">
+          <div id="genericFormFields"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('genericModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Item</button>
           </div>
         </form>
       </div>
@@ -752,8 +764,47 @@
       </div>
     </div>
 
+    <!-- Photo/Document Upload Modal -->
+    <div class="modal-overlay" id="archiveUploadModal">
+      <div class="modal">
+        <h3>Upload Photo or Document</h3>
+        <form onsubmit="saveArchiveUpload(event)">
+          <div class="form-group">
+            <label>Title / Caption</label>
+            <input type="text" id="up_title" placeholder="e.g. 1994 Opening Day Photo" required>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="up_category">
+              <option value="Photo">Photo</option>
+              <option value="Document">Document / PDF</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Select File</label>
+            <input type="file" id="up_file" accept="image/*,.pdf,.doc,.docx" required onchange="previewArchiveFile(event)">
+            <img id="up_preview" class="preview-thumb" style="display:none;" />
+          </div>
+          <input type="hidden" id="up_filedata" value="">
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('archiveUploadModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script>
-      // Simulated Firebase/Offline State
+      const firebaseConfig = {
+        apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
+        authDomain: "evlt-admin.firebaseapp.com",
+        databaseURL: "https://evlt-admin-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "evlt-admin",
+        storageBucket: "evlt-admin.firebasestorage.app",
+        messagingSenderId: "603418741774",
+        appId: "1:603418741774:web:b9d4717f3dc4a3ede5805f"
+      };
+
       let db = {
         volunteers: [
           { Name: 'Louie Hull', Pin: '1234', Roles: 'Admin, Management, Driver, Maintenance', 'DBS Status': 'Cleared' }
@@ -773,14 +824,25 @@
         clockLogs: [],
         actions: [],
         events: [],
-        historicalArchive: [],
-        customRoles: [],
-        rolePermissions: {
-            "Admin": ["dashboard", "clock", "calendar", "clockLogs", "incidents", "competency", "volunteers", "actions", "maintenance", "events", "archives"],
-            "Management": ["dashboard", "clock", "calendar", "clockLogs", "incidents", "competency", "volunteers", "actions", "maintenance", "events", "archives"]
-        }
+        archiveUploads: []
       };
 
+      let currentView = 'dashboard';
+      let currentUser = null; 
+      let tempPhotoBase64 = '';
+      let tempMaintPhotoBase64 = '';
+      let editingIndex = null;
+      let editingIncidentIndex = null;
+      let editingMaintLogIndex = null;
+      let editingFleetIndex = null;
+      let editingVolunteerIndex = null;
+      let editingModuleKey = null;
+      let calendarCurrentDate = new Date();
+      let selectedCalendarDateStr = getTodayString();
+      let archiveSubView = 'historical';
+
+      const AVAILABLE_TRAINS = ["Canadian Pacific", "DB", "Santa Fe", "George", "Edward", "Dylan", "June", "Daphne"];
+      // Including "Management" role for page access controls
       const DEFAULT_ROLES = ["Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom"];
 
       const ALL_PAGES = [
@@ -794,55 +856,523 @@
         { key: 'actions', label: 'Actions', icon: 'check-square', section: 'Operations' },
         { key: 'maintenance', label: 'Maintenance & Fleet', icon: 'wrench', section: 'Operations' },
         { key: 'events', label: 'Events', icon: 'calendar-range', section: 'Operations' },
+        { key: 'assets', label: 'Assets', icon: 'box', section: 'Management' },
+        { key: 'stock', label: 'Stock', icon: 'package', section: 'Management' },
+        { key: 'suppliers', label: 'Suppliers', icon: 'truck', section: 'Management' },
+        { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
+        { key: 'documents', label: 'Documents', icon: 'file-text', section: 'Management' },
+        { key: 'notes', label: 'Notes', icon: 'sticky-note', section: 'Management' },
         { key: 'archives', label: 'Historical Archives', icon: 'archive', section: 'Archives' }
       ];
-
-      // Application State
-      let currentView = 'dashboard';
-      let currentUser = null; 
-      let calendarCurrentDate = new Date();
-      
-      // Load data from localStorage
-      function loadData() {
-        const saved = localStorage.getItem('evlt_data');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                db = { ...db, ...parsed }; // Merge to ensure new structures exist
-            } catch(e) { console.error('Failed to parse saved data', e); }
-        }
-      }
-
-      function saveData() {
-        localStorage.setItem('evlt_data', JSON.stringify(db));
-      }
 
       function getAvailableRoles() {
         const customRoles = db.customRoles || [];
         return Array.from(new Set([...DEFAULT_ROLES, ...customRoles]));
       }
 
-      function isAdmin(user) {
-        if (!user) return false;
-        const roles = (user.Roles || '').split(',').map(r => r.trim());
-        return roles.includes('Admin') || roles.includes('Management');
+      function getTodayString() {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
       }
 
-      function hasAccess(pageKey) {
-        if (!currentUser) return false;
-        const roles = (currentUser.Roles || '').split(',').map(r => r.trim());
-        
-        if (roles.includes('Admin')) return true;
-
-        for (let role of roles) {
-            if (db.rolePermissions && db.rolePermissions[role]) {
-                if (db.rolePermissions[role].includes(pageKey)) return true;
-            }
+      function toISODate(dateStr) {
+        if (!dateStr) return null;
+        const s = String(dateStr).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m) {
+          const day = m[1].padStart(2, '0');
+          const month = m[2].padStart(2, '0');
+          const year = m[3];
+          return `${year}-${month}-${day}`;
         }
+        return s;
+      }
+
+      function formatDisplayDate(dateStr) {
+        if (!dateStr) return '';
+        const iso = toISODate(dateStr);
+        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return dateStr;
+        const [y, m, d] = iso.split('-');
+        return `${d}/${m}/${y}`;
+      }
+
+      function syncArchiveForDate(dateStr) {
+        if (!dateStr) return;
+        const iso = toISODate(dateStr);
+        if (!iso) return;
+
+        if (!db.historicalArchive) db.historicalArchive = [];
         
-        // Defaults
-        if (pageKey === 'dashboard' || pageKey === 'clock') return true;
+        let archIdx = db.historicalArchive.findIndex(a => toISODate(a.date) === iso);
+        
+        const dayClockLogs = (db.clockLogs || []).filter(l => toISODate(l.date) === iso);
+        const dayIncidents = (db.incidents || []).filter(i => toISODate(i.Date) === iso);
+        const dayMaintenance = (db.maintenanceLogs || []).filter(m => toISODate(m.endDate) === iso || toISODate(m.startDate) === iso);
+        const dayActionsAdded = (db.actions || []).filter(a => toISODate(a.createdDate) === iso);
+        const dayActionsCompleted = (db.actions || []).filter(a => toISODate(a.completedDate) === iso);
+
+        const attendanceMapped = dayClockLogs.map(l => ({
+          name: l.name,
+          clockIn: l.clockIn || '-',
+          clockOut: l.clockOut || '-',
+          status: l.status || (l.clockOut && l.clockOut !== '-' ? 'Completed' : 'Clocked In')
+        }));
+
+        const mappedIncidents = dayIncidents.map(i => ({
+          asset: i.asset || i['Asset / Location'] || 'General',
+          description: i.Description || i.desc || '',
+          status: i.Status || 'Open',
+          redTagStatus: i['Red Tag Status'] || 'Operational'
+        }));
+
+        const mappedMaint = dayMaintenance.map(m => ({
+          asset: m.assetName || m.asset || 'Fleet',
+          workDone: m.workDone || m.description || '',
+          performedBy: Array.isArray(m.performedBy) ? m.performedBy : (m.performedBy ? [m.performedBy] : [])
+        }));
+
+        if (archIdx > -1) {
+          db.historicalArchive[archIdx].attendance = attendanceMapped;
+          if (mappedIncidents.length > 0) db.historicalArchive[archIdx].incidents = mappedIncidents;
+          if (mappedMaint.length > 0) db.historicalArchive[archIdx].maintenance = mappedMaint;
+          if (dayActionsAdded.length > 0) db.historicalArchive[archIdx].actionsAdded = dayActionsAdded.map(a => a.Title || a.title);
+          if (dayActionsCompleted.length > 0) db.historicalArchive[archIdx].actionsCompleted = dayActionsCompleted.map(a => a.Title || a.title);
+        } else {
+          if (dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0) {
+            db.historicalArchive.push({
+              date: iso,
+              trackWalk: { inspector: 'N/A', result: 'Not Completed', notes: '' },
+              testRun: { inspector: 'N/A', result: 'Not Completed', notes: '', trains: [] },
+              runningTrains: [],
+              attendance: attendanceMapped,
+              incidents: mappedIncidents,
+              maintenance: mappedMaint,
+              actionsAdded: dayActionsAdded.map(a => a.Title || a.title),
+              actionsCompleted: dayActionsCompleted.map(a => a.Title || a.title)
+            });
+          }
+        }
+
+        db.historicalArchive.sort((a, b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+      }
+
+      function syncAllArchives() {
+        if (!db.historicalArchive) db.historicalArchive = [];
+        
+        const dates = new Set();
+        (db.historicalArchive || []).forEach(a => { if (a.date) dates.add(toISODate(a.date)); });
+        (db.clockLogs || []).forEach(l => { if (l.date) dates.add(toISODate(l.date)); });
+        (db.incidents || []).forEach(i => { if (i.Date) dates.add(toISODate(i.Date)); });
+        (db.maintenanceLogs || []).forEach(m => {
+          if (m.startDate) dates.add(toISODate(m.startDate));
+          if (m.endDate) dates.add(toISODate(m.endDate));
+        });
+
+        dates.forEach(dIso => {
+          if (dIso) syncArchiveForDate(dIso);
+        });
+      }
+
+      function checkExpiredEvents() {
+        if (!db.events || db.events.length === 0) return;
+        const now = new Date();
+        let changed = false;
+        db.events = db.events.filter(ev => {
+          if (!ev.EndDate) return true;
+          const endDateTime = new Date(ev.EndDate + 'T20:00:00');
+          if (now > endDateTime) {
+            changed = true;
+            return false;
+          }
+          return true;
+        });
+        if (changed && database) {
+          database.ref('EVLT_ADMIN_DB/events').set(db.events);
+        }
+      }
+
+      function archiveAndResetIfNewDay() {
+        checkExpiredEvents();
+        const todayStr = getTodayString();
+        if (!db.dailyChecks) db.dailyChecks = {};
+        const lastDate = db.dailyChecks.lastCheckDate;
+
+        if (!lastDate) {
+          db.dailyChecks.lastCheckDate = todayStr;
+          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          return;
+        }
+        if (lastDate === todayStr) return;
+
+        const daily = db.dailyChecks;
+        const dayClockLogs = (db.clockLogs || []).filter(l => toISODate(l.date) === lastDate);
+        const dayIncidents = (db.incidents || []).filter(i => toISODate(i.Date) === lastDate);
+        const dayMaintenance = (db.maintenanceLogs || []).filter(m => toISODate(m.endDate) === lastDate || toISODate(m.startDate) === lastDate);
+        const dayActionsAdded = (db.actions || []).filter(a => toISODate(a.createdDate) === lastDate);
+        const dayActionsCompleted = (db.actions || []).filter(a => toISODate(a.completedDate) === lastDate);
+
+        const trackWalkDone = daily.trackWalk && daily.trackWalk.result;
+        const testRunDone = daily.testRun && daily.testRun.result;
+        const trainsRan = (daily.runningTrains || []).length > 0;
+
+        const somethingHappened = trackWalkDone || testRunDone || trainsRan ||
+          dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0 ||
+          dayActionsAdded.length > 0 || dayActionsCompleted.length > 0;
+
+        if (somethingHappened) {
+          if (!db.historicalArchive) db.historicalArchive = [];
+          const existingIndex = db.historicalArchive.findIndex(a => toISODate(a.date) === lastDate);
+          
+          const archiveEntry = {
+            date: lastDate,
+            trackWalk: trackWalkDone ? daily.trackWalk : null,
+            testRun: testRunDone ? daily.testRun : null,
+            runningTrains: daily.runningTrains || [],
+            attendance: dayClockLogs.map(l => ({ name: l.name, clockIn: l.clockIn, clockOut: l.clockOut })),
+            incidents: dayIncidents.map(i => ({ asset: i.asset, description: i.Description, status: i.Status, redTagStatus: i['Red Tag Status'] })),
+            maintenance: dayMaintenance.map(m => ({ asset: m.assetName, workDone: m.workDone, performedBy: m.performedBy })),
+            actionsAdded: dayActionsAdded.map(a => a.Title),
+            actionsCompleted: dayActionsCompleted.map(a => a.Title)
+          };
+
+          if (existingIndex > -1) {
+            db.historicalArchive[existingIndex] = { ...db.historicalArchive[existingIndex], ...archiveEntry };
+          } else {
+            db.historicalArchive.push(archiveEntry);
+          }
+          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        }
+
+        db.dailyChecks = { lastCheckDate: todayStr, trackWalk: {}, testRun: {}, runningTrains: [] };
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+      }
+
+      function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+      }
+
+      let database, auth;
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        auth = firebase.auth();
+      } catch (e) {
+        console.error("Firebase init error", e);
+      }
+
+      function normaliseDb() {
+        if (!db || typeof db !== 'object') db = {};
+        
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads']
+          .forEach(key => {
+            const val = db[key];
+            if (Array.isArray(val)) return;
+            if (val && typeof val === 'object') {
+              db[key] = Object.keys(val).sort((a, b) => Number(a) - Number(b)).map(k => val[k]).filter(v => v !== null && v !== undefined);
+            } else if (!db[key]) {
+              db[key] = [];
+            }
+          });
+
+        if (db.historicalArchive && Array.isArray(db.historicalArchive)) {
+          const uniqueArchives = {};
+          db.historicalArchive.forEach(a => {
+            const iso = toISODate(a.date);
+            if (iso) uniqueArchives[iso] = a;
+          });
+          db.historicalArchive = Object.values(uniqueArchives).sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+        }
+
+        if (!db.userPermissions || typeof db.userPermissions !== 'object' || Array.isArray(db.userPermissions)) {
+          db.userPermissions = {};
+        }
+        if (!db.rolePageAccess || typeof db.rolePageAccess !== 'object' || Array.isArray(db.rolePageAccess)) {
+          db.rolePageAccess = {};
+        }
+
+        if (!db.fleetItems || db.fleetItems.length === 0) {
+          db.fleetItems = [
+            { name: 'Canadian Pacific', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'DB', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Santa Fe', type: 'Diesel', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'George', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Edward', type: 'Steam', gauge: "5''", state: 'In Service' },
+            { name: 'Dylan', type: 'Electric', gauge: "5''", state: 'In Service' },
+            { name: 'June', type: 'Coach', gauge: "7 1/4''", state: 'In Service' },
+            { name: 'Daphne', type: 'Coach', gauge: "7 1/4''", state: 'In Service' }
+          ];
+        }
+
+        syncAllArchives();
+      }
+
+      function attachDatabaseListener() {
+        if (!database) {
+          renderInitialApp();
+          return;
+        }
+        database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+          const val = snapshot.val();
+          if (val) {
+            db = val;
+            normaliseDb();
+          }
+          archiveAndResetIfNewDay();
+          renderInitialApp();
+        }, (err) => {
+          console.error("Database connection error:", err);
+        });
+      }
+
+      const REMEMBER_KEY = 'evltRememberedUser';
+
+      function saveRememberedUser() {
+        if (!currentUser) return;
+        const record = currentUser.isSystemAdmin
+          ? { type: 'admin' }
+          : currentUser.isShopKiosk
+            ? { type: 'kiosk' }
+            : { type: 'volunteer', name: currentUser.name };
+        try { localStorage.setItem(REMEMBER_KEY, JSON.stringify(record)); } catch (e) {}
+      }
+
+      function clearRememberedUser() {
+        try { localStorage.removeItem(REMEMBER_KEY); } catch (e) {}
+      }
+
+      function tryRestoreRememberedUser() {
+        let record = null;
+        try { record = JSON.parse(localStorage.getItem(REMEMBER_KEY)); } catch (e) {}
+        if (!record) return false;
+
+        if (record.type === 'admin') {
+          currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
+          return true;
+        }
+        if (record.type === 'kiosk') {
+          currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
+          return true;
+        }
+        if (record.type === 'volunteer') {
+          const vols = db.volunteers || [];
+          const vol = vols.find(v => getVolunteerName(v) === record.name);
+          if (vol) {
+            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
+            return true;
+          }
+        }
+        clearRememberedUser();
         return false;
+      }
+
+      function logoutDevice() {
+        clearRememberedUser();
+        currentUser = null;
+        document.getElementById('currentUserDisplayName').innerText = 'Not Logged In';
+        openLoginModal();
+      }
+
+      function renderInitialApp() {
+        updateLoginUserDropdown();
+        if (!currentUser) {
+          if (tryRestoreRememberedUser()) {
+            document.getElementById('currentUserDisplayName').innerText = currentUser.name;
+            renderSidebar();
+            navigate(currentUser.isShopKiosk ? 'clock' : currentView);
+            return;
+          }
+          openLoginModal();
+        } else {
+          renderSidebar();
+          navigate(currentView);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        renderDashboard();
+
+        if (auth) {
+          auth.signInAnonymously().then(() => {
+            attachDatabaseListener();
+          }).catch((err) => {
+            console.error("Auth failed:", err);
+            attachDatabaseListener();
+          });
+        } else {
+          attachDatabaseListener();
+        }
+      });
+
+      function updateLoginUserDropdown() {
+        const select = document.getElementById('loginUserSelect');
+        if (!select) return;
+        const vols = db.volunteers || [];
+        
+        let html = '<option value="">-- Choose Account --</option>';
+        html += '<option value="SYSTEM_ADMIN">System Administrator (Full Access)</option>';
+        html += '<option value="SHOP_IPAD">Shop iPad / Kiosk (Clock-In Station)</option>';
+        
+        html += vols.map(v => {
+          const name = getVolunteerName(v);
+          return `<option value="${name}">${name}</option>`;
+        }).join('');
+
+        const currentVal = select.value;
+        select.innerHTML = html;
+        select.value = currentVal;
+      }
+
+      function openLoginModal() {
+        updateLoginUserDropdown();
+        document.getElementById('loginUserPin').value = '';
+        document.getElementById('loginErrorMsg').style.display = 'none';
+        document.getElementById('loginModal').style.display = 'flex';
+      }
+
+      function handleUserLogin(e) {
+        e.preventDefault();
+        const accountVal = document.getElementById('loginUserSelect').value;
+        const pinVal = document.getElementById('loginUserPin').value.trim();
+        const errDiv = document.getElementById('loginErrorMsg');
+
+        if (!accountVal) return;
+
+        if (accountVal === 'SYSTEM_ADMIN') {
+          if (pinVal === '2026') {
+            currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+          return;
+        }
+
+        if (accountVal === 'SHOP_IPAD') {
+          if (pinVal === '2026' || pinVal === '5678') {
+            currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+          return;
+        }
+
+        const vols = db.volunteers || [];
+        const vol = vols.find(v => getVolunteerName(v) === accountVal);
+        if (vol) {
+          const userPin = vol.Pin || vol.pin || '1234';
+          if (pinVal === userPin || pinVal === '2026') {
+            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
+            finishLogin();
+          } else {
+            errDiv.style.display = 'block';
+          }
+        } else {
+          errDiv.style.display = 'block';
+        }
+      }
+
+      function finishLogin() {
+        const rememberBox = document.getElementById('rememberDeviceCheckbox');
+        if (rememberBox && rememberBox.checked) {
+          saveRememberedUser();
+        } else {
+          clearRememberedUser();
+        }
+        closeModal('loginModal');
+        document.getElementById('currentUserDisplayName').innerText = currentUser.name;
+        renderSidebar();
+        navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
+      }
+
+      function hasManagementPermission() {
+        if (!currentUser) return false;
+        if (currentUser.isSystemAdmin) return true;
+        if (!currentUser.volData) return false;
+        const roles = String(currentUser.volData.Roles || currentUser.volData.roles || '').toLowerCase();
+        return roles.includes('management') || roles.includes('admin');
+      }
+
+      function hasMaintenancePermission() {
+        if (!currentUser) return false;
+        if (currentUser.isSystemAdmin) return true;
+        if (!currentUser.volData) return false;
+        const roles = String(currentUser.volData.Roles || currentUser.volData.roles || '').toLowerCase();
+        return roles.includes('maintenance') || roles.includes('management') || roles.includes('admin');
+      }
+
+      function userHasAccess(pageKey) {
+        if (pageKey === 'myAccount') return !!(currentUser && currentUser.volData);
+        if (!currentUser) return true;
+        if (currentUser.isSystemAdmin) return true;
+        if (currentUser.isShopKiosk) return pageKey === 'clock';
+
+        // Always grant basic pages
+        const alwaysGranted = ['dashboard', 'clock', 'incidents', 'calendar', 'actions', 'events', 'myAccount'];
+        if (alwaysGranted.includes(pageKey)) return true;
+
+        // Management role always gets management pages
+        if (hasManagementPermission()) return true;
+
+        // Check role-based page access from Qualifications page config
+        if (currentUser.volData) {
+          const volRoles = String(currentUser.volData.Roles || currentUser.volData.roles || '').split(',').map(r => r.trim());
+          const rolePageAccess = db.rolePageAccess || {};
+          for (const role of volRoles) {
+            const grantedPages = rolePageAccess[role] || [];
+            if (grantedPages.includes(pageKey)) return true;
+          }
+        }
+
+        // Legacy: also check manual userPermissions
+        const permsMap = db.userPermissions || {};
+        const userPerms = permsMap[currentUser.name];
+        if (Array.isArray(userPerms) && userPerms.includes(pageKey)) return true;
+
+        return false;
+      }
+
+      function renderSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        if (!currentUser) return;
+
+        const sections = {};
+        ALL_PAGES.forEach(p => {
+          if (!userHasAccess(p.key)) return;
+          if (!sections[p.section]) sections[p.section] = [];
+          sections[p.section].push(p);
+        });
+
+        let html = '';
+        Object.entries(sections).forEach(([secName, pages]) => {
+          html += `<div class="sidebar-section-label">${secName}</div>`;
+          pages.forEach(p => {
+            html += `
+              <a href="#" class="${currentView === p.key ? 'active' : ''}" onclick="navigate('${p.key}'); return false;">
+                <i data-lucide="${p.icon}"></i> ${p.label}
+              </a>
+            `;
+          });
+        });
+
+        html += `
+          <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
+          ${currentUser.volData ? `
+            <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
+              <i data-lucide="user-cog"></i> My Account
+            </a>
+          ` : ''}
+          <a href="#" onclick="openLoginModal(); return false;">
+            <i data-lucide="repeat"></i> Switch Account
+          </a>
+          <a href="#" onclick="logoutDevice(); return false;" style="color: #f87171;">
+            <i data-lucide="log-out"></i> Log Out (forget this device)
+          </a>
+        `;
+
+        sidebar.innerHTML = html;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
       function toggleMenu() {
@@ -850,918 +1380,2022 @@
         document.getElementById('overlay').classList.toggle('active');
       }
 
-      function navigateTo(view) {
-        if (!hasAccess(view)) {
-            showMsg("Access Denied", "You do not have permission to access this page based on your qualifications.");
-            return;
+      function getVolunteerName(v) {
+        return v.Name || v.name || v['Volunteer Name'] || v['Volunteer ID'] || 'Unknown';
+      }
+
+      function generateTimeSlotOptions() {
+        const slots = ['-'];
+        for (let h = 0; h < 24; h++) {
+          for (let m = 0; m < 60; m += 15) {
+            slots.push(String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'));
+          }
+        }
+        return slots;
+      }
+
+      function getRedTaggedAssets() {
+        return (db.incidents || [])
+          .filter(i => String(i['Red Tag Status']).toLowerCase() === 'out of service' && String(i.Status).toLowerCase() !== 'resolved')
+          .map(i => String(i.asset || i['Asset / Location'] || '').toLowerCase());
+      }
+
+      function navigate(view) {
+        if (!userHasAccess(view)) {
+          alert('Access Restricted: You do not have permission to view this page.');
+          return;
         }
         currentView = view;
-        document.getElementById('sidebar').classList.remove('active');
-        document.getElementById('overlay').classList.remove('active');
-        updateUI();
-      }
+        renderSidebar();
 
-      function showMsg(title, msg) {
-          document.getElementById('msgBoxTitle').innerText = title;
-          document.getElementById('msgBoxText').innerText = msg;
-          document.getElementById('msgBoxModal').style.display = 'flex';
-      }
-
-      function closeModal(id) {
-          document.getElementById(id).style.display = 'none';
-      }
-
-      function openLoginModal() {
-        const select = document.getElementById('loginUserSelect');
-        select.innerHTML = '<option value="">-- Choose Account --</option>';
-        db.volunteers.forEach(v => {
-            select.innerHTML += `<option value="${v.Name}">${v.Name}</option>`;
-        });
-        document.getElementById('loginErrorMsg').style.display = 'none';
-        document.getElementById('loginUserPin').value = '';
-        document.getElementById('loginModal').style.display = 'flex';
-      }
-
-      function handleUserLogin(e) {
-        e.preventDefault();
-        const name = document.getElementById('loginUserSelect').value;
-        const pin = document.getElementById('loginUserPin').value;
-        const remember = document.getElementById('rememberDeviceCheckbox').checked;
-        
-        const user = db.volunteers.find(v => v.Name === name);
-        if (user && user.Pin === pin) {
-            currentUser = user;
-            if (remember) {
-                localStorage.setItem('evlt_saved_user', name);
-            } else {
-                localStorage.removeItem('evlt_saved_user');
-            }
-            document.getElementById('currentUserDisplayName').innerText = user.Name;
-            closeModal('loginModal');
-            updateUI();
-        } else {
-            document.getElementById('loginErrorMsg').style.display = 'block';
+        switch(view) {
+          case 'dashboard': renderDashboard(); break;
+          case 'clock': renderClock(); break;
+          case 'calendar': renderCalendarView(); break;
+          case 'clockLogs': renderClockLogsPage(); break;
+          case 'incidents': renderIncidents(); break;
+          case 'competency': renderCompetencyMatrix(); break;
+          case 'volunteers': renderVolunteers(); break;
+          case 'actions': renderActionsPage(); break;
+          case 'maintenance': renderMaintenancePage(); break;
+          case 'events': renderEventsPage(); break;
+          case 'assets': renderGenericModule('Assets', 'Rolling stock and site equipment management.', 'assets'); break;
+          case 'stock': renderGenericModule('Stock', 'Shop and tearoom inventory tracking.', 'stock'); break;
+          case 'suppliers': renderGenericModule('Suppliers', 'Vendor contacts and accounts.', 'suppliers'); break;
+          case 'enquiries': renderGenericModule('Enquiries', 'Visitor questions and bookings.', 'enquiries'); break;
+          case 'documents': renderGenericModule('Documents', 'Rulebooks, policies, and safety guides.', 'documents'); break;
+          case 'notes': renderGenericModule('Notes', 'Shift handover and operational logs.', 'notes'); break;
+          case 'archives': renderArchives(); break;
+          case 'myAccount': renderMyAccount(); break;
+          default: renderDashboard();
         }
       }
 
-      function checkSavedLogin() {
-          const savedName = localStorage.getItem('evlt_saved_user');
-          if (savedName) {
-              const user = db.volunteers.find(v => v.Name === savedName);
-              if (user) {
-                  currentUser = user;
-                  document.getElementById('currentUserDisplayName').innerText = user.Name;
-                  return true;
-              }
-          }
-          return false;
-      }
-
-      function renderSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        let html = '';
-        const sections = [...new Set(ALL_PAGES.map(p => p.section))];
-        
-        sections.forEach(sec => {
-            const pagesInSection = ALL_PAGES.filter(p => p.section === sec && hasAccess(p.key));
-            if (pagesInSection.length > 0) {
-                html += `<div class="sidebar-section-label">${sec}</div>`;
-                pagesInSection.forEach(p => {
-                    html += `<a href="#" class="${currentView === p.key ? 'active' : ''}" onclick="navigateTo('${p.key}')"><i data-lucide="${p.icon}"></i> ${p.label}</a>`;
-                });
-            }
+      function getDriverStatusHtml() {
+        const activeLogs = (db.clockLogs || []).filter(l => l.status === 'Clocked In');
+        const volunteers = db.volunteers || [];
+        let driverCount = 0;
+        activeLogs.forEach(log => {
+          const vol = volunteers.find(v => getVolunteerName(v) === log.name);
+          if (vol && (vol.Roles || vol.roles || '').includes('Driver')) driverCount++;
         });
-        sidebar.innerHTML = html;
-        lucide.createIcons();
+
+        if (driverCount >= 2) {
+          return `<div style="background: #dcfce7; color: #166534; padding: 0.75rem; border-radius: var(--radius); border: 1px solid #bbf7d0; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i data-lucide="check-circle"></i> Qualified drivers currently on site: ${driverCount} — Safety Requirement Met</div>`;
+        } else {
+          return `<div style="background: #fef2f2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius); border: 1px solid #fecaca; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i data-lucide="alert-triangle"></i> WARNING: Only ${driverCount} qualified driver(s) currently on site. A minimum of 2 drivers is required for operations.</div>`;
+        }
       }
 
       function renderDashboard() {
-        if (!currentUser) return `<div class="page-header"><div class="page-title"><h2>Welcome</h2><p>Please sign in to continue.</p></div></div>`;
-        
-        const year = new Date().getFullYear().toString();
-        let ytdHours = 0;
-        (db.clockLogs || []).forEach(log => {
-           if (log.Date.startsWith(year)) {
-               let start = new Date(`1970-01-01T${log.In}:00`);
-               let end = new Date(`1970-01-01T${log.Out}:00`);
-               if(end > start) ytdHours += (end - start) / (1000*60*60);
-           }
+        const content = document.getElementById('content');
+        const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
+        const openIncidents = (db.incidents || []).filter(i => String(i.Status).toLowerCase() !== 'resolved').length;
+        const pendingMaintenance = (db.maintenanceLogs || []).length;
+        const daily = db.dailyChecks || { trackWalk: {}, testRun: {}, runningTrains: [] };
+        const runningTrains = daily.runningTrains || [];
+
+        const todayStr = getTodayString();
+        const activeEvents = (db.events || []).filter(ev => {
+          const start = ev.StartDate || ev.startDate;
+          const end = ev.EndDate || ev.endDate || start;
+          return todayStr >= start && todayStr <= end;
         });
 
-        let html = `
+        const eventBannerHtml = activeEvents.length > 0 ? `
+          <div style="background: linear-gradient(135deg, #fef08a, #fde047); color: #713f12; padding: 0.85rem 1rem; border-radius: var(--radius-lg); border: 1px solid #facc15; font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm);">
+            <i data-lucide="calendar-range" style="width:20px; height:20px; flex-shrink:0;"></i>
+            <div>Active Event Today: <strong>${activeEvents.map(e => e.Title || e.title).join(', ')}</strong></div>
+          </div>
+        ` : '';
+
+        const renderResultIcon = (res) => {
+          if (res === 'Pass') return '<div class="result-badge result-pass"><i data-lucide="check" style="width:14px;height:14px;"></i></div>';
+          if (res === 'Fail') return '<div class="result-badge result-fail"><i data-lucide="x" style="width:14px;height:14px;"></i></div>';
+          return '<div class="result-badge result-none">-</div>';
+        };
+
+        const trackWalkPassed = daily.trackWalk && daily.trackWalk.result === 'Pass';
+
+        content.innerHTML = `
+          ${eventBannerHtml}
+          ${getDriverStatusHtml()}
           <div class="page-header">
             <div class="page-title">
-              <h2>Dashboard</h2>
-              <p>Welcome back, ${currentUser.Name}</p>
+              <h2>Operations Dashboard</h2>
+              <p>Railway daily safety inspections and site activity overview (${formatDisplayDate(todayStr)}).</p>
             </div>
+            <button class="btn btn-primary btn-sm" onclick="openIncidentModal()">
+              <i data-lucide="alert-triangle"></i> Report Defect / Red Tag
+            </button>
           </div>
-          
-          <div class="grid-stats">
-            <div class="stat-card" onclick="navigateTo('clock')">
-              <div class="stat-header">
-                <span>Total YTD Hours</span>
-                <div class="stat-icon"><i data-lucide="clock"></i></div>
-              </div>
-              <div class="stat-value">${ytdHours.toFixed(1)} <span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">hrs</span></div>
-            </div>
-            
-            <div class="stat-card" onclick="navigateTo('incidents')">
-              <div class="stat-header">
-                <span>Active Defects</span>
-                <div class="stat-icon"><i data-lucide="alert-triangle"></i></div>
-              </div>
-              <div class="stat-value">${db.incidents.filter(i => i.RedTag === 'Out of Service').length}</div>
-            </div>
 
-            <div class="stat-card" onclick="navigateTo('maintenance')">
-              <div class="stat-header">
-                <span>Out of Service Fleet</span>
-                <div class="stat-icon"><i data-lucide="train"></i></div>
+          <div class="section-group">
+            <div class="section-header">Today's Running Trains (Resets Daily)</div>
+            <div class="card" style="padding: 1rem;">
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
+                ${runningTrains.length === 0 ? '<span style="color: var(--text-muted); font-size: 0.8rem;">No trains added for running today.</span>' :
+                  runningTrains.map(train => `
+                    <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: var(--radius); font-weight: 600; font-size: 0.8rem;">
+                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${train}
+                      <button type="button" onclick="removeRunningTrain('${train}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
+                    </div>
+                  `).join('')}
               </div>
-              <div class="stat-value">${db.fleetItems.filter(f => f.state !== 'In Service').length}</div>
+              <div style="display: flex; gap: 0.5rem; max-width: 350px;">
+                <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
+                  <option value="">-- Add Loco to Today's Run --</option>
+                  ${AVAILABLE_TRAINS.map(t => `<option value="${t}">${t}</option>`).join('')}
+                </select>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
+              </div>
             </div>
           </div>
 
           <div class="section-group">
-            <div class="section-header">Quick Actions</div>
-            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-              <button class="btn btn-primary" onclick="navigateTo('clock')"><i data-lucide="clock"></i> Clock In / Out</button>
-              <button class="btn btn-secondary" onclick="openIncidentModal()"><i data-lucide="alert-triangle"></i> Report Defect</button>
+            <div class="section-header">Daily Safety Inspections (Resets Daily)</div>
+            <div class="card">
+              <div class="table-container">
+                <table class="checks-table">
+                  <thead>
+                    <tr>
+                      <th>Check Type</th>
+                      <th>Inspected By</th>
+                      <th style="text-align:center;">Result</th>
+                      <th>Notes / Running Locos</th>
+                      <th style="text-align:right;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="checks-row" onclick="openOpCheckModal('trackWalk')">
+                      <td><strong>Track Walk</strong></td>
+                      <td>${daily.trackWalk?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td style="text-align:center;">${renderResultIcon(daily.trackWalk?.result)}</td>
+                      <td>${daily.trackWalk?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.trackWalk?.notes}</span>` : (daily.trackWalk?.notes || '-') }</td>
+                      <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('trackWalk')">Edit Check</button></td>
+                    </tr>
+                    <tr class="checks-row" onclick="openOpCheckModal('testRun')">
+                      <td><strong>Test Run</strong></td>
+                      <td>${daily.testRun?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td style="text-align:center;">${renderResultIcon(daily.testRun?.result)}</td>
+                      <td>
+                        ${daily.testRun?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.testRun?.notes}</span>` : 
+                          (daily.testRun?.trains || []).map(t => `<span class="train-tag">${t}</span>`).join('') || daily.testRun?.notes || '-'}
+                      </td>
+                      <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('testRun')" ${!trackWalkPassed ? 'disabled title="Requires passed Track Walk first"' : ''}>Edit Check</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-stats">
+            <div class="stat-card" onclick="navigate('clock')">
+              <div class="stat-header"><span>Active Staff On Site</span><div class="stat-icon"><i data-lucide="users"></i></div></div>
+              <div class="stat-value">${activeClockIns}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('incidents')">
+              <div class="stat-header"><span>Open Defects</span><div class="stat-icon"><i data-lucide="alert-triangle"></i></div></div>
+              <div class="stat-value" style="color: ${openIncidents > 0 ? '#dc2626' : 'inherit'}">${openIncidents}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('maintenance')">
+              <div class="stat-header"><span>Maintenance Logs</span><div class="stat-icon"><i data-lucide="wrench"></i></div></div>
+              <div class="stat-value">${pendingMaintenance}</div>
             </div>
           </div>
         `;
-        return html;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addRunningTrain() {
+        const select = document.getElementById('newRunningTrainSelect');
+        const trainName = select.value;
+        if (!trainName) return;
+        if (!db.dailyChecks.runningTrains) db.dailyChecks.runningTrains = [];
+        if (!db.dailyChecks.runningTrains.includes(trainName)) {
+          db.dailyChecks.runningTrains.push(trainName);
+          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          renderDashboard();
+        }
+      }
+
+      function removeRunningTrain(trainName) {
+        if (!db.dailyChecks.runningTrains) return;
+        db.dailyChecks.runningTrains = db.dailyChecks.runningTrains.filter(t => t !== trainName);
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        renderDashboard();
+      }
+
+      function openOpCheckModal(checkKey) {
+        const daily = db.dailyChecks || { trackWalk: {}, testRun: {} };
+        if (checkKey === 'testRun') {
+          if (!daily.trackWalk || daily.trackWalk.result !== 'Pass') {
+            alert('Cannot complete Test Run until a Track Walk has been successfully completed and passed.');
+            return;
+          }
+        }
+        const checkData = daily[checkKey] ? daily[checkKey] : { inspector: '', result: 'Pass', notes: '', trains: [] };
+        document.getElementById('opCheckKey').value = checkKey;
+        document.getElementById('opCheckTitle').innerText = checkKey === 'trackWalk' ? 'Log Track Walk' : 'Log Test Run';
+
+        const volunteers = db.volunteers || [];
+        const inspectorSelect = document.getElementById('opCheckInspector');
+        inspectorSelect.innerHTML = '<option value="">-- Select Qualified Volunteer --</option>' + 
+          volunteers.map(v => {
+            const name = getVolunteerName(v);
+            return `<option value="${name}" ${checkData.inspector === name ? 'selected' : ''}>${name}</option>`;
+          }).join('');
+
+        document.getElementById('opCheckResult').value = checkData.result || 'Pass';
+        document.getElementById('opCheckReason').value = checkData.notes || '';
+        toggleOpCheckReason(checkData.result || 'Pass');
+
+        const trainGroup = document.getElementById('trainSelectionGroup');
+        if (checkKey === 'testRun') {
+          trainGroup.style.display = 'block';
+          const redTagged = getRedTaggedAssets();
+          const locoSelect = document.getElementById('opCheckLocoSelect');
+          const activeLoco = (checkData.trains && checkData.trains.length > 0) ? checkData.trains[0] : '';
+          locoSelect.innerHTML = '<option value="">-- Select Running Locomotive --</option>' + 
+            AVAILABLE_TRAINS.map(train => {
+              if (redTagged.some(rt => rt.includes(train.toLowerCase()))) return '';
+              return `<option value="${train}" ${activeLoco === train ? 'selected' : ''}>${train}</option>`;
+            }).join('');
+        } else {
+          trainGroup.style.display = 'none';
+        }
+        document.getElementById('opCheckModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveOpCheck(e) {
+        e.preventDefault();
+        const checkKey = document.getElementById('opCheckKey').value;
+        const inspector = document.getElementById('opCheckInspector').value;
+        const result = document.getElementById('opCheckResult').value;
+        const notes = document.getElementById('opCheckReason').value;
+
+        const selectedTrains = [];
+        if (checkKey === 'testRun') {
+          const chosenLoco = document.getElementById('opCheckLocoSelect').value;
+          if (chosenLoco) selectedTrains.push(chosenLoco);
+        }
+
+        if (!db.dailyChecks) db.dailyChecks = {};
+        const todayStr = getTodayString();
+        db.dailyChecks.lastCheckDate = todayStr;
+        db.dailyChecks[checkKey] = { inspector, result, notes, trains: selectedTrains, recordedBy: currentUser ? currentUser.name : 'User' };
+
+        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        syncArchiveForDate(todayStr);
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+
+        closeModal('opCheckModal');
+        renderDashboard();
+      }
+
+      function toggleOpCheckReason(resultVal) {
+        const reasonGroup = document.getElementById('reasonSelectionGroup');
+        const reasonInput = document.getElementById('opCheckReason');
+        if (resultVal === 'Fail') {
+          reasonGroup.style.display = 'block';
+          reasonInput.required = true;
+        } else {
+          reasonGroup.style.display = 'none';
+          reasonInput.required = false;
+        }
+      }
+
+      function openIncidentModal(index = null) {
+        editingIncidentIndex = index;
+        const existing = (index !== null && db.incidents) ? db.incidents[index] : null;
+        tempPhotoBase64 = existing ? (existing.Photo || '') : '';
+        document.getElementById('incidentAsset').value = existing ? (existing.asset || existing['Asset / Location'] || '') : '';
+        document.getElementById('incidentDesc').value = existing ? (existing.Description || existing.desc || '') : '';
+        document.getElementById('incidentRedTag').value = existing ? (existing['Red Tag Status'] || 'Operational') : 'Operational';
+        document.getElementById('incidentPhoto').value = '';
+        document.getElementById('incidentModal').style.display = 'flex';
+      }
+
+      function previewIncidentPhoto(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            tempPhotoBase64 = evt.target.result;
+            const img = document.getElementById('incidentPhotoPreview');
+            img.src = tempPhotoBase64;
+            img.style.display = 'block';
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function saveIncident(e) {
+        e.preventDefault();
+        const asset = document.getElementById('incidentAsset').value;
+        const desc = document.getElementById('incidentDesc').value;
+        const redTag = document.getElementById('incidentRedTag').value;
+        const todayStr = getTodayString();
+
+        if (!db.incidents) db.incidents = [];
+        if (editingIncidentIndex !== null && db.incidents[editingIncidentIndex]) {
+          db.incidents[editingIncidentIndex].asset = asset;
+          db.incidents[editingIncidentIndex].Description = desc;
+          db.incidents[editingIncidentIndex]['Red Tag Status'] = redTag;
+          db.incidents[editingIncidentIndex].Photo = tempPhotoBase64;
+        } else {
+          db.incidents.push({
+            id: Date.now(),
+            asset: asset,
+            Description: desc,
+            'Red Tag Status': redTag,
+            Status: 'Open',
+            Date: todayStr,
+            Photo: tempPhotoBase64,
+            reportedBy: currentUser ? currentUser.name : 'User'
+          });
+        }
+        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+        syncArchiveForDate(todayStr);
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+
+        closeModal('incidentModal');
+        navigate(currentView);
+      }
+
+      function handleClockAction(e) {
+        e.preventDefault();
+        if (currentUser && !currentUser.isSystemAdmin && !currentUser.isShopKiosk) {
+          alert('Clock-in actions are restricted to System Admin or Shop iPad accounts only.');
+          return;
+        }
+
+        const name = document.getElementById('clockVolunteer').value;
+        const action = document.getElementById('clockActionType').value;
+        if (!name) return;
+
+        const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = getTodayString();
+
+        if (!db.clockLogs) db.clockLogs = [];
+        let updatedLogs = [...db.clockLogs];
+
+        if (action === 'In') {
+          updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: timeStr, clockOut: '-', status: 'Clocked In' });
+        } else {
+          const activeLog = updatedLogs.slice().reverse().find(l => l.name === name && l.status === 'Clocked In');
+          if (activeLog) {
+            const target = updatedLogs.find(l => l.id === activeLog.id);
+            target.clockOut = timeStr;
+            target.status = 'Completed';
+          } else {
+            updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: '-', clockOut: timeStr, status: 'Completed' });
+          }
+        }
+
+        db.clockLogs = updatedLogs;
+        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+        
+        syncArchiveForDate(dateStr);
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+
+        renderClock();
       }
 
       function renderClock() {
-        const today = new Date().toISOString().split('T')[0];
-        const logsToday = db.clockLogs.filter(l => l.Name === currentUser.Name && l.Date === today);
-        let activeLog = logsToday.find(l => !l.Out);
+        const content = document.getElementById('content');
+        const activeLogs = (db.clockLogs || []).filter(l => l.status === 'Clocked In');
+        const volunteers = db.volunteers || [];
+        const canOperate = currentUser && (currentUser.isSystemAdmin || currentUser.isShopKiosk);
 
-        let html = `
-          <div class="page-header">
-            <div class="page-title">
-              <h2>Clock In/Out</h2>
-              <p>Log your attendance for ${today}</p>
-            </div>
+        const clockFormHtml = canOperate ? `
+          <div class="card" style="padding: 1.25rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Record Attendance</h3>
+            <form onsubmit="handleClockAction(event)">
+              <div class="form-group">
+                <label>Select Volunteer</label>
+                <select id="clockVolunteer" required>
+                  <option value="">-- Choose Name --</option>
+                  ${volunteers.filter(v => !v.disabled).map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)} (${v.Roles || v.roles || 'Standard'})</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Action Type</label>
+                <select id="clockActionType" required>
+                  <option value="In">Clock In (Arrived on Site)</option>
+                  <option value="Out">Clock Out (Leaving Site)</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 0.5rem;">Submit Attendance</button>
+            </form>
           </div>
-          <div class="card" style="padding: 2rem; text-align: center; max-width: 500px; margin: 0 auto;">
-            <div style="font-size: 3rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary);" id="clockDisplay">00:00:00</div>
-            
-            ${!activeLog ? `
-              <button class="btn btn-primary" style="font-size: 1.1rem; padding: 0.75rem 2rem; border-radius: 50px;" onclick="clockInOut('in')"><i data-lucide="play-circle"></i> Clock In</button>
-              <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.85rem;">You are currently clocked out.</p>
-            ` : `
-              <button class="btn btn-danger" style="font-size: 1.1rem; padding: 0.75rem 2rem; border-radius: 50px;" onclick="clockInOut('out')"><i data-lucide="stop-circle"></i> Clock Out</button>
-              <p style="margin-top: 1rem; color: #16a34a; font-weight: 600; font-size: 0.85rem;">You are currently clocked in (Since ${activeLog.In}).</p>
-            `}
+        ` : `
+          <div class="card" style="padding: 1.25rem; text-align:center;">
+            <i data-lucide="shield-alert" style="width:36px; height:36px; color:#dc2626; margin-bottom:0.75rem;"></i>
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem;">Restricted</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Attendance can only be recorded from the Shop iPad account, or by a System Admin.</p>
           </div>
         `;
-        
-        setTimeout(startLiveClock, 100);
-        return html;
+
+        content.innerHTML = `
+          ${getDriverStatusHtml()}
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Volunteer Clock In / Out</h2>
+              <p>Record your attendance for health, safety, and insurance tracking.</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+            ${clockFormHtml}
+
+            <div class="card" style="padding: 1.25rem;">
+              <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Currently On Site (${activeLogs.length})</h3>
+              <div style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                ${activeLogs.length === 0 ? '<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:1.5rem;">No volunteers currently clocked in.</div>' :
+                  activeLogs.map(l => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.6rem 0.75rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.825rem;">
+                      <div>
+                        <div style="font-weight: 600;">${l.name}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Clocked In at ${l.clockIn}</div>
+                      </div>
+                      <span style="background: #dcfce7; color: #166534; font-weight: 700; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">Active</span>
+                    </div>
+                  `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function startLiveClock() {
-         const el = document.getElementById('clockDisplay');
-         if (!el) return;
-         const now = new Date();
-         el.innerText = now.toLocaleTimeString('en-GB');
-         if(currentView === 'clock') setTimeout(startLiveClock, 1000);
-      }
-
-      function clockInOut(action) {
-        const today = new Date().toISOString().split('T')[0];
-        const time = new Date().toTimeString().slice(0,5);
-        
-        if (action === 'in') {
-            db.clockLogs.push({
-                id: Date.now(),
-                Name: currentUser.Name,
-                Date: today,
-                In: time,
-                Out: ''
-            });
-        } else {
-            const activeLog = db.clockLogs.find(l => l.Name === currentUser.Name && l.Date === today && !l.Out);
-            if (activeLog) {
-                activeLog.Out = time;
-            }
+      function deleteClockLog(id) {
+        if (currentUser && !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete attendance records.');
+          return;
         }
-        saveData();
-        updateUI();
+        if (!confirm('Are you sure you want to delete this attendance record?')) return;
+        
+        const logToDelete = (db.clockLogs || []).find(l => l.id === id);
+        const logDate = logToDelete ? toISODate(logToDelete.date) : null;
+
+        db.clockLogs = (db.clockLogs || []).filter(l => l.id !== id);
+        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+
+        if (logDate) {
+          syncArchiveForDate(logDate);
+          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        }
+
+        if (currentView === 'calendar') renderCalendarView();
+        else if (currentView === 'clockLogs') renderClockLogsPage();
       }
 
-      function renderMaintenance() {
-          let html = `
-            <div class="page-header">
-              <div class="page-title">
-                <h2>Maintenance & Fleet</h2>
-                <p>Manage fleet operational status and maintenance logs</p>
-              </div>
-              <div class="header-actions">
-                ${isAdmin(currentUser) ? `<button class="btn btn-primary" onclick="openFleetModal()"><i data-lucide="plus"></i> Add Loco/Asset</button>` : ''}
-                <button class="btn btn-secondary" onclick="openMaintLogModal()"><i data-lucide="wrench"></i> Log Maintenance</button>
+      function changeCalendarMonth(dir) {
+        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + dir);
+        renderCalendarView();
+      }
+
+      function selectCalendarDate(dateStr) {
+        selectedCalendarDateStr = dateStr;
+        renderCalendarView();
+      }
+
+      function renderCalendarView() {
+        const content = document.getElementById('content');
+        const year = calendarCurrentDate.getFullYear();
+        const month = calendarCurrentDate.getMonth();
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+
+        const logs = db.clockLogs || [];
+        const events = db.events || [];
+
+        const dayLogs = logs.filter(l => toISODate(l.date) === toISODate(selectedCalendarDateStr));
+        const volunteerHours = {};
+        dayLogs.forEach(l => {
+          if (!volunteerHours[l.name]) volunteerHours[l.name] = 0;
+          if (l.clockIn && l.clockOut && l.clockIn !== '-' && l.clockOut !== '-') {
+            const [inH, inM] = l.clockIn.split(':').map(Number);
+            const [outH, outM] = l.clockOut.split(':').map(Number);
+            let diff = (outH * 60 + outM) - (inH * 60 + inM);
+            if (diff < 0) diff += 24 * 60;
+            volunteerHours[l.name] += diff / 60;
+          }
+        });
+
+        const monthlyVolunteerHours = {};
+        const yearlyVolunteerHours = {};
+        logs.forEach(l => {
+          if (!l.date) return;
+          const iso = toISODate(l.date);
+          if (!iso) return;
+          const [lYear, lMonth] = iso.split('-').map(Number);
+
+          let diffHrs = 0;
+          if (l.clockIn && l.clockOut && l.clockIn !== '-' && l.clockOut !== '-') {
+            const [inH, inM] = l.clockIn.split(':').map(Number);
+            const [outH, outM] = l.clockOut.split(':').map(Number);
+            let diff = (outH * 60 + outM) - (inH * 60 + inM);
+            if (diff < 0) diff += 24 * 60;
+            diffHrs = diff / 60;
+          }
+
+          if (lYear === year) {
+            if (!yearlyVolunteerHours[l.name]) yearlyVolunteerHours[l.name] = 0;
+            yearlyVolunteerHours[l.name] += diffHrs;
+            if (lMonth === (month + 1)) {
+              if (!monthlyVolunteerHours[l.name]) monthlyVolunteerHours[l.name] = 0;
+              monthlyVolunteerHours[l.name] += diffHrs;
+            }
+          }
+        });
+
+        let daysHtml = '';
+        for (let i = 0; i < firstDayIndex; i++) {
+          daysHtml += '<div class="cal-day empty"></div>';
+        }
+
+        for (let d = 1; d <= totalDays; d++) {
+          const mStr = String(month + 1).padStart(2, '0');
+          const dStr = String(d).padStart(2, '0');
+          const dateStr = `${year}-${mStr}-${dStr}`;
+          const isSelected = dateStr === selectedCalendarDateStr;
+          const countForDay = logs.filter(l => toISODate(l.date) === dateStr).length;
+
+          const dayEvents = events.filter(ev => {
+            const start = ev.StartDate || ev.startDate;
+            const end = ev.EndDate || ev.endDate || start;
+            return dateStr >= start && dateStr <= end;
+          });
+
+          daysHtml += `
+            <div class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" onclick="selectCalendarDate('${dateStr}')">
+              <div style="font-weight:700;">${d}</div>
+              <div>
+                ${dayEvents.map(e => `<div class="cal-event-dot" title="${e.Title || e.title}">${e.Title || e.title}</div>`).join('')}
+                ${countForDay > 0 ? `<div class="cal-badge">${countForDay} log(s)</div>` : ''}
               </div>
             </div>
-            
-            <div class="section-group">
-              <div class="section-header">Fleet Status</div>
-              <div class="grid-stats" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));">
           `;
+        }
 
-          db.fleetItems.forEach((item, idx) => {
-            let badgeClass = item.state === 'In Service' ? 'result-pass' : (item.state === 'Out of Service' ? 'result-fail' : 'result-none');
-            html += `
-              <div class="stat-card" style="padding: 1rem; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                  <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text);">${item.name}</h3>
-                  <span class="result-badge ${badgeClass}" style="width: auto; height: auto; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem;">${item.state}</span>
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Attendance & Hours Calendar</h2>
+              <p>Select any date on the calendar to audit shifts and hours worked.</p>
+            </div>
+          </div>
+
+          <div class="calendar-layout">
+            <div class="card" style="padding: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(-1)"><i data-lucide="chevron-left"></i> Prev</button>
+                <h3 style="font-size: 1rem; font-weight: 700; margin:0;">${monthNames[month]} ${year}</h3>
+                <button class="btn btn-secondary btn-sm" onclick="changeCalendarMonth(1)">Next <i data-lucide="chevron-right"></i></button>
+              </div>
+
+              <div class="calendar-grid">
+                <div class="cal-header">Sun</div>
+                <div class="cal-header">Mon</div>
+                <div class="cal-header">Tue</div>
+                <div class="cal-header">Wed</div>
+                <div class="cal-header">Thu</div>
+                <div class="cal-header">Fri</div>
+                <div class="cal-header">Sat</div>
+                ${daysHtml}
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                  <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.2rem;">Date: ${formatDisplayDate(selectedCalendarDateStr)}</h3>
+                  <p style="font-size: 0.75rem; color: var(--text-muted);">Summary of volunteer hours for this date.</p>
                 </div>
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
-                  <i data-lucide="train" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> ${item.type} | Gauge: ${item.gauge}
-                </p>
-                <div style="display: flex; gap: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
-                  <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openFleetModal(${idx})"><i data-lucide="edit"></i> Edit</button>
-                  ${isAdmin(currentUser) ? `<button class="btn btn-danger btn-sm" style="flex: 1;" onclick="deleteFleetItem(${idx})"><i data-lucide="trash-2"></i> Delete</button>` : ''}
+
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 150px; overflow-y: auto;">
+                  <div style="font-size: 0.775rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 0.2rem;">Daily Hours Summary</div>
+                  ${Object.keys(volunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded for this date.</div>' :
+                    Object.entries(volunteerHours).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.825rem;">
+                        <span style="font-weight: 600;">${name}</span>
+                        <span style="background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 4px; font-weight: 700;">${hrs.toFixed(1)} hrs</span>
+                      </div>
+                    `).join('')}
                 </div>
-              </div>
-            `;
-          });
 
-          html += `
-              </div>
-            </div>
-            <div class="section-group">
-              <div class="section-header">Recent Maintenance Logs</div>
-              <div class="card table-container">
-                <table>
-                  <thead><tr><th>Date</th><th>Asset</th><th>Work Performed</th><th>Volunteers</th></tr></thead>
-                  <tbody>
-          `;
-          const mLogs = [...db.maintenanceLogs].reverse().slice(0, 10);
-          if (mLogs.length === 0) {
-              html += `<tr><td colspan="4" style="text-align:center;">No maintenance logs found.</td></tr>`;
-          } else {
-              mLogs.forEach(log => {
-                  html += `<tr>
-                    <td>${log.DateStart}</td>
-                    <td style="font-weight:600;">${log.Asset}</td>
-                    <td>${log.WorkDone}</td>
-                    <td>${log.Volunteers}</td>
-                  </tr>`;
-              });
-          }
-          html += `</tbody></table></div></div>`;
-          return html;
-      }
-
-      function deleteFleetItem(idx) {
-          if(confirm("Are you sure you want to delete this asset?")) {
-             db.fleetItems.splice(idx, 1);
-             saveData();
-             updateUI();
-          }
-      }
-
-      let fleetEditIndex = null;
-      function openFleetModal(idx = null) {
-          fleetEditIndex = idx;
-          if (idx !== null) {
-              const item = db.fleetItems[idx];
-              document.getElementById('fleetName').value = item.name;
-              document.getElementById('fleetType').value = item.type;
-              document.getElementById('fleetGauge').value = item.gauge;
-              document.getElementById('fleetState').value = item.state;
-              document.getElementById('fleetModalTitle').innerText = 'Edit Fleet Item';
-          } else {
-              document.getElementById('fleetName').value = '';
-              document.getElementById('fleetType').value = 'Steam';
-              document.getElementById('fleetGauge').value = "7 1/4''";
-              document.getElementById('fleetState').value = 'In Service';
-              document.getElementById('fleetModalTitle').innerText = 'Add Fleet Item';
-          }
-          document.getElementById('fleetModal').style.display = 'flex';
-      }
-
-      function saveFleetItem(e) {
-          e.preventDefault();
-          const item = {
-              name: document.getElementById('fleetName').value,
-              type: document.getElementById('fleetType').value,
-              gauge: document.getElementById('fleetGauge').value,
-              state: document.getElementById('fleetState').value
-          };
-          if (fleetEditIndex !== null) {
-              db.fleetItems[fleetEditIndex] = item;
-          } else {
-              db.fleetItems.push(item);
-          }
-          saveData();
-          closeModal('fleetModal');
-          updateUI();
-      }
-
-      function openMaintLogModal() {
-          document.getElementById('maintWorkDone').value = '';
-          document.getElementById('maintStartDate').value = new Date().toISOString().split('T')[0];
-          document.getElementById('maintEndDate').value = new Date().toISOString().split('T')[0];
-          
-          let assetHtml = '<option value="">-- Select Locomotive / Asset --</option>';
-          db.fleetItems.forEach(f => {
-              assetHtml += `<option value="${f.name}">${f.name} (${f.gauge})</option>`;
-          });
-          document.getElementById('maintAssetSelect').innerHTML = assetHtml;
-
-          let volHtml = '';
-          db.volunteers.forEach(v => {
-              volHtml += `
-                <label class="checkbox-label">
-                  <input type="checkbox" value="${v.Name}" class="maint-vol-check">
-                  <span>${v.Name}</span>
-                </label>
-              `;
-          });
-          document.getElementById('maintVolunteersList').innerHTML = volHtml;
-          document.getElementById('maintUpdateState').value = '';
-          
-          document.getElementById('maintLogModal').style.display = 'flex';
-      }
-
-      function saveMaintenanceLogEntry(e) {
-          e.preventDefault();
-          const asset = document.getElementById('maintAssetSelect').value;
-          const work = document.getElementById('maintWorkDone').value;
-          const start = document.getElementById('maintStartDate').value;
-          const end = document.getElementById('maintEndDate').value;
-          
-          const vols = Array.from(document.querySelectorAll('.maint-vol-check:checked')).map(cb => cb.value).join(', ');
-          
-          db.maintenanceLogs.push({
-              Asset: asset,
-              WorkDone: work,
-              DateStart: start,
-              DateEnd: end,
-              Volunteers: vols
-          });
-          
-          const newState = document.getElementById('maintUpdateState').value;
-          if (newState) {
-              const f = db.fleetItems.find(i => i.name === asset);
-              if (f) f.state = newState;
-          }
-          
-          saveData();
-          closeModal('maintLogModal');
-          updateUI();
-      }
-
-      function renderVolunteers() {
-          const year = new Date().getFullYear().toString();
-          
-          let html = `
-            <div class="page-header">
-              <div class="page-title">
-                <h2>Volunteers</h2>
-                <p>Manage volunteer accounts and roles</p>
-              </div>
-              <div class="header-actions">
-                ${isAdmin(currentUser) ? `<button class="btn btn-primary" onclick="openVolunteerModal()"><i data-lucide="plus"></i> Add Volunteer</button>` : ''}
-              </div>
-            </div>
-            <div class="card table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Roles</th>
-                    <th>DBS Status</th>
-                    <th>YTD Hours</th>
-                    ${isAdmin(currentUser) ? `<th>Actions</th>` : ''}
-                  </tr>
-                </thead>
-                <tbody>
-          `;
-          
-          db.volunteers.forEach((v, idx) => {
-              let ytdHours = 0;
-              (db.clockLogs || []).forEach(log => {
-                 if (log.Name === v.Name && log.Date.startsWith(year)) {
-                     let start = new Date(`1970-01-01T${log.In}:00`);
-                     let end = new Date(`1970-01-01T${log.Out}:00`);
-                     if(end > start) ytdHours += (end - start) / (1000*60*60);
-                 }
-              });
-
-              html += `<tr>
-                <td style="font-weight:600;">${v.Name}</td>
-                <td><div style="max-width:250px; white-space:normal; font-size:0.75rem;">${v.Roles}</div></td>
-                <td><span class="result-badge ${v['DBS Status']==='Cleared'?'result-pass':(v['DBS Status']==='Pending'?'result-none':'result-fail')}" style="width:auto; height:auto; padding:2px 8px; border-radius:12px; font-size:0.65rem;">${v['DBS Status']}</span></td>
-                <td>${ytdHours.toFixed(1)} hrs</td>
-                ${isAdmin(currentUser) ? `<td><button class="btn btn-subtle btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i></button></td>` : ''}
-              </tr>`;
-          });
-
-          html += `</tbody></table></div>`;
-          return html;
-      }
-
-      let volunteerEditIndex = null;
-      function openVolunteerModal(idx = null) {
-          volunteerEditIndex = idx;
-          const allRoles = getAvailableRoles();
-          let userRoles = [];
-          
-          if (idx !== null) {
-              const v = db.volunteers[idx];
-              document.getElementById('volName').value = v.Name;
-              document.getElementById('volPin').value = v.Pin;
-              document.getElementById('volDbs').value = v['DBS Status'];
-              userRoles = (v.Roles || '').split(',').map(s=>s.trim());
-              document.getElementById('volunteerModalTitle').innerText = 'Edit Volunteer';
-          } else {
-              document.getElementById('volName').value = '';
-              document.getElementById('volPin').value = '';
-              document.getElementById('volDbs').value = 'Pending';
-              document.getElementById('volunteerModalTitle').innerText = 'Add Volunteer';
-          }
-
-          let rolesHtml = '';
-          allRoles.forEach(r => {
-              const checked = userRoles.includes(r) ? 'checked' : '';
-              rolesHtml += `
-                <label class="checkbox-label">
-                  <input type="checkbox" value="${r}" class="vol-role-cb" ${checked}>
-                  <span>${r}</span>
-                </label>
-              `;
-          });
-          document.getElementById('volRolesCheckboxes').innerHTML = rolesHtml;
-          document.getElementById('volunteerModal').style.display = 'flex';
-      }
-
-      function saveVolunteerForm(e) {
-          e.preventDefault();
-          const name = document.getElementById('volName').value;
-          const pin = document.getElementById('volPin').value;
-          const dbs = document.getElementById('volDbs').value;
-          const roles = Array.from(document.querySelectorAll('.vol-role-cb:checked')).map(cb => cb.value).join(', ');
-
-          const vData = { Name: name, Pin: pin, Roles: roles, 'DBS Status': dbs };
-          
-          if (volunteerEditIndex !== null) {
-              db.volunteers[volunteerEditIndex] = vData;
-          } else {
-              db.volunteers.push(vData);
-          }
-          saveData();
-          closeModal('volunteerModal');
-          updateUI();
-      }
-
-      function renderCompetency() {
-          const roles = getAvailableRoles();
-          
-          let html = `
-            <div class="page-header">
-              <div class="page-title">
-                <h2>Qualifications Matrix</h2>
-                <p>Overview of volunteer competencies and roles</p>
-              </div>
-              <div class="header-actions">
-                ${isAdmin(currentUser) ? `
-                  <button class="btn btn-secondary" onclick="document.getElementById('addRoleModal').style.display='flex'"><i data-lucide="plus"></i> New Role</button>
-                  <button class="btn btn-primary" onclick="openRoleAccessModal()"><i data-lucide="shield"></i> Manage Access</button>
-                ` : ''}
-              </div>
-            </div>
-            <div class="card table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Volunteer</th>
-                    ${roles.map(r => `<th style="text-align:center;">${r}</th>`).join('')}
-                  </tr>
-                </thead>
-                <tbody>
-          `;
-          
-          db.volunteers.forEach(v => {
-              const vRoles = (v.Roles || '').split(',').map(s=>s.trim());
-              html += `<tr><td style="font-weight:600;">${v.Name}</td>`;
-              roles.forEach(r => {
-                  if (vRoles.includes(r)) {
-                      html += `<td style="text-align:center; color:#16a34a;"><i data-lucide="check-circle-2"></i></td>`;
-                  } else {
-                      html += `<td style="text-align:center; color:var(--border);">-</td>`;
-                  }
-              });
-              html += `</tr>`;
-          });
-
-          html += `</tbody></table></div>`;
-          return html;
-      }
-
-      function openRoleAccessModal() {
-          const roles = getAvailableRoles();
-          const select = document.getElementById('roleAccessSelect');
-          select.innerHTML = roles.map(r => `<option value="${r}">${r}</option>`).join('');
-          loadRolePermissionsForSelected();
-          document.getElementById('roleAccessModal').style.display = 'flex';
-      }
-
-      function loadRolePermissionsForSelected() {
-          const role = document.getElementById('roleAccessSelect').value;
-          const perms = (db.rolePermissions && db.rolePermissions[role]) ? db.rolePermissions[role] : [];
-          
-          let html = '';
-          ALL_PAGES.forEach(p => {
-              const checked = perms.includes(p.key) ? 'checked' : '';
-              html += `
-                <label class="checkbox-label">
-                  <input type="checkbox" value="${p.key}" class="role-perm-cb" ${checked}>
-                  <span>${p.label} <span style="font-size:0.65rem; color:var(--text-muted);">(${p.section})</span></span>
-                </label>
-              `;
-          });
-          document.getElementById('permissionsCheckboxesList').innerHTML = html;
-      }
-
-      function saveRolePermissions(e) {
-          e.preventDefault();
-          const role = document.getElementById('roleAccessSelect').value;
-          const selectedPages = Array.from(document.querySelectorAll('.role-perm-cb:checked')).map(cb => cb.value);
-          
-          if (!db.rolePermissions) db.rolePermissions = {};
-          db.rolePermissions[role] = selectedPages;
-          
-          saveData();
-          closeModal('roleAccessModal');
-          showMsg("Permissions Saved", `Access permissions for ${role} have been updated.`);
-          updateUI(); // re-render sidebar in case current user's permissions changed
-      }
-
-      function renderActions() {
-          let html = `
-            <div class="page-header">
-              <div class="page-title">
-                <h2>Actions & Tasks</h2>
-                <p>Site management and operation tasks</p>
-              </div>
-              <div class="header-actions">
-                <button class="btn btn-primary" onclick="openActionModal()"><i data-lucide="plus"></i> Add Action</button>
-              </div>
-            </div>
-            <div class="card table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Task</th>
-                    <th>Asset</th>
-                    <th>Due</th>
-                    <th>Assigned</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-          `;
-          
-          if (db.actions.length === 0) {
-              html += `<tr><td colspan="7" style="text-align:center;">No pending actions.</td></tr>`;
-          }
-
-          db.actions.forEach((act, idx) => {
-              let prioColor = act.Priority === 'High' ? '#dc2626' : (act.Priority === 'Medium' ? '#ca8a04' : 'var(--text-muted)');
-              html += `<tr>
-                <td style="font-weight:600;">${act.Title}<br><span style="font-size:0.7rem; font-weight:normal; color:var(--text-muted);">${act.Desc}</span></td>
-                <td>${act.Asset || '-'}</td>
-                <td>${act.DueDate}</td>
-                <td>${act.Assigned || '-'}</td>
-                <td style="color:${prioColor}; font-weight:600;">${act.Priority}</td>
-                <td><span class="result-badge ${act.Status === 'Completed' ? 'result-pass' : 'result-none'}" style="width:auto; height:auto; padding:2px 8px; border-radius:12px; font-size:0.65rem;">${act.Status || 'Pending'}</span></td>
-                <td>
-                  <div style="display:flex; gap:0.3rem;">
-                    ${act.Status !== 'Completed' ? `<button class="btn btn-primary btn-sm" onclick="completeAction(${idx})"><i data-lucide="check"></i></button>` : ''}
-                    <button class="btn btn-secondary btn-sm" onclick="openActionModal(${idx})"><i data-lucide="edit"></i></button>
-                    ${isAdmin(currentUser) ? `<button class="btn btn-danger btn-sm" onclick="deleteAction(${idx})"><i data-lucide="trash-2"></i></button>` : ''}
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+                  <div style="font-size: 0.775rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Detailed Shift Logs</div>
+                  <div style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem;">
+                    ${dayLogs.length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No individual shift entries for this date.</div>' :
+                      dayLogs.map(l => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.4rem 0.6rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.775rem;">
+                          <div>
+                            <div style="font-weight: 600;">${l.name}</div>
+                            <div style="color: var(--text-muted);">${l.clockIn} → ${l.clockOut}</div>
+                          </div>
+                          ${isAdmin ? `
+                            <div style="display:flex; gap:0.2rem;">
+                              <button class="btn btn-secondary btn-sm" style="padding: 2px 5px;" onclick="openEditClockLogModal(${l.id})"><i data-lucide="edit"></i></button>
+                              <button class="btn btn-danger btn-sm" style="padding: 2px 5px;" onclick="deleteClockLog(${l.id})"><i data-lucide="trash-2"></i></button>
+                            </div>
+                          ` : ''}
+                        </div>
+                      `).join('')}
                   </div>
-                </td>
-              </tr>`;
-          });
-          html += `</tbody></table></div>`;
-          return html;
-      }
+                </div>
+              </div>
 
-      let actionEditIndex = null;
-      function openActionModal(idx = null) {
-          actionEditIndex = idx;
-          let assetHtml = '<option value="">-- None / General Site --</option>';
-          db.fleetItems.forEach(f => { assetHtml += `<option value="${f.name}">${f.name}</option>`; });
-          document.getElementById('act_asset').innerHTML = assetHtml;
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;">Monthly Totals (${monthNames[month]} ${year})</h3>
+                <div style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem;">
+                  ${Object.keys(monthlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded this month.</div>' :
+                    Object.entries(monthlyVolunteerHours).sort((a,b) => b[1]-a[1]).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                        <span>${name}</span>
+                        <strong style="color: var(--primary);">${hrs.toFixed(1)} hrs</strong>
+                      </div>
+                    `).join('')}
+                </div>
+              </div>
 
-          if (idx !== null) {
-              const act = db.actions[idx];
-              document.getElementById('act_title').value = act.Title;
-              document.getElementById('act_desc').value = act.Desc || '';
-              document.getElementById('act_asset').value = act.Asset || '';
-              document.getElementById('act_assigned').value = act.Assigned || '';
-              document.getElementById('act_duedate').value = act.DueDate;
-              document.getElementById('act_recurrence').value = act.Recurrence || 'None';
-              document.getElementById('act_priority').value = act.Priority || 'Normal';
-              document.getElementById('actionModalTitle').innerText = 'Edit Action';
-          } else {
-              document.getElementById('actionForm').reset();
-              document.getElementById('actionModalTitle').innerText = 'Add Action';
-          }
-          document.getElementById('actionModal').style.display = 'flex';
-      }
-
-      function saveActionItem(e) {
-          e.preventDefault();
-          const act = {
-              Title: document.getElementById('act_title').value,
-              Desc: document.getElementById('act_desc').value,
-              Asset: document.getElementById('act_asset').value,
-              Assigned: document.getElementById('act_assigned').value,
-              DueDate: document.getElementById('act_duedate').value,
-              Recurrence: document.getElementById('act_recurrence').value,
-              Priority: document.getElementById('act_priority').value,
-              Status: 'Pending'
-          };
-
-          if (actionEditIndex !== null) {
-              act.Status = db.actions[actionEditIndex].Status; // retain status
-              db.actions[actionEditIndex] = act;
-          } else {
-              db.actions.push(act);
-          }
-          saveData();
-          closeModal('actionModal');
-          updateUI();
-      }
-
-      function completeAction(idx) {
-          db.actions[idx].Status = 'Completed';
-          saveData();
-          updateUI();
-      }
-
-      function deleteAction(idx) {
-          db.actions.splice(idx, 1);
-          saveData();
-          updateUI();
-      }
-
-      function renderArchives() {
-          let html = `
-            <div class="page-header">
-              <div class="page-title">
-                <h2>Historical Archives</h2>
-                <p>Daily running logs, documents, and historical data</p>
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;"><i data-lucide="calendar" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Yearly Totals (${year})</h3>
+                <div style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem;">
+                  ${Object.keys(yearlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded this year.</div>' :
+                    Object.entries(yearlyVolunteerHours).sort((a,b) => b[1]-a[1]).map(([name, hrs]) => `
+                      <div style="display: flex; justify-content: space-between; font-size: 0.8rem; padding: 3px 0; border-bottom: 1px solid var(--border-subtle);">
+                        <span style="font-weight:500;">${name}</span>
+                        <strong style="color: var(--accent);">${hrs.toFixed(1)} hrs</strong>
+                      </div>
+                    `).join('')}
+                  <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.3rem; text-align:right;">
+                    Total: <strong>${Object.values(yearlyVolunteerHours).reduce((s,h)=>s+h,0).toFixed(1)} hrs</strong> across all volunteers
+                  </div>
+                </div>
               </div>
             </div>
-            
-            <div class="card table-container">
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function renderClockLogsPage() {
+        const content = document.getElementById('content');
+        const logs = (db.clockLogs || []).slice().sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Clock Log Records</h2>
+              <p>All recorded shift hours. Updating hours here automatically syncs historical archives for that date.</p>
+            </div>
+            ${isAdmin ? `
+              <button class="btn btn-primary btn-sm" onclick="openEditClockLogModal(null)">
+                <i data-lucide="plus"></i> Add Clock Log Entry
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="card">
+            <div class="table-container">
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Track Walk</th>
-                    <th>Test Run</th>
-                    <th>Locos Used</th>
-                    <th>Actions</th>
+                    <th>Volunteer Name</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Status</th>
+                    ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
                   </tr>
                 </thead>
                 <tbody>
+                  ${logs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No clock log records found.</td></tr>' :
+                    logs.map(l => `
+                      <tr>
+                        <td><strong>${formatDisplayDate(l.date)}</strong></td>
+                        <td>${l.name}</td>
+                        <td>${l.clockIn}</td>
+                        <td>${l.clockOut}</td>
+                        <td><span style="font-weight:600; font-size:0.75rem; color:${l.status === 'Clocked In' ? '#166534' : '#475569'};">${l.status}</span></td>
+                        ${isAdmin ? `
+                          <td style="text-align:right;">
+                            <button class="btn btn-secondary btn-sm" onclick="openEditClockLogModal(${l.id})"><i data-lucide="edit"></i> Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteClockLog(${l.id})"><i data-lucide="trash-2"></i> Delete</button>
+                          </td>
+                        ` : ''}
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function renderVolunteers() {
+        const content = document.getElementById('content');
+        const volunteers = db.volunteers || [];
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Volunteer Directory & Roles</h2>
+              <p>Manage volunteer profiles, PIN codes, DBS statuses, and system permissions.</p>
+            </div>
+            ${isAdmin ? `
+              <button class="btn btn-primary btn-sm" onclick="openVolunteerModal(null)">
+                <i data-lucide="user-plus"></i> Add New Volunteer
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Volunteer Name</th>
+                    <th>PIN Code</th>
+                    <th>Roles / Qualifications</th>
+                    <th>DBS Status</th>
+                    ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${volunteers.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem;">No volunteers registered.</td></tr>' :
+                    volunteers.map((v, idx) => {
+                      const name = getVolunteerName(v);
+                      return `
+                        <tr>
+                          <td><strong>${name}</strong></td>
+                          <td><code>${v.Pin || v.pin || '1234'}</code></td>
+                          <td>${v.Roles || v.roles || 'Standard'}</td>
+                          <td><span style="background:${v['DBS Status'] === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${v['DBS Status'] === 'Cleared' ? '#166534' : '#92400e'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${v['DBS Status'] || 'Cleared'}</span></td>
+                          ${isAdmin ? `
+                            <td style="text-align:right;">
+                              <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
+                              <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})"><i data-lucide="trash-2"></i> Delete</button>
+                            </td>
+                          ` : ''}
+                        </tr>
+                      `;
+                    }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openVolunteerModal(index = null) {
+        editingVolunteerIndex = index;
+        const vols = db.volunteers || [];
+        const existing = index !== null ? vols[index] : null;
+
+        document.getElementById('volunteerModalTitle').innerText = existing ? 'Edit Volunteer' : 'Add New Volunteer';
+        document.getElementById('volEditIndex').value = index !== null ? index : '';
+        document.getElementById('volName').value = existing ? getVolunteerName(existing) : '';
+        document.getElementById('volPin').value = existing ? (existing.Pin || existing.pin || '1234') : '1234';
+        document.getElementById('volDbs').value = existing ? (existing['DBS Status'] || 'Cleared') : 'Cleared';
+
+        const rolesListContainer = document.getElementById('volRolesCheckboxes');
+        const availableRoles = getAvailableRoles();
+        const existingRolesStr = existing ? (existing.Roles || existing.roles || '') : '';
+
+        rolesListContainer.innerHTML = availableRoles.map(role => {
+          const checked = existingRolesStr.toLowerCase().includes(role.toLowerCase());
+          return `
+            <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; font-weight:normal; cursor:pointer; line-height:1.3; padding:2px 0;">
+              <input type="checkbox" value="${role}" class="vol-role-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${role}
+            </label>
           `;
-          
-          // Generate a list of dates that have activity (clock logs, maintenance, etc.) or exist in historicalArchive
-          let allDates = new Set();
-          (db.historicalArchive || []).forEach(a => allDates.add(a.date));
-          (db.clockLogs || []).forEach(a => allDates.add(a.Date));
-          (db.maintenanceLogs || []).forEach(a => allDates.add(a.DateStart));
-          
-          let sortedDates = Array.from(allDates).sort((a,b) => new Date(b) - new Date(a));
-          
-          sortedDates.forEach(dateStr => {
-              const arch = (db.historicalArchive || []).find(a => a.date === dateStr) || {};
-              const locos = arch.locosUsed || [];
-              const tw = arch.twResult || '-';
-              const tr = arch.trResult || '-';
-              
-              html += `<tr>
-                <td style="font-weight:600;">${dateStr}</td>
-                <td><span class="result-badge ${tw==='Pass'?'result-pass':(tw==='Fail'?'result-fail':'result-none')}" style="width:auto; height:auto; padding:2px 8px; border-radius:12px; font-size:0.65rem;">${tw}</span></td>
-                <td><span class="result-badge ${tr==='Pass'?'result-pass':(tr==='Fail'?'result-fail':'result-none')}" style="width:auto; height:auto; padding:2px 8px; border-radius:12px; font-size:0.65rem;">${tr}</span></td>
-                <td>${locos.map(l => `<span class="train-tag">${l}</span>`).join('')}</td>
-                <td>
-                  <button class="btn btn-secondary btn-sm" onclick="openEditArchiveModal('${dateStr}')"><i data-lucide="edit"></i> Edit Archive</button>
-                </td>
-              </tr>`;
+        }).join('');
+
+        document.getElementById('volunteerModal').style.display = 'flex';
+      }
+
+      function saveVolunteerForm(e) {
+        e.preventDefault();
+        const indexVal = document.getElementById('volEditIndex').value;
+        const name = document.getElementById('volName').value.trim();
+        const pin = document.getElementById('volPin').value.trim();
+        const dbs = document.getElementById('volDbs').value;
+
+        const selectedRoles = Array.from(document.querySelectorAll('.vol-role-cb:checked')).map(cb => cb.value);
+        const rolesStr = selectedRoles.join(', ') || 'Standard';
+
+        if (!db.volunteers) db.volunteers = [];
+
+        if (indexVal !== '' && db.volunteers[indexVal]) {
+          db.volunteers[indexVal].Name = name;
+          db.volunteers[indexVal].Pin = pin;
+          db.volunteers[indexVal].Roles = rolesStr;
+          db.volunteers[indexVal]['DBS Status'] = dbs;
+        } else {
+          db.volunteers.push({
+            Name: name,
+            Pin: pin,
+            Roles: rolesStr,
+            'DBS Status': dbs
           });
+        }
 
-          html += `</tbody></table></div>`;
-          return html;
+        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        closeModal('volunteerModal');
+        renderVolunteers();
       }
 
-      function openEditArchiveModal(dateStr) {
-          document.getElementById('editArchiveDateTxt').innerText = dateStr;
-          document.getElementById('editArchiveDateVal').value = dateStr;
-          
-          let arch = (db.historicalArchive || []).find(a => a.date === dateStr);
-          if (!arch) {
-              // Create blank structure
-              arch = {
-                  date: dateStr, twResult: 'Not Completed', twInspector: '', twNotes: '',
-                  trResult: 'Not Completed', trInspector: '', locosUsed: [],
-                  shifts: [], incidents: [], maintenance: []
-              };
-          }
+      function deleteVolunteer(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete volunteers.');
+          return;
+        }
+        const vol = (db.volunteers || [])[index];
+        if (!vol) return;
+        const volName = getVolunteerName(vol);
+        
+        if (!confirm(`Are you sure you want to delete volunteer "${volName}"? This action cannot be undone.`)) return;
 
-          // Populate selects
-          let volOpts = '<option value="">-- Select --</option>' + db.volunteers.map(v => `<option value="${v.Name}">${v.Name}</option>`).join('');
-          document.getElementById('editArch_TW_Inspector').innerHTML = volOpts;
-          document.getElementById('editArch_TR_Inspector').innerHTML = volOpts;
-          
-          document.getElementById('editArch_TW_Result').value = arch.twResult || 'Not Completed';
-          document.getElementById('editArch_TW_Inspector').value = arch.twInspector || '';
-          document.getElementById('editArch_TW_Notes').value = arch.twNotes || '';
-          toggleEditArchTWNotes(arch.twResult);
-          
-          document.getElementById('editArch_TR_Result').value = arch.trResult || 'Not Completed';
-          document.getElementById('editArch_TR_Inspector').value = arch.trInspector || '';
+        db.volunteers.splice(index, 1);
+        if (db.userPermissions && db.userPermissions[volName]) {
+          delete db.userPermissions[volName];
+          database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions);
+        }
 
-          // Popoulate Locos
-          let locosHtml = '';
-          db.fleetItems.forEach(item => {
-              const checked = (arch.locosUsed || []).includes(item.name) ? 'checked' : '';
-              locosHtml += `
-                <label class="checkbox-label">
-                  <input type="checkbox" value="${item.name}" class="arch-loco-cb" ${checked}>
-                  <span>${item.name}</span>
-                </label>
-              `;
-          });
-          document.getElementById('editArch_LocosContainer').innerHTML = locosHtml;
-
-          // Populate Shifts
-          document.getElementById('editArch_ShiftsContainer').innerHTML = '';
-          (arch.shifts || []).forEach(s => addArchiveShiftRow(s));
-
-          // Populate Incidents
-          document.getElementById('editArch_IncidentsContainer').innerHTML = '';
-          (arch.incidents || []).forEach(i => addArchiveIncidentRow(i));
-
-          // Populate Maintenance
-          document.getElementById('editArch_MaintContainer').innerHTML = '';
-          (arch.maintenance || []).forEach(m => addArchiveMaintRow(m));
-
-          document.getElementById('editArchiveModal').style.display = 'flex';
-          lucide.createIcons();
+        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        renderVolunteers();
       }
 
-      function toggleEditArchTWNotes(val) {
-          document.getElementById('editArch_TW_NotesGroup').style.display = val === 'Fail' ? 'block' : 'none';
-      }
+      function renderMaintenancePage() {
+        const content = document.getElementById('content');
+        const fleet = db.fleetItems || [];
+        const maintLogs = (db.maintenanceLogs || []).slice().reverse();
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const canMaint = hasMaintenancePermission();
 
-      function addArchiveShiftRow(data = {name:'', in:'', out:''}) {
-          let volOpts = '<option value="">-- Select --</option>' + db.volunteers.map(v => `<option value="${v.Name}" ${v.Name===data.name?'selected':''}>${v.Name}</option>`).join('');
-          let html = `
-            <div class="arch-shift-row" style="display:flex; gap:0.5rem; align-items:center;">
-              <select class="shift-name form-group" style="flex:2; margin:0;">${volOpts}</select>
-              <input type="time" class="shift-in form-group" value="${data.in}" style="flex:1; margin:0;">
-              <input type="time" class="shift-out form-group" value="${data.out}" style="flex:1; margin:0;">
-              <button type="button" class="btn btn-subtle btn-sm" onclick="this.parentElement.remove()"><i data-lucide="x"></i></button>
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Maintenance & Fleet Overview</h2>
+              <p>Fleet asset state, locomotives, overhaul records, and maintenance logs.</p>
             </div>
-          `;
-          document.getElementById('editArch_ShiftsContainer').insertAdjacentHTML('beforeend', html);
-          lucide.createIcons();
-      }
-
-      function addArchiveIncidentRow(data = {asset:'', desc:''}) {
-          let html = `
-            <div class="arch-inc-row" style="display:flex; gap:0.5rem; align-items:center;">
-              <input type="text" class="inc-asset form-group" placeholder="Asset" value="${data.asset}" style="flex:1; margin:0;">
-              <input type="text" class="inc-desc form-group" placeholder="Defect description" value="${data.desc}" style="flex:2; margin:0;">
-              <button type="button" class="btn btn-subtle btn-sm" onclick="this.parentElement.remove()"><i data-lucide="x"></i></button>
+            <div style="display:flex; gap:0.5rem;">
+              ${canMaint ? `
+                <button class="btn btn-secondary btn-sm" onclick="openFleetModal(null)">
+                  <i data-lucide="plus"></i> Add Fleet Item
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="openMaintLogModal('', null)">
+                  <i data-lucide="wrench"></i> Log Maintenance
+                </button>
+              ` : ''}
             </div>
-          `;
-          document.getElementById('editArch_IncidentsContainer').insertAdjacentHTML('beforeend', html);
-          lucide.createIcons();
-      }
+          </div>
 
-      function addArchiveMaintRow(data = {asset:'', work:''}) {
-          let html = `
-            <div class="arch-maint-row" style="display:flex; gap:0.5rem; align-items:center;">
-              <input type="text" class="maint-asset form-group" placeholder="Asset" value="${data.asset}" style="flex:1; margin:0;">
-              <input type="text" class="maint-work form-group" placeholder="Work completed" value="${data.work}" style="flex:2; margin:0;">
-              <button type="button" class="btn btn-subtle btn-sm" onclick="this.parentElement.remove()"><i data-lucide="x"></i></button>
+          <div class="section-group">
+            <div class="section-header">Fleet & Locomotives Status</div>
+            ${fleet.length === 0 ? '<div class="card" style="padding:1.5rem; text-align:center; color:var(--text-muted);">No fleet items added.</div>' :
+              `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:0.85rem;">
+                ${fleet.map((item, idx) => {
+                  const stateColor = item.state === 'In Service' ? '#dcfce7' : (item.state === 'Overhaul' ? '#fef3c7' : '#fee2e2');
+                  const stateText = item.state === 'In Service' ? '#166534' : (item.state === 'Overhaul' ? '#92400e' : '#991b1b');
+                  const typeIcons = { Steam: '🚂', Diesel: '🚃', Electric: '⚡', Coach: '🚋', Other: '🚞' };
+                  const icon = typeIcons[item.type] || '🚞';
+                  return `
+                    <div class="card" style="padding:1rem; display:flex; flex-direction:column; gap:0.6rem; border-left:4px solid ${item.state === 'In Service' ? '#16a34a' : (item.state === 'Overhaul' ? '#ca8a04' : '#dc2626')};">
+                      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                          <div style="font-size:1.4rem; margin-bottom:0.2rem;">${icon}</div>
+                          <h3 style="font-size:0.95rem; font-weight:700; color:var(--text); margin:0;">${item.name}</h3>
+                          <div style="font-size:0.75rem; color:var(--text-muted);">${item.type} · ${item.gauge}</div>
+                        </div>
+                        <span style="background:${stateColor}; color:${stateText}; padding:3px 8px; border-radius:4px; font-weight:700; font-size:0.7rem; white-space:nowrap;">${item.state}</span>
+                      </div>
+                      <div style="display:flex; flex-wrap:wrap; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem;">
+                        ${canMaint ? `
+                          <button class="btn btn-secondary btn-sm" onclick="openFleetModal(${idx})" style="flex:1; min-width:80px;"><i data-lucide="edit"></i> Edit</button>
+                          <button class="btn btn-primary btn-sm" onclick="openMaintLogModal('${item.name}', null)" style="flex:1; min-width:80px;"><i data-lucide="wrench"></i> Log Work</button>
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteFleetItem(${idx})" style="flex:0;"><i data-lucide="trash-2"></i></button>` : ''}
+                        ` : '<span style="color:var(--text-muted); font-size:0.75rem;">Read Only</span>'}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>`
+            }
+          </div>
+
+          <div class="section-group">
+            <div class="section-header">Maintenance Log Records</div>
+            <div class="card">
+              <div class="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Dates</th>
+                      <th>Asset</th>
+                      <th>Work Done</th>
+                      <th>Performed By</th>
+                      <th>Updated State</th>
+                      <th>Photo</th>
+                      ${canMaint ? '<th style="text-align:right;">Actions</th>' : ''}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${maintLogs.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:2rem;">No maintenance logs recorded.</td></tr>' :
+                      maintLogs.map((m, originalIdx) => {
+                        const actualIndex = db.maintenanceLogs.length - 1 - originalIdx;
+                        const perfBy = Array.isArray(m.performedBy) ? m.performedBy.join(', ') : (m.performedBy || 'Unknown');
+                        return `
+                          <tr>
+                            <td><strong>${formatDisplayDate(m.startDate || m.date)}</strong> → ${formatDisplayDate(m.endDate || m.startDate || m.date)}</td>
+                            <td><strong>${m.assetName || m.asset}</strong></td>
+                            <td>${m.workDone || m.description || '-'}</td>
+                            <td>${perfBy}</td>
+                            <td>${m.updateState || m.updatedState || 'Unchanged'}</td>
+                            <td>${m.photo ? `<a href="${m.photo}" target="_blank" style="color:var(--primary); font-weight:bold;">View Photo</a>` : '-'}</td>
+                            ${canMaint ? `
+                              <td style="text-align:right;">
+                                <button class="btn btn-secondary btn-sm" onclick="openMaintLogModal('', ${actualIndex})"><i data-lucide="edit"></i> Edit</button>
+                                ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteMaintenanceLog(${actualIndex})"><i data-lucide="trash-2"></i> Delete</button>` : ''}
+                              </td>
+                            ` : ''}
+                          </tr>
+                        `;
+                      }).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          `;
-          document.getElementById('editArch_MaintContainer').insertAdjacentHTML('beforeend', html);
-          lucide.createIcons();
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveArchiveEdit(e) {
-          e.preventDefault();
-          const dateStr = document.getElementById('editArchiveDateVal').value;
-          
-          let arch = {
-              date: dateStr,
-              twResult: document.getElementById('editArch_TW_Result').value,
-              twInspector: document.getElementById('editArch_TW_Inspector').value,
-              twNotes: document.getElementById('editArch_TW_Notes').value,
-              trResult: document.getElementById('editArch_TR_Result').value,
-              trInspector: document.getElementById('editArch_TR_Inspector').value,
-              locosUsed: Array.from(document.querySelectorAll('.arch-loco-cb:checked')).map(cb => cb.value),
-              shifts: [], incidents: [], maintenance: []
+      function openFleetModal(index = null) {
+        editingFleetIndex = index;
+        const fleet = db.fleetItems || [];
+        const existing = index !== null ? fleet[index] : null;
+
+        document.getElementById('fleetModalTitle').innerText = existing ? 'Edit Fleet Item / Locomotive' : 'Add Fleet Item';
+        document.getElementById('fleetEditIndex').value = index !== null ? index : '';
+        document.getElementById('fleetName').value = existing ? existing.name : '';
+        document.getElementById('fleetType').value = existing ? existing.type : 'Steam';
+        document.getElementById('fleetGauge').value = existing ? existing.gauge : "7 1/4''";
+        document.getElementById('fleetState').value = existing ? existing.state : 'In Service';
+
+        document.getElementById('fleetModal').style.display = 'flex';
+      }
+
+      function saveFleetItem(e) {
+        e.preventDefault();
+        const indexVal = document.getElementById('fleetEditIndex').value;
+        const name = document.getElementById('fleetName').value.trim();
+        const type = document.getElementById('fleetType').value;
+        const gauge = document.getElementById('fleetGauge').value;
+        const state = document.getElementById('fleetState').value;
+
+        if (!db.fleetItems) db.fleetItems = [];
+
+        if (indexVal !== '' && db.fleetItems[indexVal]) {
+          db.fleetItems[indexVal] = { name, type, gauge, state };
+        } else {
+          db.fleetItems.push({ name, type, gauge, state });
+        }
+
+        database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+        closeModal('fleetModal');
+        renderMaintenancePage();
+      }
+
+      function deleteFleetItem(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete fleet items.');
+          return;
+        }
+        const item = (db.fleetItems || [])[index];
+        if (!item) return;
+        if (!confirm(`Are you sure you want to delete "${item.name}" from the fleet? This cannot be undone.`)) return;
+        db.fleetItems.splice(index, 1);
+        database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+        renderMaintenancePage();
+      }
+
+      function openMaintLogModal(assetName = '', logIndex = null) {
+        if (!hasMaintenancePermission()) {
+          alert('Access Restricted: Only volunteers with the "Maintenance" role or permission can log or edit maintenance records.');
+          return;
+        }
+
+        editingMaintLogIndex = logIndex;
+        const logs = db.maintenanceLogs || [];
+        const existingLog = logIndex !== null ? logs[logIndex] : null;
+
+        document.getElementById('maintLogModalTitle').innerText = existingLog ? 'Edit Maintenance Log Entry' : 'Log Maintenance';
+        document.getElementById('maintLogEditIndex').value = logIndex !== null ? logIndex : '';
+
+        // Populate asset select
+        const assetSelect = document.getElementById('maintAssetSelect');
+        const fleet = db.fleetItems || [];
+        assetSelect.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
+          fleet.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+          '<option value="General Trackwork">General Trackwork</option>' +
+          '<option value="Carriage Fleet">Carriage Fleet</option>' +
+          '<option value="Infrastructure / Buildings">Infrastructure / Buildings</option>';
+
+        const targetAsset = existingLog ? (existingLog.assetName || existingLog.asset) : assetName;
+        if (targetAsset) assetSelect.value = targetAsset;
+
+        document.getElementById('maintWorkDone').value = existingLog ? (existingLog.workDone || existingLog.description || '') : '';
+        document.getElementById('maintStartDate').value = existingLog ? toISODate(existingLog.startDate || existingLog.date) : getTodayString();
+        document.getElementById('maintEndDate').value = existingLog ? toISODate(existingLog.endDate || existingLog.startDate || existingLog.date) : getTodayString();
+        document.getElementById('maintUpdateState').value = existingLog ? (existingLog.updateState || existingLog.updatedState || '') : '';
+        document.getElementById('maintNotes').value = existingLog ? (existingLog.notes || '') : '';
+
+        tempMaintPhotoBase64 = existingLog ? (existingLog.photo || '') : '';
+        const previewImg = document.getElementById('maintPhotoPreview');
+        if (tempMaintPhotoBase64) {
+          previewImg.src = tempMaintPhotoBase64;
+          previewImg.style.display = 'block';
+        } else {
+          previewImg.style.display = 'none';
+        }
+
+        // Render volunteers checkboxes
+        const volsList = document.getElementById('maintVolunteersList');
+        const volunteers = db.volunteers || [];
+        const existingPerfBy = existingLog ? (Array.isArray(existingLog.performedBy) ? existingLog.performedBy : [existingLog.performedBy]) : [(currentUser ? currentUser.name : '')];
+
+        volsList.innerHTML = volunteers.map(v => {
+          const vName = getVolunteerName(v);
+          const checked = existingPerfBy.includes(vName);
+          return `
+            <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer; line-height:1.3; padding:2px 0;">
+              <input type="checkbox" value="${vName}" class="maint-vol-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${vName}
+            </label>
+          `;
+        }).join('');
+
+        document.getElementById('maintLogModal').style.display = 'flex';
+      }
+
+      function previewMaintPhoto(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            tempMaintPhotoBase64 = evt.target.result;
+            const img = document.getElementById('maintPhotoPreview');
+            img.src = tempMaintPhotoBase64;
+            img.style.display = 'block';
           };
+          reader.readAsDataURL(file);
+        }
+      }
 
-          document.querySelectorAll('.arch-shift-row').forEach(row => {
-              arch.shifts.push({
-                  name: row.querySelector('.shift-name').value,
-                  in: row.querySelector('.shift-in').value,
-                  out: row.querySelector('.shift-out').value
-              });
-          });
+      function saveMaintenanceLogEntry(e) {
+        e.preventDefault();
+        const editIdxVal = document.getElementById('maintLogEditIndex').value;
+        const assetName = document.getElementById('maintAssetSelect').value;
+        const workDone = document.getElementById('maintWorkDone').value;
+        const startDate = document.getElementById('maintStartDate').value;
+        const endDate = document.getElementById('maintEndDate').value;
+        const updateState = document.getElementById('maintUpdateState').value;
+        const notes = document.getElementById('maintNotes').value;
 
-          document.querySelectorAll('.arch-inc-row').forEach(row => {
-              arch.incidents.push({
-                  asset: row.querySelector('.inc-asset').value,
-                  desc: row.querySelector('.inc-desc').value
-              });
-          });
+        const selectedVols = Array.from(document.querySelectorAll('.maint-vol-cb:checked')).map(cb => cb.value);
 
-          document.querySelectorAll('.arch-maint-row').forEach(row => {
-              arch.maintenance.push({
-                  asset: row.querySelector('.maint-asset').value,
-                  work: row.querySelector('.maint-work').value
-              });
-          });
+        if (!db.maintenanceLogs) db.maintenanceLogs = [];
 
-          if (!db.historicalArchive) db.historicalArchive = [];
-          const idx = db.historicalArchive.findIndex(a => a.date === dateStr);
-          if (idx > -1) {
-              db.historicalArchive[idx] = arch;
-          } else {
-              db.historicalArchive.push(arch);
+        const logData = {
+          id: editIdxVal !== '' ? db.maintenanceLogs[editIdxVal].id : Date.now(),
+          assetName: assetName,
+          workDone: workDone,
+          startDate: startDate,
+          endDate: endDate,
+          performedBy: selectedVols.length > 0 ? selectedVols : [currentUser ? currentUser.name : 'Unknown'],
+          updateState: updateState,
+          photo: tempMaintPhotoBase64,
+          notes: notes,
+          recordedBy: currentUser ? currentUser.name : 'User'
+        };
+
+        if (editIdxVal !== '' && db.maintenanceLogs[editIdxVal]) {
+          db.maintenanceLogs[editIdxVal] = logData;
+        } else {
+          db.maintenanceLogs.push(logData);
+        }
+
+        // If state changed, update fleet item status
+        if (updateState && db.fleetItems) {
+          const fleetItem = db.fleetItems.find(f => f.name === assetName);
+          if (fleetItem) {
+            fleetItem.state = updateState;
+            database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
           }
-          
-          saveData();
-          closeModal('editArchiveModal');
-          updateUI();
+        }
+
+        database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+        syncArchiveForDate(startDate);
+        if (endDate !== startDate) syncArchiveForDate(endDate);
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+
+        closeModal('maintLogModal');
+        renderMaintenancePage();
+      }
+
+      function deleteMaintenanceLog(index) {
+        if (!hasMaintenancePermission()) {
+          alert('Only Maintenance personnel or System Admin can delete maintenance logs.');
+          return;
+        }
+        if (!confirm('Are you sure you want to delete this maintenance record?')) return;
+
+        const targetLog = db.maintenanceLogs[index];
+        const logDate = targetLog ? targetLog.startDate : null;
+
+        db.maintenanceLogs.splice(index, 1);
+        database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+
+        if (logDate) {
+          syncArchiveForDate(logDate);
+          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        }
+
+        renderMaintenancePage();
+      }
+
+      function renderArchives() {
+        const content = document.getElementById('content');
+        const archives = db.historicalArchive || [];
+        const uploads = db.archiveUploads || [];
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        let archiveBody = '';
+        if (archiveSubView === 'historical') {
+          archiveBody = `
+            <div style="display:flex; flex-direction:column; gap:1.25rem;">
+              ${archives.length === 0 ? '<div class="card" style="padding:2rem; text-align:center; color:var(--text-muted);">No historical daily archive logs recorded yet.</div>' :
+                archives.map(a => {
+                  const dateIso = toISODate(a.date);
+                  return `
+                    <div class="card" style="padding:1.25rem;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.6rem; margin-bottom:0.85rem;">
+                        <div>
+                          <h3 style="font-size:1.05rem; font-weight:700; color:var(--primary);">${formatDisplayDate(a.date)}</h3>
+                          <span style="font-size:0.75rem; color:var(--text-muted);">Recorded Operational Shift</span>
+                        </div>
+                        <div style="display:flex; gap:0.4rem;">
+                          ${isAdmin ? `
+                            <button class="btn btn-secondary btn-sm" onclick="openEditArchiveModal('${dateIso}')"><i data-lucide="edit"></i> Edit Day</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteArchiveDay('${dateIso}')"><i data-lucide="trash-2"></i> Delete Record</button>
+                          ` : ''}
+                        </div>
+                      </div>
+
+                      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:0.85rem; font-size:0.8rem;">
+                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
+                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Track Walk & Test Run</strong>
+                          <div>Track Walk: ${a.trackWalk?.result || 'N/A'} (${a.trackWalk?.inspector || 'N/A'})</div>
+                          <div>Test Run: ${a.testRun?.result || 'N/A'} (${a.testRun?.inspector || 'N/A'})</div>
+                        </div>
+
+                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
+                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Volunteers On Site (${(a.attendance || []).length})</strong>
+                          <div style="max-height:80px; overflow-y:auto;">
+                            ${(a.attendance || []).length === 0 ? '<span style="color:var(--text-muted);">None recorded</span>' :
+                              (a.attendance || []).map(att => `<div>${att.name} (${att.clockIn} - ${att.clockOut})</div>`).join('')}
+                          </div>
+                        </div>
+
+                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
+                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Maintenance & Defects</strong>
+                          <div>Maintenance: ${(a.maintenance || []).length} item(s)</div>
+                          <div>Defects Reported: ${(a.incidents || []).length} item(s)</div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+            </div>
+          `;
+        } else {
+          archiveBody = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+              <p style="font-size:0.8rem; color:var(--text-muted);">Uploaded railway museum photos, documents, and historical media.</p>
+              <button class="btn btn-primary btn-sm" onclick="openArchiveUploadModal()"><i data-lucide="upload"></i> Upload Photo / Document</button>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:1rem;">
+              ${uploads.length === 0 ? '<div style="grid-column: 1/-1; text-align:center; padding:2rem; color:var(--text-muted);">No uploaded archive media found.</div>' :
+                uploads.map(u => `
+                  <div class="card" style="padding:0.85rem; display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                      ${u.category === 'Photo' ? `<img src="${u.fileData}" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius); margin-bottom:0.5rem;" />` :
+                        `<div style="height:120px; background:#f1f5f9; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; margin-bottom:0.5rem;"><i data-lucide="file-text" style="width:36px;height:36px;color:var(--text-muted);"></i></div>`}
+                      <strong style="font-size:0.85rem; display:block;">${u.title}</strong>
+                      <span style="font-size:0.7rem; color:var(--text-muted);">${u.category} • Uploaded ${formatDisplayDate(u.uploadDate)}</span>
+                    </div>
+                  </div>
+                `).join('')}
+            </div>
+          `;
+        }
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Historical Archives & Media</h2>
+              <p>Comprehensive daily logs history and digital heritage vault.</p>
+            </div>
+            <div style="display:flex; gap:0.4rem;">
+              <button class="btn ${archiveSubView === 'historical' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="archiveSubView='historical'; renderArchives();">Daily Archive Logs</button>
+              <button class="btn ${archiveSubView === 'media' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="archiveSubView='media'; renderArchives();">Media & Documents Vault</button>
+            </div>
+          </div>
+          ${archiveBody}
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function deleteArchiveDay(dateIso) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can delete archive records.');
+          return;
+        }
+        if (!confirm(`Are you sure you want to permanently delete the archive record for ${formatDisplayDate(dateIso)}?`)) return;
+
+        db.historicalArchive = (db.historicalArchive || []).filter(a => toISODate(a.date) !== dateIso);
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        renderArchives();
       }
 
       function renderIncidents() {
-          return `<div class="page-header"><div class="page-title"><h2>Incident & Defect Log</h2></div></div><p>Incidents feature active.</p>`;
-      }
-      function renderClockLogs() {
-          return `<div class="page-header"><div class="page-title"><h2>Clock Log Records</h2></div></div><p>Clock logs feature active.</p>`;
-      }
-      function renderCalendar() {
-          return `<div class="page-header"><div class="page-title"><h2>Attendance & Hours</h2></div></div><p>Calendar feature active.</p>`;
-      }
-      function renderEvents() {
-          return `<div class="page-header"><div class="page-title"><h2>Events</h2></div></div><p>Events feature active.</p>`;
-      }
-
-      function updateUI() {
-        renderSidebar();
         const content = document.getElementById('content');
-        
-        switch(currentView) {
-            case 'dashboard': content.innerHTML = renderDashboard(); break;
-            case 'clock': content.innerHTML = renderClock(); break;
-            case 'maintenance': content.innerHTML = renderMaintenance(); break;
-            case 'volunteers': content.innerHTML = renderVolunteers(); break;
-            case 'competency': content.innerHTML = renderCompetency(); break;
-            case 'actions': content.innerHTML = renderActions(); break;
-            case 'archives': content.innerHTML = renderArchives(); break;
-            case 'incidents': content.innerHTML = renderIncidents(); break;
-            case 'clockLogs': content.innerHTML = renderClockLogs(); break;
-            case 'calendar': content.innerHTML = renderCalendar(); break;
-            case 'events': content.innerHTML = renderEvents(); break;
-            default: content.innerHTML = `<h2>Page Under Construction</h2>`;
+        const incidents = db.incidents || [];
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Incident & Defect Log</h2>
+              <p>Safety defects, lockout red-tags, and maintenance action tracking.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openIncidentModal()">
+              <i data-lucide="plus"></i> Report Defect
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Asset / Location</th>
+                    <th>Description</th>
+                    <th>Red Tag Status</th>
+                    <th>Resolution Status</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${incidents.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:2rem;">No defect logs reported.</td></tr>' :
+                    incidents.map((i, idx) => `
+                      <tr>
+                        <td><strong>${formatDisplayDate(i.Date || i.date)}</strong></td>
+                        <td><strong>${i.asset || i['Asset / Location']}</strong></td>
+                        <td>${i.Description || i.desc}</td>
+                        <td><span style="background:${i['Red Tag Status'] === 'Out of Service' ? '#fee2e2' : '#dcfce7'}; color:${i['Red Tag Status'] === 'Out of Service' ? '#991b1b' : '#166534'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${i['Red Tag Status'] || 'Operational'}</span></td>
+                        <td><span style="font-weight:600; font-size:0.75rem;">${i.Status || 'Open'}</span></td>
+                        <td style="text-align:right;">
+                          <button class="btn btn-secondary btn-sm" onclick="toggleIncidentStatus(${idx})">Toggle Status</button>
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteIncident(${idx})"><i data-lucide="trash-2"></i> Delete</button>` : ''}
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function toggleIncidentStatus(index) {
+        if (!db.incidents || !db.incidents[index]) return;
+        const current = db.incidents[index].Status || 'Open';
+        db.incidents[index].Status = current === 'Resolved' ? 'Open' : 'Resolved';
+        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+        renderIncidents();
+      }
+
+      function deleteIncident(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can delete defect records.');
+          return;
         }
-        
-        // Add minimal layout fixes for specific views if needed
-        setTimeout(() => lucide.createIcons(), 0);
+        if (!confirm('Are you sure you want to delete this defect record?')) return;
+        db.incidents.splice(index, 1);
+        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
+        renderIncidents();
       }
 
-      // Init
-      window.onload = function() {
-          loadData();
-          
-          if (!checkSavedLogin()) {
-              openLoginModal();
-          } else {
-              updateUI();
-          }
+      function renderCompetencyMatrix() {
+        const content = document.getElementById('content');
+        const volunteers = db.volunteers || [];
+        const roles = getAvailableRoles();
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const rolePageAccess = db.rolePageAccess || {};
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Qualifications & Competency Matrix</h2>
+              <p>Audit volunteer skills, certifications, and qualification-based page access.</p>
+            </div>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add Custom Role</button>` : ''}
+              ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openRoleAccessModal()"><i data-lucide="shield"></i> Manage Role Page Access</button>` : ''}
+            </div>
+          </div>
+
+          ${isAdmin ? `
+            <div class="card" style="padding:1rem; margin-bottom:1rem; background:#f0f4f0; border-color:var(--primary);">
+              <div style="font-size:0.8rem; font-weight:700; color:var(--primary); margin-bottom:0.5rem;"><i data-lucide="info" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Role-Based Page Access</div>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">Pages are automatically granted based on a volunteer's qualifications. Click "Manage Role Page Access" to configure which qualifications unlock which pages.</p>
+              <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+                ${Object.entries(rolePageAccess).map(([role, pages]) =>
+                  pages.length > 0 ? `<span style="background:var(--primary); color:white; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">${role}: ${pages.length} page(s)</span>` : ''
+                ).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Volunteer Name</th>
+                    ${roles.map(r => `<th style="text-align:center; font-size:0.65rem;">${r}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${volunteers.map(v => {
+                    const name = getVolunteerName(v);
+                    const vRoles = String(v.Roles || v.roles || '').toLowerCase();
+                    return `
+                      <tr>
+                        <td><strong>${name}</strong></td>
+                        ${roles.map(r => {
+                          const hasRole = vRoles.includes(r.toLowerCase());
+                          return `<td style="text-align:center;">${hasRole ? '<i data-lucide="check" style="color:#16a34a; width:16px; height:16px; margin:auto;"></i>' : '<span style="color:#cbd5e1;">·</span>'}</td>`;
+                        }).join('')}
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
+      function openRoleAccessModal() {
+        const roles = getAvailableRoles();
+        const rolePageAccess = db.rolePageAccess || {};
+
+        const container = document.getElementById('roleAccessContainer');
+        container.innerHTML = roles.map(role => {
+          const grantedPages = rolePageAccess[role] || [];
+          return `
+            <div style="margin-bottom:0.85rem; padding:0.75rem; background:#f8fafc; border-radius:var(--radius); border:1px solid var(--border);">
+              <div style="font-weight:700; font-size:0.8rem; color:var(--primary); margin-bottom:0.4rem;">${role}</div>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:0.25rem;">
+                ${ALL_PAGES.map(p => {
+                  const checked = grantedPages.includes(p.key);
+                  return `<label style="display:flex; align-items:center; gap:0.35rem; font-size:0.75rem; cursor:pointer; padding:2px 0;">
+                    <input type="checkbox" value="${role}|||${p.key}" class="role-page-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:13px; height:13px; margin:0; accent-color:var(--primary);">${p.label}
+                  </label>`;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        document.getElementById('roleAccessModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveRolePageAccess(e) {
+        e.preventDefault();
+        const rolePageAccess = {};
+        document.querySelectorAll('.role-page-cb:checked').forEach(cb => {
+          const [role, pageKey] = cb.value.split('|||');
+          if (!rolePageAccess[role]) rolePageAccess[role] = [];
+          rolePageAccess[role].push(pageKey);
+        });
+        db.rolePageAccess = rolePageAccess;
+        database.ref('EVLT_ADMIN_DB/rolePageAccess').set(rolePageAccess);
+        closeModal('roleAccessModal');
+        renderCompetencyMatrix();
+      }
+
+      function openAddRoleModal() {
+        document.getElementById('newRoleName').value = '';
+        document.getElementById('addRoleModal').style.display = 'flex';
+      }
+
+      function saveNewRole(e) {
+        e.preventDefault();
+        const newRole = document.getElementById('newRoleName').value.trim();
+        if (!newRole) return;
+        if (!db.customRoles) db.customRoles = [];
+        if (!db.customRoles.includes(newRole)) db.customRoles.push(newRole);
+
+        database.ref('EVLT_ADMIN_DB/customRoles').set(db.customRoles);
+        closeModal('addRoleModal');
+        renderCompetencyMatrix();
+      }
+
+      function renderActionsPage() {
+        const content = document.getElementById('content');
+        const actions = db.actions || [];
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Actions & Tasks</h2>
+              <p>Operational assignments, maintenance tasks, and todo items.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openActionModal()"><i data-lucide="plus"></i> Add Action Task</button>
+          </div>
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Asset</th>
+                    <th>Assigned To</th>
+                    <th>Due Date</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th style="text-align:right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${actions.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:2rem;">No pending action tasks.</td></tr>' :
+                    actions.map((a, idx) => `
+                      <tr>
+                        <td><strong>${a.Title || a.title}</strong>${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${(a.Description || a.desc).substring(0,60)}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}</td>
+                        <td>${a.Asset || a.asset || '-'}</td>
+                        <td>${a.AssignedTo || a.assignedTo || 'Unassigned'}</td>
+                        <td>${formatDisplayDate(a.DueDate || a.dueDate)}</td>
+                        <td><span style="font-weight:700; font-size:0.7rem; color:${a.Priority === 'High' ? '#dc2626' : a.Priority === 'Medium' ? '#ca8a04' : '#475569'};">${a.Priority || 'Normal'}</span></td>
+                        <td>
+                          <button onclick="toggleActionStatus(${idx})" style="background:${(a.Status||'Pending')==='Completed'?'#dcfce7':'#f1f5f9'}; color:${(a.Status||'Pending')==='Completed'?'#166534':'#475569'}; border:1px solid ${(a.Status||'Pending')==='Completed'?'#bbf7d0':'#e2e8f0'}; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:700; cursor:pointer;">${a.Status || 'Pending'}</button>
+                        </td>
+                        <td style="text-align:right;">
+                          <button class="btn btn-secondary btn-sm" onclick="openActionModal(${idx})"><i data-lucide="edit"></i> Edit</button>
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteAction(${idx})"><i data-lucide="trash-2"></i></button>` : ''}
+                        </td>
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openActionModal(index = null) {
+        const existing = index !== null ? (db.actions || [])[index] : null;
+        document.getElementById('actionModalTitle').innerText = existing ? 'Edit Action / Task' : 'Add Action / Task';
+        document.getElementById('actionEditIndex').value = index !== null ? index : '';
+        document.getElementById('act_title').value = existing ? (existing.Title || existing.title || '') : '';
+        document.getElementById('act_desc').value = existing ? (existing.Description || existing.desc || '') : '';
+        document.getElementById('act_assigned').value = existing ? (existing.AssignedTo || existing.assignedTo || '') : '';
+        document.getElementById('act_duedate').value = existing ? toISODate(existing.DueDate || existing.dueDate) : getTodayString();
+        document.getElementById('act_recurrence').value = existing ? (existing.Recurrence || existing.recurrence || 'None') : 'None';
+        document.getElementById('act_priority').value = existing ? (existing.Priority || 'Normal') : 'Normal';
+
+        // Populate asset select
+        const assetSel = document.getElementById('act_asset');
+        const fleet = db.fleetItems || [];
+        assetSel.innerHTML = '<option value="">-- None / General Site --</option>' +
+          fleet.map(f => `<option value="${f.name}" ${(existing && (existing.Asset||existing.asset)===f.name)?'selected':''}>${f.name} (${f.type})</option>`).join('');
+        if (existing && (existing.Asset || existing.asset)) assetSel.value = existing.Asset || existing.asset;
+
+        document.getElementById('actionModal').style.display = 'flex';
+      }
+
+      function saveActionItem(e) {
+        e.preventDefault();
+        if (!db.actions) db.actions = [];
+        const idxVal = document.getElementById('actionEditIndex').value;
+        const actionData = {
+          Title: document.getElementById('act_title').value,
+          Description: document.getElementById('act_desc').value,
+          Asset: document.getElementById('act_asset').value,
+          AssignedTo: document.getElementById('act_assigned').value,
+          DueDate: document.getElementById('act_duedate').value,
+          Recurrence: document.getElementById('act_recurrence').value,
+          Priority: document.getElementById('act_priority').value,
+        };
+        if (idxVal !== '' && db.actions[idxVal]) {
+          db.actions[idxVal] = { ...db.actions[idxVal], ...actionData };
+        } else {
+          db.actions.push({ id: Date.now(), ...actionData, Status: 'Pending', createdDate: getTodayString() });
+        }
+        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        closeModal('actionModal');
+        renderActionsPage();
+      }
+
+      function toggleActionStatus(index) {
+        if (!db.actions || !db.actions[index]) return;
+        const cur = db.actions[index].Status || 'Pending';
+        db.actions[index].Status = cur === 'Completed' ? 'Pending' : 'Completed';
+        if (db.actions[index].Status === 'Completed') db.actions[index].completedDate = getTodayString();
+        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        renderActionsPage();
+      }
+
+      function deleteAction(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can delete action tasks.');
+          return;
+        }
+        if (!confirm('Delete this action task?')) return;
+        db.actions.splice(index, 1);
+        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        renderActionsPage();
+      }
+
+      function renderEventsPage() {
+        const content = document.getElementById('content');
+        const events = db.events || [];
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Railway Events Calendar</h2>
+              <p>Special gala days, public operating days, and private bookings.</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>
+          </div>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem;">
+            ${events.length === 0 ? '<div class="card" style="grid-column:1/-1; padding:2rem; text-align:center; color:var(--text-muted);">No upcoming events scheduled.</div>' :
+              events.map(ev => `
+                <div class="card" style="padding:1.25rem;">
+                  <h3 style="font-size:1rem; font-weight:700; color:var(--primary); margin-bottom:0.4rem;">${ev.Title || ev.title}</h3>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.6rem;"><i data-lucide="calendar"></i> ${formatDisplayDate(ev.StartDate)} → ${formatDisplayDate(ev.EndDate)}</div>
+                  <p style="font-size:0.8rem; color:var(--text);">${ev.Description || ev.desc || 'No event details specified.'}</p>
+                </div>
+              `).join('')}
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openEventModal() {
+        document.getElementById('evt_title').value = '';
+        document.getElementById('evt_start').value = getTodayString();
+        document.getElementById('evt_end').value = getTodayString();
+        document.getElementById('evt_desc').value = '';
+        document.getElementById('eventModal').style.display = 'flex';
+      }
+
+      function saveEventItem(e) {
+        e.preventDefault();
+        if (!db.events) db.events = [];
+        db.events.push({
+          id: Date.now(),
+          Title: document.getElementById('evt_title').value,
+          StartDate: document.getElementById('evt_start').value,
+          EndDate: document.getElementById('evt_end').value,
+          Description: document.getElementById('evt_desc').value
+        });
+        database.ref('EVLT_ADMIN_DB/events').set(db.events);
+        closeModal('eventModal');
+        renderEventsPage();
+      }
+
+      function renderGenericModule(title, description, dbKey) {
+        const content = document.getElementById('content');
+        const items = db[dbKey] || [];
+        const canEdit = hasManagementPermission();
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>${title} Management</h2>
+              <p>${description} (Access restricted to Management / Admin roles).</p>
+            </div>
+            ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="openGenericModal('${dbKey}')"><i data-lucide="plus"></i> Add New ${title} Item</button>` : ''}
+          </div>
+
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item / Name</th>
+                    <th>Details / Category</th>
+                    <th>Date Recorded</th>
+                    ${canEdit ? '<th style="text-align:right;">Actions</th>' : ''}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${items.length === 0 ? `<tr><td colspan="4" style="text-align:center; padding:2rem;">No items recorded in ${title}.</td></tr>` :
+                    items.map((item, idx) => `
+                      <tr>
+                        <td><strong>${item.name || item.title || 'Item #' + (idx+1)}</strong></td>
+                        <td>${item.details || item.category || item.notes || '-'}</td>
+                        <td>${formatDisplayDate(item.date || getTodayString())}</td>
+                        ${canEdit ? `
+                          <td style="text-align:right;">
+                            <button class="btn btn-danger btn-sm" onclick="deleteGenericItem('${dbKey}', ${idx})"><i data-lucide="trash-2"></i> Delete</button>
+                          </td>
+                        ` : ''}
+                      </tr>
+                    `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openGenericModal(dbKey) {
+        editingModuleKey = dbKey;
+        document.getElementById('genericModalTitle').innerText = `Add New ${dbKey.toUpperCase()} Item`;
+        const fields = document.getElementById('genericFormFields');
+        fields.innerHTML = `
+          <div class="form-group">
+            <label>Item Name / Title</label>
+            <input type="text" id="genName" required>
+          </div>
+          <div class="form-group">
+            <label>Details / Notes / Description</label>
+            <textarea id="genDetails" rows="3"></textarea>
+          </div>
+        `;
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function saveGenericItem(e) {
+        e.preventDefault();
+        if (!editingModuleKey) return;
+        if (!db[editingModuleKey]) db[editingModuleKey] = [];
+        db[editingModuleKey].push({
+          id: Date.now(),
+          name: document.getElementById('genName').value,
+          details: document.getElementById('genDetails').value,
+          date: getTodayString()
+        });
+        database.ref('EVLT_ADMIN_DB/' + editingModuleKey).set(db[editingModuleKey]);
+        closeModal('genericModal');
+        renderGenericModule(editingModuleKey.toUpperCase(), '', editingModuleKey);
+      }
+
+      function deleteGenericItem(dbKey, index) {
+        if (!hasManagementPermission()) {
+          alert('Only Management personnel or System Admin can delete management records.');
+          return;
+        }
+        if (!confirm('Delete this item?')) return;
+        db[dbKey].splice(index, 1);
+        database.ref('EVLT_ADMIN_DB/' + dbKey).set(db[dbKey]);
+        renderGenericModule(dbKey.toUpperCase(), '', dbKey);
+      }
+
+      function openAccessControlModal(userName) {
+        document.getElementById('accessControlUserName').value = userName;
+        document.getElementById('accessControlTitle').innerText = `Page Permissions: ${userName}`;
+
+        const container = document.getElementById('permissionsCheckboxesList');
+        const permsMap = db.userPermissions || {};
+        const activePerms = permsMap[userName] || [];
+
+        container.innerHTML = ALL_PAGES.map(p => {
+          const checked = activePerms.includes(p.key);
+          return `
+            <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; cursor:pointer;">
+              <input type="checkbox" value="${p.key}" class="perm-cb" ${checked ? 'checked' : ''}>
+              <strong>${p.label}</strong> <span style="font-size:0.7rem; color:var(--text-muted);">(${p.section})</span>
+            </label>
+          `;
+        }).join('');
+
+        document.getElementById('accessControlModal').style.display = 'flex';
+      }
+
+      function saveUserPermissions(e) {
+        e.preventDefault();
+        const userName = document.getElementById('accessControlUserName').value;
+        const selected = Array.from(document.querySelectorAll('.perm-cb:checked')).map(cb => cb.value);
+
+        if (!db.userPermissions) db.userPermissions = {};
+        db.userPermissions[userName] = selected;
+
+        database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions);
+        closeModal('accessControlModal');
+        renderVolunteers();
+      }
+
+      function renderMyAccount() {
+        const content = document.getElementById('content');
+        if (!currentUser || !currentUser.volData) {
+          content.innerHTML = `<div class="card" style="padding:2rem;">Log in with a volunteer profile to view account settings.</div>`;
+          return;
+        }
+
+        const vol = currentUser.volData;
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>My Account Settings</h2>
+              <p>Profile information for ${getVolunteerName(vol)}.</p>
+            </div>
+          </div>
+
+          <div class="card" style="padding:1.25rem; max-width:500px;">
+            <div style="margin-bottom:1rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">NAME</label>
+              <div style="font-size:1rem; font-weight:700;">${getVolunteerName(vol)}</div>
+            </div>
+            <div style="margin-bottom:1rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">ASSIGNED ROLES</label>
+              <div style="font-size:0.85rem;">${vol.Roles || vol.roles || 'Standard'}</div>
+            </div>
+            <div style="margin-bottom:1rem;">
+              <label style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">DBS STATUS</label>
+              <div style="font-size:0.85rem;">${vol['DBS Status'] || 'Cleared'}</div>
+            </div>
+          </div>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function toggleEditArchTWNotes(val) {
+        const group = document.getElementById('editArch_TW_NotesGroup');
+        if (group) group.style.display = (val === 'Fail' || val === 'Not Completed') ? 'block' : 'none';
+      }
+
+      function openEditArchiveModal(dateIso) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can edit archive records.');
+          return;
+        }
+        const archives = db.historicalArchive || [];
+        const idx = archives.findIndex(a => toISODate(a.date) === dateIso);
+        if (idx === -1) {
+          alert('Archive record not found for this date.');
+          return;
+        }
+        const a = archives[idx];
+        document.getElementById('editArchiveDateTxt').innerText = formatDisplayDate(a.date);
+        document.getElementById('editArchiveIndex').value = idx;
+
+        // Track Walk
+        document.getElementById('editArch_TW_Result').value = a.trackWalk?.result || 'Not Completed';
+        document.getElementById('editArch_TW_Notes').value = a.trackWalk?.notes || '';
+        toggleEditArchTWNotes(a.trackWalk?.result || 'Not Completed');
+
+        // Inspector selects
+        const vols = db.volunteers || [];
+        const volOptions = '<option value="">-- Select --</option>' + vols.map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)}</option>`).join('');
+        document.getElementById('editArch_TW_Inspector').innerHTML = volOptions;
+        document.getElementById('editArch_TW_Inspector').value = a.trackWalk?.inspector || '';
+        document.getElementById('editArch_TR_Inspector').innerHTML = volOptions;
+        document.getElementById('editArch_TR_Inspector').value = a.testRun?.inspector || '';
+
+        // Test Run
+        document.getElementById('editArch_TR_Result').value = a.testRun?.result || 'Not Completed';
+
+        // Locos checkboxes
+        const locoContainer = document.getElementById('editArch_LocosContainer');
+        const runningLocos = a.testRun?.trains || a.runningTrains || [];
+        const allLocos = (db.fleetItems || []).map(f => f.name);
+        locoContainer.innerHTML = allLocos.map(loco => `
+          <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer; padding:3px 0;">
+            <input type="checkbox" value="${loco}" class="arch-loco-cb" ${runningLocos.includes(loco) ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${loco}
+          </label>
+        `).join('');
+
+        // Shifts
+        const shiftsContainer = document.getElementById('editArch_ShiftsContainer');
+        const attendance = a.attendance || [];
+        shiftsContainer.innerHTML = '';
+        attendance.forEach((att, i) => {
+          shiftsContainer.appendChild(createArchiveShiftRow(att.name, att.clockIn, att.clockOut));
+        });
+
+        // Incidents
+        const incContainer = document.getElementById('editArch_IncidentsContainer');
+        const incidents = a.incidents || [];
+        incContainer.innerHTML = '';
+        incidents.forEach((inc) => {
+          incContainer.appendChild(createArchiveIncidentRow(inc.asset, inc.description, inc.redTagStatus));
+        });
+
+        // Maintenance
+        const maintContainer = document.getElementById('editArch_MaintContainer');
+        const maintenance = a.maintenance || [];
+        maintContainer.innerHTML = '';
+        maintenance.forEach((m) => {
+          maintContainer.appendChild(createArchiveMaintRow(m.asset, m.workDone, Array.isArray(m.performedBy) ? m.performedBy.join(', ') : m.performedBy));
+        });
+
+        document.getElementById('editArchiveModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function createArchiveShiftRow(name = '', clockIn = '', clockOut = '') {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:grid; grid-template-columns:1fr auto auto auto; gap:0.4rem; align-items:center; background:white; padding:0.4rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius);';
+        const vols = db.volunteers || [];
+        const volOpts = '<option value="">-- Name --</option>' + vols.map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)}</option>`).join('');
+        const timeSlots = generateTimeSlotOptions().map(t => `<option value="${t}">${t}</option>`).join('');
+        div.innerHTML = `
+          <select style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">${volOpts}</select>
+          <select class="arch-in-sel" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">${timeSlots}</select>
+          <select class="arch-out-sel" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">${timeSlots}</select>
+          <button type="button" onclick="this.closest('div').remove()" style="background:#fee2e2; color:#991b1b; border:none; border-radius:var(--radius-sm); padding:3px 7px; cursor:pointer; font-weight:700;">✕</button>
+        `;
+        div.querySelector('select').value = name;
+        div.querySelector('.arch-in-sel').value = clockIn || '-';
+        div.querySelector('.arch-out-sel').value = clockOut || '-';
+        return div;
+      }
+
+      function createArchiveIncidentRow(asset = '', description = '', redTag = 'Operational') {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr auto auto; gap:0.4rem; align-items:center; background:white; padding:0.4rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius);';
+        div.innerHTML = `
+          <input type="text" placeholder="Asset / Location" value="${asset}" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+          <input type="text" placeholder="Description" value="${description}" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+          <select style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <option value="Operational" ${redTag==='Operational'?'selected':''}>Operational</option>
+            <option value="Out of Service" ${redTag==='Out of Service'?'selected':''}>Out of Service</option>
+          </select>
+          <button type="button" onclick="this.closest('div').remove()" style="background:#fee2e2; color:#991b1b; border:none; border-radius:var(--radius-sm); padding:3px 7px; cursor:pointer; font-weight:700;">✕</button>
+        `;
+        return div;
+      }
+
+      function createArchiveMaintRow(asset = '', workDone = '', performedBy = '') {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:0.4rem; align-items:center; background:white; padding:0.4rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius);';
+        div.innerHTML = `
+          <input type="text" placeholder="Asset" value="${asset}" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+          <input type="text" placeholder="Work Done" value="${workDone}" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+          <input type="text" placeholder="Performed By" value="${performedBy}" style="font-size:0.78rem; padding:0.25rem 0.35rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+          <button type="button" onclick="this.closest('div').remove()" style="background:#fee2e2; color:#991b1b; border:none; border-radius:var(--radius-sm); padding:3px 7px; cursor:pointer; font-weight:700;">✕</button>
+        `;
+        return div;
+      }
+
+      function addArchiveShiftRow() {
+        document.getElementById('editArch_ShiftsContainer').appendChild(createArchiveShiftRow());
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addArchiveIncidentRow() {
+        document.getElementById('editArch_IncidentsContainer').appendChild(createArchiveIncidentRow());
+      }
+
+      function addArchiveMaintRow() {
+        document.getElementById('editArch_MaintContainer').appendChild(createArchiveMaintRow());
+      }
+
+      function saveArchiveEdit(e) {
+        e.preventDefault();
+        const idx = parseInt(document.getElementById('editArchiveIndex').value);
+        if (isNaN(idx) || !db.historicalArchive || !db.historicalArchive[idx]) return;
+
+        // Track Walk
+        const twResult = document.getElementById('editArch_TW_Result').value;
+        const twInspector = document.getElementById('editArch_TW_Inspector').value;
+        const twNotes = document.getElementById('editArch_TW_Notes').value;
+
+        // Test Run
+        const trResult = document.getElementById('editArch_TR_Result').value;
+        const trInspector = document.getElementById('editArch_TR_Inspector').value;
+
+        // Locos
+        const selectedLocos = Array.from(document.querySelectorAll('.arch-loco-cb:checked')).map(cb => cb.value);
+
+        // Shifts
+        const shiftRows = document.getElementById('editArch_ShiftsContainer').children;
+        const newAttendance = Array.from(shiftRows).map(row => {
+          const sels = row.querySelectorAll('select');
+          return { name: sels[0].value, clockIn: sels[1].value, clockOut: sels[2].value };
+        }).filter(s => s.name);
+
+        // Incidents
+        const incRows = document.getElementById('editArch_IncidentsContainer').children;
+        const newIncidents = Array.from(incRows).map(row => {
+          const inputs = row.querySelectorAll('input');
+          const sel = row.querySelector('select');
+          return { asset: inputs[0].value, description: inputs[1].value, redTagStatus: sel.value };
+        }).filter(i => i.asset);
+
+        // Maintenance
+        const maintRows = document.getElementById('editArch_MaintContainer').children;
+        const newMaint = Array.from(maintRows).map(row => {
+          const inputs = row.querySelectorAll('input');
+          return { asset: inputs[0].value, workDone: inputs[1].value, performedBy: inputs[2].value.split(',').map(s => s.trim()) };
+        }).filter(m => m.asset);
+
+        // Update the archive record
+        db.historicalArchive[idx] = {
+          ...db.historicalArchive[idx],
+          trackWalk: { result: twResult, inspector: twInspector, notes: twNotes },
+          testRun: { result: trResult, inspector: trInspector, trains: selectedLocos },
+          runningTrains: selectedLocos,
+          attendance: newAttendance,
+          incidents: newIncidents,
+          maintenance: newMaint
+        };
+
+        // Also sync clock logs for this date
+        const dateIso = db.historicalArchive[idx].date;
+        const existingLogsForDate = (db.clockLogs || []).filter(l => toISODate(l.date) !== toISODate(dateIso));
+        const newClockLogs = newAttendance.map(att => ({
+          id: Date.now() + Math.random(),
+          name: att.name,
+          date: toISODate(dateIso),
+          clockIn: att.clockIn || '-',
+          clockOut: att.clockOut || '-',
+          status: att.clockOut && att.clockOut !== '-' ? 'Completed' : 'Clocked In'
+        }));
+        db.clockLogs = [...existingLogsForDate, ...newClockLogs];
+        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+
+        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        closeModal('editArchiveModal');
+        renderArchives();
+      }
+
+      function openArchiveUploadModal() {
+        document.getElementById('up_title').value = '';
+        document.getElementById('up_filedata').value = '';
+        document.getElementById('up_preview').style.display = 'none';
+        document.getElementById('archiveUploadModal').style.display = 'flex';
+      }
+
+      function previewArchiveFile(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            document.getElementById('up_filedata').value = evt.target.result;
+            const img = document.getElementById('up_preview');
+            if (file.type.startsWith('image/')) {
+              img.src = evt.target.result;
+              img.style.display = 'block';
+            } else {
+              img.style.display = 'none';
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function saveArchiveUpload(e) {
+        e.preventDefault();
+        if (!db.archiveUploads) db.archiveUploads = [];
+        db.archiveUploads.push({
+          id: Date.now(),
+          title: document.getElementById('up_title').value,
+          category: document.getElementById('up_category').value,
+          fileData: document.getElementById('up_filedata').value,
+          uploadDate: getTodayString()
+        });
+        database.ref('EVLT_ADMIN_DB/archiveUploads').set(db.archiveUploads);
+        closeModal('archiveUploadModal');
+        renderArchives();
+      }
     </script>
   </body>
 </html>
