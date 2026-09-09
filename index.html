@@ -1454,6 +1454,12 @@
         const pendingMaintenance = (db.maintenanceLogs || []).length;
         const daily = db.dailyChecks || { trackWalk: {}, testRun: {}, runningTrains: [] };
         const runningTrains = daily.runningTrains || [];
+        const todayIso = getTodayString();
+        const overdueActions = (db.actions || []).filter(a => {
+          if ((a.Status || '') === 'Completed') return false;
+          const due = a.DueDate || a.dueDate;
+          return due && toISODate(due) < todayIso;
+        });
 
         const todayStr = getTodayString();
         const activeEvents = (db.events || []).filter(ev => {
@@ -1477,7 +1483,15 @@
 
         const trackWalkPassed = daily.trackWalk && daily.trackWalk.result === 'Pass';
 
+        const overdueBannerHtml = overdueActions.length > 0 ? `
+          <div style="background:#fef2f2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-lg); border:1px solid #fecaca; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; cursor:pointer;" onclick="navigate('actions')">
+            <i data-lucide="clock" style="width:18px; height:18px; flex-shrink:0;"></i>
+            <div><strong>${overdueActions.length} overdue action task${overdueActions.length > 1 ? 's' : ''}:</strong> ${overdueActions.map(a => a.Title || a.title).join(', ')} — <u>View Actions</u></div>
+          </div>
+        ` : '';
+
         content.innerHTML = `
+          ${overdueBannerHtml}
           ${eventBannerHtml}
           ${getDriverStatusHtml()}
           <div class="page-header">
@@ -1562,6 +1576,10 @@
             <div class="stat-card" onclick="navigate('maintenance')">
               <div class="stat-header"><span>Maintenance Logs</span><div class="stat-icon"><i data-lucide="wrench"></i></div></div>
               <div class="stat-value">${pendingMaintenance}</div>
+            </div>
+            <div class="stat-card" onclick="navigate('actions')" style="${overdueActions.length > 0 ? 'border-left:4px solid #dc2626;' : ''}">
+              <div class="stat-header"><span>Overdue Actions</span><div class="stat-icon"><i data-lucide="clock"></i></div></div>
+              <div class="stat-value" style="color:${overdueActions.length > 0 ? '#dc2626' : '#16a34a'};">${overdueActions.length}</div>
             </div>
           </div>
         `;
@@ -2048,6 +2066,15 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
+      function calcShiftHours(clockIn, clockOut) {
+        if (!clockIn || !clockOut || clockIn === '-' || clockOut === '-') return null;
+        const [inH, inM] = clockIn.split(':').map(Number);
+        const [outH, outM] = clockOut.split(':').map(Number);
+        let diff = (outH * 60 + outM) - (inH * 60 + inM);
+        if (diff < 0) diff += 24 * 60;
+        return diff / 60;
+      }
+
       function renderClockLogsPage() {
         const content = document.getElementById('content');
         const logs = (db.clockLogs || []).slice().sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
@@ -2075,18 +2102,22 @@
                     <th>Volunteer Name</th>
                     <th>Clock In</th>
                     <th>Clock Out</th>
+                    <th>Duration</th>
                     <th>Status</th>
                     ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
                   </tr>
                 </thead>
                 <tbody>
-                  ${logs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 2rem;">No clock log records found.</td></tr>' :
-                    logs.map(l => `
+                  ${logs.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding: 2rem;">No clock log records found.</td></tr>' :
+                    logs.map(l => {
+                      const hrs = calcShiftHours(l.clockIn, l.clockOut);
+                      return `
                       <tr>
                         <td><strong>${formatDisplayDate(l.date)}</strong></td>
                         <td>${l.name}</td>
                         <td>${l.clockIn}</td>
                         <td>${l.clockOut}</td>
+                        <td>${hrs !== null ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.75rem;">${hrs.toFixed(1)}h</span>` : '<span style="color:var(--text-muted); font-size:0.75rem;">Active</span>'}</td>
                         <td><span style="font-weight:600; font-size:0.75rem; color:${l.status === 'Clocked In' ? '#166534' : '#475569'};">${l.status}</span></td>
                         ${isAdmin ? `
                           <td style="text-align:right;">
@@ -2095,13 +2126,26 @@
                           </td>
                         ` : ''}
                       </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
               </table>
             </div>
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function getVolYtdHours(name) {
+        const year = new Date().getFullYear();
+        let total = 0;
+        (db.clockLogs || []).forEach(l => {
+          if (l.name !== name) return;
+          const iso = toISODate(l.date);
+          if (!iso || !iso.startsWith(String(year))) return;
+          const hrs = calcShiftHours(l.clockIn, l.clockOut);
+          if (hrs) total += hrs;
+        });
+        return total;
       }
 
       function renderVolunteers() {
@@ -2113,7 +2157,7 @@
           <div class="page-header">
             <div class="page-title">
               <h2>Volunteer Directory & Roles</h2>
-              <p>Manage volunteer profiles, PIN codes, DBS statuses, and system permissions.</p>
+              <p>Manage volunteer profiles, PIN codes, DBS statuses, and qualifications.</p>
             </div>
             ${isAdmin ? `
               <button class="btn btn-primary btn-sm" onclick="openVolunteerModal(null)">
@@ -2122,32 +2166,44 @@
             ` : ''}
           </div>
 
+          <div style="margin-bottom:0.75rem;">
+            <input type="search" id="volSearchInput" placeholder="🔍  Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.85rem; outline:none;">
+          </div>
+
           <div class="card">
             <div class="table-container">
               <table>
                 <thead>
                   <tr>
                     <th>Volunteer Name</th>
-                    <th>PIN Code</th>
                     <th>Roles / Qualifications</th>
+                    <th>YTD Hours</th>
                     <th>DBS Status</th>
                     ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody id="volTableBody">
                   ${volunteers.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem;">No volunteers registered.</td></tr>' :
                     volunteers.map((v, idx) => {
                       const name = getVolunteerName(v);
+                      const ytd = getVolYtdHours(name);
                       return `
-                        <tr>
-                          <td><strong>${name}</strong></td>
-                          <td><code>${v.Pin || v.pin || '1234'}</code></td>
-                          <td>${v.Roles || v.roles || 'Standard'}</td>
+                        <tr data-volname="${name.toLowerCase()}" data-volroles="${(v.Roles||v.roles||'').toLowerCase()}">
+                          <td>
+                            <strong>${name}</strong>
+                            <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">PIN: ${v.Pin || v.pin || '1234'}</div>
+                          </td>
+                          <td style="font-size:0.78rem;">${v.Roles || v.roles || 'Standard'}</td>
+                          <td>
+                            ${ytd > 0
+                              ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 7px; border-radius:4px; font-weight:700; font-size:0.75rem;">${ytd.toFixed(1)} hrs</span>`
+                              : `<span style="color:var(--text-muted); font-size:0.75rem;">0 hrs</span>`}
+                          </td>
                           <td><span style="background:${v['DBS Status'] === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${v['DBS Status'] === 'Cleared' ? '#166534' : '#92400e'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${v['DBS Status'] || 'Cleared'}</span></td>
                           ${isAdmin ? `
                             <td style="text-align:right;">
                               <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
-                              <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})"><i data-lucide="trash-2"></i> Delete</button>
+                              <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})"><i data-lucide="trash-2"></i></button>
                             </td>
                           ` : ''}
                         </tr>
@@ -2159,6 +2215,15 @@
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function filterVolunteersTable() {
+        const q = (document.getElementById('volSearchInput')?.value || '').toLowerCase();
+        document.querySelectorAll('#volTableBody tr[data-volname]').forEach(row => {
+          const name = row.getAttribute('data-volname') || '';
+          const roles = row.getAttribute('data-volroles') || '';
+          row.style.display = (!q || name.includes(q) || roles.includes(q)) ? '' : 'none';
+        });
       }
 
       function openVolunteerModal(index = null) {
@@ -2568,23 +2633,49 @@
 
                       <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:0.85rem; font-size:0.8rem;">
                         <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
-                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Track Walk & Test Run</strong>
-                          <div>Track Walk: ${a.trackWalk?.result || 'N/A'} (${a.trackWalk?.inspector || 'N/A'})</div>
-                          <div>Test Run: ${a.testRun?.result || 'N/A'} (${a.testRun?.inspector || 'N/A'})</div>
-                        </div>
-
-                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
-                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Volunteers On Site (${(a.attendance || []).length})</strong>
-                          <div style="max-height:80px; overflow-y:auto;">
-                            ${(a.attendance || []).length === 0 ? '<span style="color:var(--text-muted);">None recorded</span>' :
-                              (a.attendance || []).map(att => `<div>${att.name} (${att.clockIn} - ${att.clockOut})</div>`).join('')}
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">Daily Checks</strong>
+                          <div style="display:flex; align-items:center; gap:0.3rem; margin-bottom:0.2rem;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${a.trackWalk?.result==='Pass'?'#16a34a':'#dc2626'};flex-shrink:0;"></span>
+                            <span>Track Walk: <strong>${a.trackWalk?.result || 'N/A'}</strong></span>
+                            ${a.trackWalk?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${a.trackWalk.inspector})</span>` : ''}
+                          </div>
+                          <div style="display:flex; align-items:center; gap:0.3rem;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${a.testRun?.result==='Pass'?'#16a34a':'#dc2626'};flex-shrink:0;"></span>
+                            <span>Test Run: <strong>${a.testRun?.result || 'N/A'}</strong></span>
+                            ${a.testRun?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${a.testRun.inspector})</span>` : ''}
                           </div>
                         </div>
 
                         <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
-                          <strong style="color:var(--text); display:block; margin-bottom:0.2rem;">Maintenance & Defects</strong>
-                          <div>Maintenance: ${(a.maintenance || []).length} item(s)</div>
-                          <div>Defects Reported: ${(a.incidents || []).length} item(s)</div>
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">🚂 Locos Running (${(a.testRun?.trains || a.runningTrains || []).length})</strong>
+                          <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
+                            ${(a.testRun?.trains || a.runningTrains || []).length === 0
+                              ? '<span style="color:var(--text-muted); font-size:0.75rem;">None recorded</span>'
+                              : (a.testRun?.trains || a.runningTrains || []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${t}</span>`).join('')}
+                          </div>
+                        </div>
+
+                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">Volunteers On Site (${(a.attendance || []).length})</strong>
+                          <div style="max-height:80px; overflow-y:auto; font-size:0.76rem;">
+                            ${(a.attendance || []).length === 0 ? '<span style="color:var(--text-muted);">None recorded</span>' :
+                              (a.attendance || []).map(att => {
+                                const hrs = calcShiftHours(att.clockIn, att.clockOut);
+                                return `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding:1px 0;">${att.name} <span style="color:var(--text-muted);">${att.clockIn}–${att.clockOut}${hrs?' ('+hrs.toFixed(1)+'h)':''}</span></div>`;
+                              }).join('')}
+                          </div>
+                        </div>
+
+                        <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">Maintenance & Defects</strong>
+                          <div style="font-size:0.76rem;">
+                            ${(a.maintenance || []).length === 0 && (a.incidents || []).length === 0
+                              ? '<span style="color:var(--text-muted);">None recorded</span>'
+                              : `
+                                ${(a.incidents || []).map(i => `<div style="color:#991b1b;">⚠ ${i.asset}: ${i.description}</div>`).join('')}
+                                ${(a.maintenance || []).map(m => `<div>🔧 ${m.asset}: ${m.workDone}</div>`).join('')}
+                              `}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2832,10 +2923,28 @@
         renderCompetencyMatrix();
       }
 
+      let actionsFilter = 'pending';
+
       function renderActionsPage() {
         const content = document.getElementById('content');
-        const actions = db.actions || [];
+        const allActions = db.actions || [];
         const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const todayIso = getTodayString();
+
+        const pending = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && (!a.DueDate || toISODate(a.DueDate||a.dueDate) >= todayIso));
+        const overdue = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && a.DueDate && toISODate(a.DueDate||a.dueDate) < todayIso);
+        const completed = allActions.filter(a => (a.Status||'') === 'Completed');
+
+        const filtered = actionsFilter === 'all' ? allActions
+          : actionsFilter === 'overdue' ? overdue
+          : actionsFilter === 'completed' ? completed
+          : pending;
+
+        const tabBtn = (key, label, count, danger = false) => `
+          <button onclick="actionsFilter='${key}'; renderActionsPage();" style="padding:5px 12px; border-radius:var(--radius); border:1px solid ${actionsFilter===key?'var(--primary)':'var(--border)'}; background:${actionsFilter===key?'var(--primary)':'white'}; color:${actionsFilter===key?'white':(danger&&count>0?'#dc2626':'var(--text-muted))')}; font-weight:600; font-size:0.78rem; cursor:pointer;">
+            ${label} <span style="background:${actionsFilter===key?'rgba(255,255,255,0.25)':'var(--border)'}; padding:1px 6px; border-radius:10px; font-size:0.7rem;">${count}</span>
+          </button>`;
+
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
@@ -2843,6 +2952,13 @@
               <p>Operational assignments, maintenance tasks, and todo items.</p>
             </div>
             <button class="btn btn-primary btn-sm" onclick="openActionModal()"><i data-lucide="plus"></i> Add Action Task</button>
+          </div>
+
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.85rem;">
+            ${tabBtn('pending', 'Pending', pending.length)}
+            ${tabBtn('overdue', '⚠ Overdue', overdue.length, true)}
+            ${tabBtn('completed', 'Completed', completed.length)}
+            ${tabBtn('all', 'All', allActions.length)}
           </div>
 
           <div class="card">
@@ -2860,13 +2976,20 @@
                   </tr>
                 </thead>
                 <tbody>
-                  ${actions.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:2rem;">No pending action tasks.</td></tr>' :
-                    actions.map((a, idx) => `
-                      <tr>
-                        <td><strong>${a.Title || a.title}</strong>${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${(a.Description || a.desc).substring(0,60)}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}</td>
+                  ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No ${actionsFilter} tasks.</td></tr>` :
+                    filtered.map((a) => {
+                      const idx = allActions.indexOf(a);
+                      const isOverdue = (a.Status||'Pending') !== 'Completed' && a.DueDate && toISODate(a.DueDate||a.dueDate) < todayIso;
+                      return `
+                      <tr style="${isOverdue ? 'background:#fff5f5;' : ''}">
+                        <td>
+                          <strong>${a.Title || a.title}</strong>
+                          ${isOverdue ? '<span style="color:#dc2626; font-size:0.65rem; font-weight:700; margin-left:5px;">OVERDUE</span>' : ''}
+                          ${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${(a.Description || a.desc).substring(0,60)}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}
+                        </td>
                         <td>${a.Asset || a.asset || '-'}</td>
                         <td>${a.AssignedTo || a.assignedTo || 'Unassigned'}</td>
-                        <td>${formatDisplayDate(a.DueDate || a.dueDate)}</td>
+                        <td style="color:${isOverdue?'#dc2626':'inherit'}; font-weight:${isOverdue?'700':'400'};">${formatDisplayDate(a.DueDate || a.dueDate)}</td>
                         <td><span style="font-weight:700; font-size:0.7rem; color:${a.Priority === 'High' ? '#dc2626' : a.Priority === 'Medium' ? '#ca8a04' : '#475569'};">${a.Priority || 'Normal'}</span></td>
                         <td>
                           <button onclick="toggleActionStatus(${idx})" style="background:${(a.Status||'Pending')==='Completed'?'#dcfce7':'#f1f5f9'}; color:${(a.Status||'Pending')==='Completed'?'#166534':'#475569'}; border:1px solid ${(a.Status||'Pending')==='Completed'?'#bbf7d0':'#e2e8f0'}; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:700; cursor:pointer;">${a.Status || 'Pending'}</button>
@@ -2876,7 +2999,7 @@
                           ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteAction(${idx})"><i data-lucide="trash-2"></i></button>` : ''}
                         </td>
                       </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
               </table>
             </div>
