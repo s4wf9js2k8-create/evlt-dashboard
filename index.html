@@ -676,7 +676,7 @@
     <div class="modal-overlay" id="scanDocumentModal">
       <div class="modal" style="max-width: 560px;">
         <h3>Scan Document</h3>
-        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">Take a photo of, or upload, a maintenance sheet or piece of paperwork. It will be read automatically and turned into a draft record for you to check before saving.</p>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">Take a photo of, or upload, a maintenance sheet or piece of paperwork. AI will read it and turn it into a draft record for you to check before saving.</p>
 
         <div id="scanStep1">
           <div class="form-group">
@@ -691,7 +691,7 @@
         <div id="scanStep2" style="display:none;">
           <div style="background:#f0f4f0; border:1px solid var(--primary); border-radius:var(--radius); padding:0.6rem 0.8rem; font-size:0.75rem; color:var(--primary); margin-bottom:0.85rem;">
             <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
-            Best-effort text recognition — please check everything below before saving.
+            Best-effort automatic reading — please check everything below before saving.
           </div>
           <div class="form-group">
             <label>Title</label>
@@ -855,6 +855,15 @@
     </div>
 
     <script>
+      // ============================================================
+      // AI DOCUMENT SCANNING — GEMINI API KEY
+      // Get a free key (no credit card needed) at https://aistudio.google.com
+      // then paste it between the quotes below, replacing the placeholder text.
+      // If left as-is, the "Scan Document" feature falls back to a basic
+      // on-device text scan instead of AI.
+      // ============================================================
+      const GEMINI_API_KEY = "AQ.Ab8RN6KmnSH-taxRrSQ0S3h629P92sCPmDsNf0xRal5aoo7t2A";
+
       const firebaseConfig = {
         apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
         authDomain: "evlt-admin.firebaseapp.com",
@@ -3856,15 +3865,101 @@
 
       function runDocumentScan() {
         if (!scanImageDataUrl) return;
+        const statusEl = document.getElementById('scan_status');
+        document.getElementById('scan_run_btn').disabled = true;
+
+        const keyIsSet = GEMINI_API_KEY && GEMINI_API_KEY.indexOf('PASTE_YOUR') === -1;
+
+        if (keyIsSet) {
+          statusEl.innerText = 'Asking AI to read the document…';
+          const fleetNames = (db.fleetItems || []).map(f => f.name);
+          callGeminiVision(scanImageDataUrl, fleetNames)
+            .then(result => {
+              document.getElementById('scan_run_btn').disabled = false;
+              proceedToScanReviewAI(result);
+            })
+            .catch(err => {
+              console.error('Gemini scan failed, falling back to basic OCR:', err);
+              statusEl.innerText = 'AI reading failed — falling back to basic on-device text scan…';
+              runTesseractFallback();
+            });
+        } else {
+          statusEl.innerText = 'No AI key set yet — using basic on-device text scan.';
+          runTesseractFallback();
+        }
+      }
+
+      async function callGeminiVision(imageDataUrl, assetNames) {
+        const [header, base64Data] = imageDataUrl.split(',');
+        const mimeMatch = header.match(/data:(.*?);base64/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+        const prompt = `You are reading a scanned piece of maintenance paperwork for a heritage railway.
+Known locomotive/coach names at this railway: ${assetNames.join(', ') || '(none listed)'}.
+Look at the image and extract:
+- "asset": the locomotive or coach this paperwork is about. Pick the closest match from the known names list above if one is clearly referenced; otherwise your best guess of the name written, or an empty string if unclear.
+- "date": the date on the document, formatted strictly as YYYY-MM-DD. Empty string if no date is visible.
+- "title": a short 4-8 word title for this record.
+- "summary": a clear, well-written summary in your own words of the work performed or described on the document, based only on what is actually written.
+Respond with ONLY valid JSON in exactly this shape, no other text, no markdown formatting:
+{"asset": "", "date": "", "title": "", "summary": ""}`;
+
+        const body = {
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Data } }
+            ]
+          }]
+        };
+
+        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`Gemini API error ${resp.status}: ${errText}`);
+        }
+
+        const data = await resp.json();
+        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
+        return JSON.parse(text);
+      }
+
+      function proceedToScanReviewAI(result) {
+        const fleet = db.fleetItems || [];
+        const guessedAsset =
+          fleet.find(f => f.name && result.asset && f.name.toLowerCase() === String(result.asset).toLowerCase()) ||
+          fleet.find(f => f.name && result.asset && (f.name.toLowerCase().includes(String(result.asset).toLowerCase()) || String(result.asset).toLowerCase().includes(f.name.toLowerCase())));
+
+        const assetSel = document.getElementById('scan_asset');
+        assetSel.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
+          fleet.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+          '<option value="General Trackwork">General Trackwork</option>' +
+          '<option value="Carriage Fleet">Carriage Fleet</option>' +
+          '<option value="Infrastructure / Buildings">Infrastructure / Buildings</option>';
+        assetSel.value = guessedAsset ? guessedAsset.name : (result.asset || '');
+
+        document.getElementById('scan_title').value = result.title || (guessedAsset ? `${guessedAsset.name} - Scanned Paperwork` : 'Scanned Document');
+        document.getElementById('scan_date').value = /^\d{4}-\d{2}-\d{2}$/.test(result.date) ? result.date : getTodayString();
+        document.getElementById('scan_workdone').value = result.summary || '(AI could not read any details — please type a summary here.)';
+
+        document.getElementById('scanStep1').style.display = 'none';
+        document.getElementById('scanStep2').style.display = 'block';
+      }
+
+      function runTesseractFallback() {
+        const statusEl = document.getElementById('scan_status');
         if (typeof Tesseract === 'undefined') {
-          document.getElementById('scan_status').innerText = 'OCR engine failed to load (check internet connection). You can still fill in the details manually below.';
+          statusEl.innerText = 'OCR engine unavailable (check internet connection). Fill in details manually below.';
+          document.getElementById('scan_run_btn').disabled = false;
           proceedToScanReview('');
           return;
         }
-        const statusEl = document.getElementById('scan_status');
-        statusEl.innerText = 'Reading document… this can take a few seconds.';
-        document.getElementById('scan_run_btn').disabled = true;
-
         Tesseract.recognize(scanImageDataUrl, 'eng', {
           logger: (m) => {
             if (m.status === 'recognizing text') {
@@ -3872,9 +3967,11 @@
             }
           }
         }).then(({ data: { text } }) => {
+          document.getElementById('scan_run_btn').disabled = false;
           proceedToScanReview(text || '');
-        }).catch((err) => {
-          statusEl.innerText = 'Could not read the document automatically. You can still fill in the details manually below.';
+        }).catch(() => {
+          document.getElementById('scan_run_btn').disabled = false;
+          statusEl.innerText = 'Could not read the document automatically. Fill in details manually below.';
           proceedToScanReview('');
         });
       }
