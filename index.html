@@ -856,13 +856,14 @@
 
     <script>
       // ============================================================
-      // AI DOCUMENT SCANNING — GEMINI API KEY
-      // Get a free key (no credit card needed) at https://aistudio.google.com
+      // AI DOCUMENT SCANNING — OPENROUTER API KEY
+      // Get a free key (no credit card needed) at https://openrouter.ai
+      // Sign in, click your profile icon (top right) → Keys → Create Key,
       // then paste it between the quotes below, replacing the placeholder text.
       // If left as-is, the "Scan Document" feature falls back to a basic
       // on-device text scan instead of AI.
       // ============================================================
-      const GEMINI_API_KEY = "AQ.Ab8RN6Jisi1LDmGz1d2PE0T4sznewr0jx7TcMYi1n1I5eTAStA";
+      const AI_API_KEY = "PASTE_YOUR_OPENROUTER_API_KEY_HERE";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
@@ -3868,12 +3869,12 @@
         const statusEl = document.getElementById('scan_status');
         document.getElementById('scan_run_btn').disabled = true;
 
-        const keyIsSet = GEMINI_API_KEY && GEMINI_API_KEY.indexOf('PASTE_YOUR') === -1;
+        const keyIsSet = AI_API_KEY && AI_API_KEY.indexOf('PASTE_YOUR') === -1;
 
         if (keyIsSet) {
           statusEl.innerText = 'Asking AI to read the document…';
           const fleetNames = (db.fleetItems || []).map(f => f.name);
-          callGeminiVision(scanImageDataUrl, fleetNames)
+          callVisionAPI(scanImageDataUrl, fleetNames)
             .then(result => {
               document.getElementById('scan_run_btn').disabled = false;
               proceedToScanReviewAI(result);
@@ -3890,11 +3891,7 @@
         }
       }
 
-      async function callGeminiVision(imageDataUrl, assetNames) {
-        const [header, base64Data] = imageDataUrl.split(',');
-        const mimeMatch = header.match(/data:(.*?);base64/);
-        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-
+      async function callVisionAPI(imageDataUrl, assetNames) {
         const prompt = `You are reading a scanned piece of maintenance paperwork for a heritage railway.
 Known locomotive/coach names at this railway: ${assetNames.join(', ') || '(none listed)'}.
 Look at the image and extract:
@@ -3906,30 +3903,32 @@ Respond with ONLY valid JSON in exactly this shape, no other text, no markdown f
 {"asset": "", "date": "", "title": "", "summary": ""}`;
 
         const body = {
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType, data: base64Data } }
+          model: 'baidu/qianfan-ocr-fast:free',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageDataUrl } }
             ]
           }]
         };
 
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
+        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-goog-api-key': GEMINI_API_KEY
+            'Authorization': `Bearer ${AI_API_KEY}`
           },
           body: JSON.stringify(body)
         });
 
         if (!resp.ok) {
           const errText = await resp.text();
-          throw new Error(`Gemini API error ${resp.status}: ${errText}`);
+          throw new Error(`AI API error ${resp.status}: ${errText}`);
         }
 
         const data = await resp.json();
-        let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        let text = data.choices?.[0]?.message?.content || '';
         text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
         return JSON.parse(text);
       }
