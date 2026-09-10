@@ -8,6 +8,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
       :root { 
         --primary: #1e3a1e; 
@@ -657,6 +658,65 @@
             <button type="submit" class="btn btn-primary">Save Access Rules</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Asset Maintenance History Modal -->
+    <div class="modal-overlay" id="assetHistoryModal">
+      <div class="modal" style="max-width: 560px;">
+        <h3 id="assetHistoryTitle">Maintenance History</h3>
+        <div id="assetHistoryBody"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('assetHistoryModal')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scan Document Modal (OCR) -->
+    <div class="modal-overlay" id="scanDocumentModal">
+      <div class="modal" style="max-width: 560px;">
+        <h3>Scan Document</h3>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">Take a photo of, or upload, a maintenance sheet or piece of paperwork. It will be read automatically and turned into a draft record for you to check before saving.</p>
+
+        <div id="scanStep1">
+          <div class="form-group">
+            <label>Photo of Document</label>
+            <input type="file" id="scan_file" accept="image/*" capture="environment" onchange="handleScanFileSelect(event)">
+            <img id="scan_preview" class="preview-thumb" style="display:none; max-height:200px;" />
+          </div>
+          <button type="button" class="btn btn-primary" id="scan_run_btn" style="width:100%; display:none;" onclick="runDocumentScan()"><i data-lucide="scan-line"></i> Read Document</button>
+          <div id="scan_status" style="font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; text-align:center;"></div>
+        </div>
+
+        <div id="scanStep2" style="display:none;">
+          <div style="background:#f0f4f0; border:1px solid var(--primary); border-radius:var(--radius); padding:0.6rem 0.8rem; font-size:0.75rem; color:var(--primary); margin-bottom:0.85rem;">
+            <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Best-effort text recognition — please check everything below before saving.
+          </div>
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="scan_title" placeholder="e.g. Toby - Brake Inspection Sheet">
+          </div>
+          <div class="form-group">
+            <label>Linked Asset / Locomotive (auto-detected — please confirm)</label>
+            <select id="scan_asset">
+              <option value="">-- Select Locomotive / Asset --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="scan_date">
+          </div>
+          <div class="form-group">
+            <label>Extracted Text / Work Done (edit as needed)</label>
+            <textarea id="scan_workdone" rows="6"></textarea>
+          </div>
+          <div class="modal-actions" style="flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('scanDocumentModal')">Cancel</button>
+            <button type="button" class="btn btn-secondary" onclick="finalizeScan('document')"><i data-lucide="save"></i> Save as Document Only</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeScan('maintenance')"><i data-lucide="wrench"></i> Add to Maintenance Log</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2321,10 +2381,17 @@
         renderVolunteers();
       }
 
+      let maintAssetFilterValue = '';
+
       function renderMaintenancePage() {
         const content = document.getElementById('content');
         const fleet = db.fleetItems || [];
+        const filterSelect = document.getElementById('maintAssetFilter');
+        if (filterSelect) maintAssetFilterValue = filterSelect.value;
         const maintLogs = (db.maintenanceLogs || []).slice().reverse();
+        const filteredMaintLogs = maintAssetFilterValue
+          ? maintLogs.filter(m => (m.assetName || m.asset || '') === maintAssetFilterValue)
+          : maintLogs;
         const isAdmin = currentUser && currentUser.isSystemAdmin;
         const canMaint = hasMaintenancePermission();
 
@@ -2369,8 +2436,9 @@
                         ${canMaint ? `
                           <button class="btn btn-secondary btn-sm" onclick="openFleetModal(${idx})" style="flex:1; min-width:80px;"><i data-lucide="edit"></i> Edit</button>
                           <button class="btn btn-primary btn-sm" onclick="openMaintLogModal('${item.name}', null)" style="flex:1; min-width:80px;"><i data-lucide="wrench"></i> Log Work</button>
+                          <button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal('${item.name}')" style="flex:1; min-width:80px;"><i data-lucide="history"></i> History</button>
                           ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteFleetItem(${idx})" style="flex:0;"><i data-lucide="trash-2"></i></button>` : ''}
-                        ` : '<span style="color:var(--text-muted); font-size:0.75rem;">Read Only</span>'}
+                        ` : `<button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal('${item.name}')" style="flex:1;"><i data-lucide="history"></i> View History</button>`}
                       </div>
                     </div>
                   `;
@@ -2380,7 +2448,13 @@
           </div>
 
           <div class="section-group">
-            <div class="section-header">Maintenance Log Records</div>
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <span>Maintenance Log Records</span>
+              <select id="maintAssetFilter" onchange="renderMaintenancePage()" style="font-size:0.78rem; padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-weight:500;">
+                <option value="">All Assets</option>
+                ${fleet.map(f => `<option value="${f.name}" ${maintAssetFilterValue === f.name ? 'selected' : ''}>${f.name}</option>`).join('')}
+              </select>
+            </div>
             <div class="card">
               <div class="table-container">
                 <table>
@@ -2396,9 +2470,9 @@
                     </tr>
                   </thead>
                   <tbody>
-                    ${maintLogs.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:2rem;">No maintenance logs recorded.</td></tr>' :
-                      maintLogs.map((m, originalIdx) => {
-                        const actualIndex = db.maintenanceLogs.length - 1 - originalIdx;
+                    ${filteredMaintLogs.length === 0 ? `<tr><td colspan="7" style="text-align:center; padding:2rem;">No maintenance logs recorded${maintAssetFilterValue ? ' for ' + maintAssetFilterValue : ''}.</td></tr>` :
+                      filteredMaintLogs.map((m) => {
+                        const actualIndex = db.maintenanceLogs.indexOf(m);
                         const perfBy = Array.isArray(m.performedBy) ? m.performedBy.join(', ') : (m.performedBy || 'Unknown');
                         return `
                           <tr>
@@ -2616,6 +2690,62 @@
         dbUpdate({ maintenanceLogs: db.maintenanceLogs, historicalArchive: db.historicalArchive });
 
         renderMaintenancePage();
+        // Keep the history modal in sync if it's open for this asset
+        if (document.getElementById('assetHistoryModal').style.display === 'flex' && currentHistoryAssetName) {
+          openAssetHistoryModal(currentHistoryAssetName);
+        }
+      }
+
+      let currentHistoryAssetName = '';
+
+      function openAssetHistoryModal(assetName) {
+        currentHistoryAssetName = assetName;
+        const canMaint = hasMaintenancePermission();
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const nameLower = assetName.trim().toLowerCase();
+        const history = (db.maintenanceLogs || [])
+          .filter(m => (m.assetName || m.asset || '').trim().toLowerCase() === nameLower)
+          .slice()
+          .sort((a, b) => (toISODate(b.startDate || b.date) || '').localeCompare(toISODate(a.startDate || a.date) || ''));
+
+        document.getElementById('assetHistoryTitle').innerText = `Maintenance History — ${assetName}`;
+        const body = document.getElementById('assetHistoryBody');
+
+        body.innerHTML = `
+          <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
+            ${canMaint ? `<button class="btn btn-primary btn-sm" onclick="closeModal('assetHistoryModal'); openMaintLogModal('${assetName}', null);"><i data-lucide="plus"></i> Log New Work</button>` : ''}
+          </div>
+          ${history.length === 0 ? '<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.85rem;">No maintenance history recorded for this asset yet.</div>' :
+            `<div style="display:flex; flex-direction:column; gap:0.6rem; max-height:50vh; overflow-y:auto;">
+              ${history.map(m => {
+                const actualIndex = db.maintenanceLogs.indexOf(m);
+                const perfBy = Array.isArray(m.performedBy) ? m.performedBy.join(', ') : (m.performedBy || 'Unknown');
+                return `
+                  <div style="background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius); padding:0.7rem 0.85rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                      <div>
+                        <strong style="font-size:0.85rem;">${formatDisplayDate(m.startDate || m.date)}${m.endDate && m.endDate !== m.startDate ? ' → ' + formatDisplayDate(m.endDate) : ''}</strong>
+                        ${m.updateState ? `<span style="margin-left:6px; background:var(--primary-light); color:var(--primary); padding:1px 6px; border-radius:4px; font-size:0.65rem; font-weight:700;">${m.updateState}</span>` : ''}
+                      </div>
+                      ${canMaint ? `
+                        <div style="display:flex; gap:0.3rem; flex-shrink:0;">
+                          <button class="btn btn-secondary btn-sm" style="padding:2px 6px;" onclick="closeModal('assetHistoryModal'); openMaintLogModal('', ${actualIndex});"><i data-lucide="edit"></i></button>
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" style="padding:2px 6px;" onclick="deleteMaintenanceLog(${actualIndex})"><i data-lucide="trash-2"></i></button>` : ''}
+                        </div>
+                      ` : ''}
+                    </div>
+                    <p style="font-size:0.8rem; margin:0.35rem 0;">${m.workDone || m.description || '-'}</p>
+                    <div style="font-size:0.7rem; color:var(--text-muted);">Performed by: ${perfBy}${m.notes ? ` • ${m.notes}` : ''}</div>
+                    ${m.photo ? `<a href="${m.photo}" target="_blank" style="font-size:0.72rem; color:var(--primary); font-weight:600;">View attached photo/document →</a>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>`
+          }
+        `;
+
+        document.getElementById('assetHistoryModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
       function renderArchives() {
@@ -2623,6 +2753,7 @@
         const archives = db.historicalArchive || [];
         const uploads = db.archiveUploads || [];
         const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const canMaint = hasMaintenancePermission();
 
         let archiveBody = '';
         if (archiveSubView === 'historical') {
@@ -2700,19 +2831,26 @@
           `;
         } else {
           archiveBody = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
               <p style="font-size:0.8rem; color:var(--text-muted);">Uploaded railway museum photos, documents, and historical media.</p>
-              <button class="btn btn-primary btn-sm" onclick="openArchiveUploadModal()"><i data-lucide="upload"></i> Upload Photo / Document</button>
+              <div style="display:flex; gap:0.4rem;">
+                ${canMaint ? `<button class="btn btn-secondary btn-sm" onclick="openScanDocumentModal()"><i data-lucide="scan-line"></i> Scan Document</button>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="openArchiveUploadModal()"><i data-lucide="upload"></i> Upload Photo / Document</button>
+              </div>
             </div>
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:1rem;">
               ${uploads.length === 0 ? '<div style="grid-column: 1/-1; text-align:center; padding:2rem; color:var(--text-muted);">No uploaded archive media found.</div>' :
                 uploads.map(u => `
                   <div class="card" style="padding:0.85rem; display:flex; flex-direction:column; justify-content:space-between;">
-                    <div>
+                    <div style="cursor:pointer;" onclick="openArchiveDocument(${u.id})" title="Click to open">
                       ${u.category === 'Photo' ? `<img src="${u.fileData}" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius); margin-bottom:0.5rem;" />` :
                         `<div style="height:120px; background:#f1f5f9; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; margin-bottom:0.5rem;"><i data-lucide="file-text" style="width:36px;height:36px;color:var(--text-muted);"></i></div>`}
                       <strong style="font-size:0.85rem; display:block;">${u.title}</strong>
-                      <span style="font-size:0.7rem; color:var(--text-muted);">${u.category} • Uploaded ${formatDisplayDate(u.uploadDate)}</span>
+                      <span style="font-size:0.7rem; color:var(--text-muted);">${u.category} • Uploaded ${formatDisplayDate(u.uploadDate)}${u.linkedAsset ? ` • <span style="color:var(--primary); font-weight:600;">${u.linkedAsset}</span>` : ''}</span>
+                    </div>
+                    <div style="display:flex; gap:0.4rem; margin-top:0.6rem; border-top:1px solid var(--border); padding-top:0.5rem;">
+                      <button class="btn btn-secondary btn-sm" onclick="openArchiveDocument(${u.id})" style="flex:1;"><i data-lucide="external-link"></i> Open</button>
+                      ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteArchiveUpload(${u.id})"><i data-lucide="trash-2"></i></button>` : ''}
                     </div>
                   </div>
                 `).join('')}
@@ -2745,6 +2883,42 @@
 
         db.historicalArchive = (db.historicalArchive || []).filter(a => toISODate(a.date) !== dateIso);
         database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        renderArchives();
+      }
+
+      function dataUrlToBlob(dataUrl) {
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/data:(.*?);base64/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+        const binary = atob(parts[1]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+      }
+
+      function openArchiveDocument(id) {
+        const upload = (db.archiveUploads || []).find(u => u.id === id);
+        if (!upload || !upload.fileData) { alert('File data not found for this record.'); return; }
+        try {
+          const blob = dataUrlToBlob(upload.fileData);
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+        } catch (err) {
+          // Fallback: open the raw data URL directly
+          window.open(upload.fileData, '_blank');
+        }
+      }
+
+      function deleteArchiveUpload(id) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete uploaded documents.');
+          return;
+        }
+        const upload = (db.archiveUploads || []).find(u => u.id === id);
+        if (!upload) return;
+        if (!confirm(`Delete "${upload.title}"? This cannot be undone.`)) return;
+        db.archiveUploads = (db.archiveUploads || []).filter(u => u.id !== id);
+        dbUpdate({ archiveUploads: db.archiveUploads });
         renderArchives();
       }
 
@@ -3648,6 +3822,141 @@
         renderArchives();
       }
 
+      let scanImageDataUrl = '';
+
+      function openScanDocumentModal() {
+        if (!hasMaintenancePermission()) {
+          alert('Access Restricted: Only volunteers with the "Maintenance" role or permission can scan documents into maintenance records.');
+          return;
+        }
+        scanImageDataUrl = '';
+        document.getElementById('scan_file').value = '';
+        document.getElementById('scan_preview').style.display = 'none';
+        document.getElementById('scan_run_btn').style.display = 'none';
+        document.getElementById('scan_status').innerText = '';
+        document.getElementById('scanStep1').style.display = 'block';
+        document.getElementById('scanStep2').style.display = 'none';
+        document.getElementById('scanDocumentModal').style.display = 'flex';
+      }
+
+      function handleScanFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          scanImageDataUrl = evt.target.result;
+          const img = document.getElementById('scan_preview');
+          img.src = scanImageDataUrl;
+          img.style.display = 'block';
+          document.getElementById('scan_run_btn').style.display = 'block';
+          document.getElementById('scan_status').innerText = '';
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function runDocumentScan() {
+        if (!scanImageDataUrl) return;
+        if (typeof Tesseract === 'undefined') {
+          document.getElementById('scan_status').innerText = 'OCR engine failed to load (check internet connection). You can still fill in the details manually below.';
+          proceedToScanReview('');
+          return;
+        }
+        const statusEl = document.getElementById('scan_status');
+        statusEl.innerText = 'Reading document… this can take a few seconds.';
+        document.getElementById('scan_run_btn').disabled = true;
+
+        Tesseract.recognize(scanImageDataUrl, 'eng', {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              statusEl.innerText = `Reading document… ${Math.round((m.progress || 0) * 100)}%`;
+            }
+          }
+        }).then(({ data: { text } }) => {
+          proceedToScanReview(text || '');
+        }).catch((err) => {
+          statusEl.innerText = 'Could not read the document automatically. You can still fill in the details manually below.';
+          proceedToScanReview('');
+        });
+      }
+
+      function proceedToScanReview(extractedText) {
+        document.getElementById('scan_run_btn').disabled = false;
+
+        // Best-effort guess: does the text mention one of our known assets?
+        const fleet = db.fleetItems || [];
+        const lowerText = extractedText.toLowerCase();
+        const guessedAsset = fleet.find(f => f.name && lowerText.includes(f.name.toLowerCase()));
+
+        // Best-effort guess: find a date-like pattern (DD/MM/YYYY, DD-MM-YYYY, or YYYY-MM-DD)
+        let guessedDate = getTodayString();
+        const isoMatch = extractedText.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+        const dmyMatch = extractedText.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+        if (isoMatch) {
+          guessedDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+        } else if (dmyMatch) {
+          let [, dd, mm, yyyy] = dmyMatch;
+          if (yyyy.length === 2) yyyy = '20' + yyyy;
+          guessedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+        }
+
+        // Populate asset select
+        const assetSel = document.getElementById('scan_asset');
+        assetSel.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
+          fleet.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+          '<option value="General Trackwork">General Trackwork</option>' +
+          '<option value="Carriage Fleet">Carriage Fleet</option>' +
+          '<option value="Infrastructure / Buildings">Infrastructure / Buildings</option>';
+        assetSel.value = guessedAsset ? guessedAsset.name : '';
+
+        document.getElementById('scan_title').value = guessedAsset ? `${guessedAsset.name} - Scanned Paperwork` : 'Scanned Document';
+        document.getElementById('scan_date').value = guessedDate;
+        document.getElementById('scan_workdone').value = extractedText.trim() || '(No text could be automatically read — please type a summary here.)';
+
+        document.getElementById('scanStep1').style.display = 'none';
+        document.getElementById('scanStep2').style.display = 'block';
+      }
+
+      function finalizeScan(mode) {
+        const title = document.getElementById('scan_title').value || 'Scanned Document';
+        const assetName = document.getElementById('scan_asset').value;
+        const date = document.getElementById('scan_date').value || getTodayString();
+        const workDone = document.getElementById('scan_workdone').value;
+
+        if (mode === 'maintenance') {
+          if (!assetName) { alert('Please select which locomotive / asset this record belongs to.'); return; }
+          if (!db.maintenanceLogs) db.maintenanceLogs = [];
+          db.maintenanceLogs.push({
+            id: Date.now(),
+            assetName: assetName,
+            workDone: workDone,
+            startDate: date,
+            endDate: date,
+            performedBy: [currentUser ? currentUser.name : 'Unknown'],
+            updateState: '',
+            photo: scanImageDataUrl,
+            notes: 'Auto-extracted from scanned document.',
+            recordedBy: currentUser ? currentUser.name : 'User'
+          });
+          syncArchiveForDate(date);
+          dbUpdate({ maintenanceLogs: db.maintenanceLogs, historicalArchive: db.historicalArchive });
+          closeModal('scanDocumentModal');
+          renderMaintenancePage();
+        } else {
+          if (!db.archiveUploads) db.archiveUploads = [];
+          db.archiveUploads.push({
+            id: Date.now(),
+            title: title,
+            category: 'Document',
+            fileData: scanImageDataUrl,
+            uploadDate: getTodayString(),
+            linkedAsset: assetName || null
+          });
+          dbUpdate({ archiveUploads: db.archiveUploads });
+          closeModal('scanDocumentModal');
+          renderArchives();
+        }
+      }
+
       function openArchiveUploadModal() {
         document.getElementById('up_title').value = '';
         document.getElementById('up_filedata').value = '';
@@ -3683,7 +3992,7 @@
           fileData: document.getElementById('up_filedata').value,
           uploadDate: getTodayString()
         });
-        database.ref('EVLT_ADMIN_DB/archiveUploads').set(db.archiveUploads);
+        dbUpdate({ archiveUploads: db.archiveUploads });
         closeModal('archiveUploadModal');
         renderArchives();
       }
