@@ -3881,8 +3881,8 @@
             })
             .catch(err => {
               console.error('Gemini scan failed, falling back to basic OCR:', err);
-              const shortErr = String(err.message || err).substring(0, 120);
-              statusEl.innerText = `AI reading failed (${shortErr}) — falling back to basic on-device text scan…`;
+              const shortErr = String(err.message || err).substring(0, 500);
+              statusEl.innerText = `AI reading failed: ${shortErr} — falling back to basic on-device text scan…`;
               runTesseractFallback();
             });
         } else {
@@ -3913,7 +3913,7 @@ Look at the image and extract:
 Respond with ONLY valid JSON in exactly this shape, no other text, no markdown formatting:
 {"asset": "", "date": "", "title": "", "summary": ""}`;
 
-        let lastError = null;
+        const attemptSummaries = [];
 
         for (const model of VISION_MODEL_CANDIDATES) {
           try {
@@ -3939,7 +3939,7 @@ Respond with ONLY valid JSON in exactly this shape, no other text, no markdown f
 
             if (!resp.ok) {
               const errText = await resp.text();
-              lastError = new Error(`AI API error ${resp.status} (${model}): ${errText}`);
+              attemptSummaries.push(`${model} → ${resp.status}: ${errText.substring(0, 80)}`);
               continue; // try the next model in the list
             }
 
@@ -3948,12 +3948,12 @@ Respond with ONLY valid JSON in exactly this shape, no other text, no markdown f
             text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
             return JSON.parse(text);
           } catch (err) {
-            lastError = err;
+            attemptSummaries.push(`${model} → ${String(err.message || err).substring(0, 80)}`);
             continue;
           }
         }
 
-        throw lastError || new Error('All vision models failed.');
+        throw new Error('All models failed — ' + attemptSummaries.join(' | '));
       }
 
       function proceedToScanReviewAI(result) {
