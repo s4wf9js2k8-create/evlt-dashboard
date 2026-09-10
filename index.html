@@ -3891,6 +3891,17 @@
         }
       }
 
+      // A short list of free, vision-capable OpenRouter models to try in order.
+      // Free models on OpenRouter come and go — if one disappears, the code
+      // just moves on to the next rather than failing outright.
+      const VISION_MODEL_CANDIDATES = [
+        'baidu/qianfan-ocr-fast:free',
+        'google/gemma-3-27b-it:free',
+        'mistralai/mistral-small-3.1-24b-instruct:free',
+        'meta-llama/llama-3.2-11b-vision-instruct:free',
+        'qwen/qwen2.5-vl-72b-instruct:free'
+      ];
+
       async function callVisionAPI(imageDataUrl, assetNames) {
         const prompt = `You are reading a scanned piece of maintenance paperwork for a heritage railway.
 Known locomotive/coach names at this railway: ${assetNames.join(', ') || '(none listed)'}.
@@ -3902,35 +3913,47 @@ Look at the image and extract:
 Respond with ONLY valid JSON in exactly this shape, no other text, no markdown formatting:
 {"asset": "", "date": "", "title": "", "summary": ""}`;
 
-        const body = {
-          model: 'baidu/qianfan-ocr-fast:free',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageDataUrl } }
-            ]
-          }]
-        };
+        let lastError = null;
 
-        const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${AI_API_KEY}`
-          },
-          body: JSON.stringify(body)
-        });
+        for (const model of VISION_MODEL_CANDIDATES) {
+          try {
+            const body = {
+              model: model,
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'text', text: prompt },
+                  { type: 'image_url', image_url: { url: imageDataUrl } }
+                ]
+              }]
+            };
 
-        if (!resp.ok) {
-          const errText = await resp.text();
-          throw new Error(`AI API error ${resp.status}: ${errText}`);
+            const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${AI_API_KEY}`
+              },
+              body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+              const errText = await resp.text();
+              lastError = new Error(`AI API error ${resp.status} (${model}): ${errText}`);
+              continue; // try the next model in the list
+            }
+
+            const data = await resp.json();
+            let text = data.choices?.[0]?.message?.content || '';
+            text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
+            return JSON.parse(text);
+          } catch (err) {
+            lastError = err;
+            continue;
+          }
         }
 
-        const data = await resp.json();
-        let text = data.choices?.[0]?.message?.content || '';
-        text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
-        return JSON.parse(text);
+        throw lastError || new Error('All vision models failed.');
       }
 
       function proceedToScanReviewAI(result) {
