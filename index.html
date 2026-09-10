@@ -897,6 +897,19 @@
         return `${d}/${m}/${y}`;
       }
 
+      function dbUpdate(updates) {
+        // Writes multiple top-level keys in ONE atomic operation.
+        // Using separate .set() calls on sibling paths causes a race condition:
+        // the app listens on the DB root, so each individual .set() fires its
+        // own 'value' event with a partial snapshot, which can transiently
+        // (or permanently, on slow connections) revert data from the other
+        // write. A single .update() commits all keys together as one event.
+        if (!database) return;
+        const payload = {};
+        Object.keys(updates).forEach(k => { payload['EVLT_ADMIN_DB/' + k] = updates[k]; });
+        database.ref().update(payload);
+      }
+
       function syncArchiveForDate(dateStr) {
         if (!dateStr) return;
         const iso = toISODate(dateStr);
@@ -975,35 +988,41 @@
       }
 
       function checkExpiredEvents() {
-        if (!db.events || db.events.length === 0) return;
+        // Returns true if db.events was changed (caller decides how to persist it,
+        // so this can be folded into one atomic dbUpdate alongside other changes).
+        if (!db.events || db.events.length === 0) return false;
         const now = new Date();
         let changed = false;
         db.events = db.events.filter(ev => {
-          if (!ev.EndDate) return true;
-          const endDateTime = new Date(ev.EndDate + 'T20:00:00');
+          const endRaw = ev.EndDate || ev.endDate || ev.StartDate || ev.startDate;
+          if (!endRaw) return true;
+          const endDateTime = new Date(toISODate(endRaw) + 'T20:00:00');
           if (now > endDateTime) {
             changed = true;
             return false;
           }
           return true;
         });
-        if (changed && database) {
-          database.ref('EVLT_ADMIN_DB/events').set(db.events);
-        }
+        return changed;
       }
 
       function archiveAndResetIfNewDay() {
-        checkExpiredEvents();
+        const eventsChanged = checkExpiredEvents();
         const todayStr = getTodayString();
         if (!db.dailyChecks) db.dailyChecks = {};
         const lastDate = db.dailyChecks.lastCheckDate;
 
         if (!lastDate) {
           db.dailyChecks.lastCheckDate = todayStr;
-          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          const upd = { dailyChecks: db.dailyChecks };
+          if (eventsChanged) upd.events = db.events;
+          dbUpdate(upd);
           return;
         }
-        if (lastDate === todayStr) return;
+        if (lastDate === todayStr) {
+          if (eventsChanged) dbUpdate({ events: db.events });
+          return;
+        }
 
         const daily = db.dailyChecks;
         const dayClockLogs = (db.clockLogs || []).filter(l => toISODate(l.date) === lastDate);
@@ -1019,6 +1038,8 @@
         const somethingHappened = trackWalkDone || testRunDone || trainsRan ||
           dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0 ||
           dayActionsAdded.length > 0 || dayActionsCompleted.length > 0;
+
+        const resetUpdates = {};
 
         if (somethingHappened) {
           if (!db.historicalArchive) db.historicalArchive = [];
@@ -1041,11 +1062,13 @@
           } else {
             db.historicalArchive.push(archiveEntry);
           }
-          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+          resetUpdates.historicalArchive = db.historicalArchive;
         }
 
         db.dailyChecks = { lastCheckDate: todayStr, trackWalk: {}, testRun: {}, runningTrains: [] };
-        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        resetUpdates.dailyChecks = db.dailyChecks;
+        if (eventsChanged) resetUpdates.events = db.events;
+        dbUpdate(resetUpdates);
       }
 
       function closeModal(modalId) {
@@ -1665,9 +1688,8 @@
         db.dailyChecks.lastCheckDate = todayStr;
         db.dailyChecks[checkKey] = { inspector, result, notes, trains: selectedTrains, recordedBy: currentUser ? currentUser.name : 'User' };
 
-        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
         syncArchiveForDate(todayStr);
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        dbUpdate({ dailyChecks: db.dailyChecks, historicalArchive: db.historicalArchive });
 
         closeModal('opCheckModal');
         renderDashboard();
@@ -1735,9 +1757,8 @@
             reportedBy: currentUser ? currentUser.name : 'User'
           });
         }
-        database.ref('EVLT_ADMIN_DB/incidents').set(db.incidents);
         syncArchiveForDate(todayStr);
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        dbUpdate({ incidents: db.incidents, historicalArchive: db.historicalArchive });
 
         closeModal('incidentModal');
         navigate(currentView);
@@ -1774,10 +1795,8 @@
         }
 
         db.clockLogs = updatedLogs;
-        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
-        
         syncArchiveForDate(dateStr);
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        dbUpdate({ clockLogs: db.clockLogs, historicalArchive: db.historicalArchive });
 
         renderClock();
       }
@@ -1860,12 +1879,9 @@
         const logDate = logToDelete ? toISODate(logToDelete.date) : null;
 
         db.clockLogs = (db.clockLogs || []).filter(l => l.id !== id);
-        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+        if (logDate) syncArchiveForDate(logDate);
 
-        if (logDate) {
-          syncArchiveForDate(logDate);
-          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
-        }
+        dbUpdate({ clockLogs: db.clockLogs, historicalArchive: db.historicalArchive });
 
         if (currentView === 'calendar') renderCalendarView();
         else if (currentView === 'clockLogs') renderClockLogsPage();
@@ -2296,12 +2312,12 @@
         if (!confirm(`Are you sure you want to delete volunteer "${volName}"? This action cannot be undone.`)) return;
 
         db.volunteers.splice(index, 1);
+        const updates = { volunteers: db.volunteers };
         if (db.userPermissions && db.userPermissions[volName]) {
           delete db.userPermissions[volName];
-          database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions);
+          updates.userPermissions = db.userPermissions;
         }
-
-        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        dbUpdate(updates);
         renderVolunteers();
       }
 
@@ -2565,18 +2581,20 @@
         }
 
         // If state changed, update fleet item status
+        const maintUpdates = {};
         if (updateState && db.fleetItems) {
           const fleetItem = db.fleetItems.find(f => f.name === assetName);
           if (fleetItem) {
             fleetItem.state = updateState;
-            database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+            maintUpdates.fleetItems = db.fleetItems;
           }
         }
 
-        database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
         syncArchiveForDate(startDate);
         if (endDate !== startDate) syncArchiveForDate(endDate);
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        maintUpdates.maintenanceLogs = db.maintenanceLogs;
+        maintUpdates.historicalArchive = db.historicalArchive;
+        dbUpdate(maintUpdates);
 
         closeModal('maintLogModal');
         renderMaintenancePage();
@@ -2593,12 +2611,9 @@
         const logDate = targetLog ? targetLog.startDate : null;
 
         db.maintenanceLogs.splice(index, 1);
-        database.ref('EVLT_ADMIN_DB/maintenanceLogs').set(db.maintenanceLogs);
+        if (logDate) syncArchiveForDate(logDate);
 
-        if (logDate) {
-          syncArchiveForDate(logDate);
-          database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
-        }
+        dbUpdate({ maintenanceLogs: db.maintenanceLogs, historicalArchive: db.historicalArchive });
 
         renderMaintenancePage();
       }
@@ -3047,17 +3062,69 @@
         } else {
           db.actions.push({ id: Date.now(), ...actionData, Status: 'Pending', createdDate: getTodayString() });
         }
-        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        dbUpdate({ actions: db.actions });
         closeModal('actionModal');
         renderActionsPage();
       }
 
+      function canToggleActionStatus() {
+        return currentUser && (currentUser.isSystemAdmin || hasMaintenancePermission());
+      }
+
+      function getNextRecurrenceDate(dueDateIso, recurrence) {
+        const d = new Date(dueDateIso + 'T12:00:00');
+        switch (recurrence) {
+          case 'Daily': d.setDate(d.getDate() + 1); break;
+          case 'Weekly': d.setDate(d.getDate() + 7); break;
+          case 'Monthly': d.setMonth(d.getMonth() + 1); break;
+          case '3 Monthly': d.setMonth(d.getMonth() + 3); break;
+          case '6 Monthly': d.setMonth(d.getMonth() + 6); break;
+          case 'Yearly': d.setFullYear(d.getFullYear() + 1); break;
+          default: return null;
+        }
+        return toISODate(d.toISOString().split('T')[0]);
+      }
+
       function toggleActionStatus(index) {
+        if (!canToggleActionStatus()) {
+          alert('Only the System Admin or volunteers with a Maintenance qualification can change the status of action tasks.');
+          return;
+        }
         if (!db.actions || !db.actions[index]) return;
-        const cur = db.actions[index].Status || 'Pending';
-        db.actions[index].Status = cur === 'Completed' ? 'Pending' : 'Completed';
-        if (db.actions[index].Status === 'Completed') db.actions[index].completedDate = getTodayString();
-        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        const item = db.actions[index];
+        const cur = item.Status || 'Pending';
+        const nowCompleting = cur !== 'Completed';
+        item.Status = nowCompleting ? 'Completed' : 'Pending';
+
+        if (nowCompleting) {
+          item.completedDate = getTodayString();
+
+          // If this is a recurring task, spin up the next occurrence automatically
+          // so it doesn't just vanish — e.g. weekly carriage cleaning, monthly checks, etc.
+          const recurrence = item.Recurrence || item.recurrence || 'None';
+          if (recurrence && recurrence !== 'None') {
+            const currentDue = toISODate(item.DueDate || item.dueDate) || getTodayString();
+            const nextDue = getNextRecurrenceDate(currentDue, recurrence);
+            if (nextDue) {
+              db.actions.push({
+                id: Date.now() + Math.random(),
+                Title: item.Title || item.title,
+                Description: item.Description || item.desc || '',
+                Asset: item.Asset || item.asset || '',
+                AssignedTo: item.AssignedTo || item.assignedTo || '',
+                DueDate: nextDue,
+                Recurrence: recurrence,
+                Priority: item.Priority || 'Normal',
+                Status: 'Pending',
+                createdDate: getTodayString()
+              });
+            }
+          }
+        } else {
+          delete item.completedDate;
+        }
+
+        dbUpdate({ actions: db.actions });
         renderActionsPage();
       }
 
@@ -3068,56 +3135,96 @@
         }
         if (!confirm('Delete this action task?')) return;
         db.actions.splice(index, 1);
-        database.ref('EVLT_ADMIN_DB/actions').set(db.actions);
+        dbUpdate({ actions: db.actions });
         renderActionsPage();
       }
 
       function renderEventsPage() {
         const content = document.getElementById('content');
-        const events = db.events || [];
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        if (checkExpiredEvents()) dbUpdate({ events: db.events });
+        const events = (db.events || []).slice().sort((a, b) => toISODate(a.StartDate || a.startDate).localeCompare(toISODate(b.StartDate || b.startDate)));
+        const todayIso = getTodayString();
+
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
               <h2>Railway Events Calendar</h2>
               <p>Special gala days, public operating days, and private bookings.</p>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>
+            ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>` : ''}
           </div>
 
           <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:1rem;">
             ${events.length === 0 ? '<div class="card" style="grid-column:1/-1; padding:2rem; text-align:center; color:var(--text-muted);">No upcoming events scheduled.</div>' :
-              events.map(ev => `
-                <div class="card" style="padding:1.25rem;">
-                  <h3 style="font-size:1rem; font-weight:700; color:var(--primary); margin-bottom:0.4rem;">${ev.Title || ev.title}</h3>
-                  <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.6rem;"><i data-lucide="calendar"></i> ${formatDisplayDate(ev.StartDate)} → ${formatDisplayDate(ev.EndDate)}</div>
-                  <p style="font-size:0.8rem; color:var(--text);">${ev.Description || ev.desc || 'No event details specified.'}</p>
+              events.map((ev, idx) => {
+                const isPast = toISODate(ev.EndDate || ev.endDate || ev.StartDate || ev.startDate) < todayIso;
+                return `
+                <div class="card" style="padding:1.25rem; ${isPast ? 'opacity:0.6;' : ''}">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                    <h3 style="font-size:1rem; font-weight:700; color:var(--primary); margin-bottom:0.4rem;">${ev.Title || ev.title}</h3>
+                    ${isPast ? '<span style="background:#f1f5f9; color:var(--text-muted); padding:2px 7px; border-radius:4px; font-size:0.65rem; font-weight:700; flex-shrink:0;">PAST</span>' : ''}
+                  </div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.6rem;"><i data-lucide="calendar"></i> ${formatDisplayDate(ev.StartDate || ev.startDate)} → ${formatDisplayDate(ev.EndDate || ev.endDate)}</div>
+                  <p style="font-size:0.8rem; color:var(--text); margin-bottom:${isAdmin ? '0.75rem' : '0'};">${ev.Description || ev.desc || 'No event details specified.'}</p>
+                  ${isAdmin ? `
+                    <div style="display:flex; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem;">
+                      <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})" style="flex:1;"><i data-lucide="edit"></i> Edit</button>
+                      <button class="btn btn-danger btn-sm" onclick="deleteEvent(${idx})"><i data-lucide="trash-2"></i></button>
+                    </div>
+                  ` : ''}
                 </div>
-              `).join('')}
+              `;}).join('')}
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function openEventModal() {
-        document.getElementById('evt_title').value = '';
-        document.getElementById('evt_start').value = getTodayString();
-        document.getElementById('evt_end').value = getTodayString();
-        document.getElementById('evt_desc').value = '';
+      function openEventModal(index = null) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can add or edit events.');
+          return;
+        }
+        const existing = index !== null ? (db.events || [])[index] : null;
+        document.getElementById('eventModalTitle').innerText = existing ? 'Edit Event' : 'Add Event';
+        document.getElementById('eventEditIndex').value = index !== null ? index : '';
+        document.getElementById('evt_title').value = existing ? (existing.Title || existing.title || '') : '';
+        document.getElementById('evt_start').value = existing ? toISODate(existing.StartDate || existing.startDate) : getTodayString();
+        document.getElementById('evt_end').value = existing ? toISODate(existing.EndDate || existing.endDate) : getTodayString();
+        document.getElementById('evt_desc').value = existing ? (existing.Description || existing.desc || '') : '';
         document.getElementById('eventModal').style.display = 'flex';
       }
 
       function saveEventItem(e) {
         e.preventDefault();
         if (!db.events) db.events = [];
-        db.events.push({
-          id: Date.now(),
+        const idxVal = document.getElementById('eventEditIndex').value;
+        const eventData = {
           Title: document.getElementById('evt_title').value,
           StartDate: document.getElementById('evt_start').value,
           EndDate: document.getElementById('evt_end').value,
           Description: document.getElementById('evt_desc').value
-        });
-        database.ref('EVLT_ADMIN_DB/events').set(db.events);
+        };
+        if (idxVal !== '' && db.events[idxVal]) {
+          db.events[idxVal] = { ...db.events[idxVal], ...eventData };
+        } else {
+          db.events.push({ id: Date.now(), ...eventData });
+        }
+        dbUpdate({ events: db.events });
         closeModal('eventModal');
+        renderEventsPage();
+      }
+
+      function deleteEvent(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can delete events.');
+          return;
+        }
+        const ev = (db.events || [])[index];
+        if (!ev) return;
+        if (!confirm(`Delete the event "${ev.Title || ev.title}"? This cannot be undone.`)) return;
+        db.events.splice(index, 1);
+        dbUpdate({ events: db.events });
         renderEventsPage();
       }
 
@@ -3282,6 +3389,68 @@
       function toggleEditArchTWNotes(val) {
         const group = document.getElementById('editArch_TW_NotesGroup');
         if (group) group.style.display = (val === 'Fail' || val === 'Not Completed') ? 'block' : 'none';
+      }
+
+      function openEditClockLogModal(id) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can edit clock log hours.');
+          return;
+        }
+        const existing = id !== null ? (db.clockLogs || []).find(l => l.id === id) : null;
+
+        const nameSel = document.getElementById('editClockLogName');
+        const vols = db.volunteers || [];
+        nameSel.innerHTML = '<option value="">-- Select Volunteer --</option>' + vols.map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)}</option>`).join('');
+
+        const timeSlots = generateTimeSlotOptions();
+        const inSel = document.getElementById('editClockLogIn');
+        const outSel = document.getElementById('editClockLogOut');
+        inSel.innerHTML = timeSlots.map(t => `<option value="${t}">${t}</option>`).join('');
+        outSel.innerHTML = timeSlots.map(t => `<option value="${t}">${t}</option>`).join('');
+
+        document.getElementById('editClockLogId').value = existing ? existing.id : '';
+        nameSel.value = existing ? existing.name : '';
+        document.getElementById('editClockLogDate').value = existing ? toISODate(existing.date) : getTodayString();
+        inSel.value = existing ? (existing.clockIn || '-') : '-';
+        outSel.value = existing ? (existing.clockOut || '-') : '-';
+
+        document.getElementById('editClockLogModal').style.display = 'flex';
+      }
+
+      function saveClockLogShiftEdit(e) {
+        e.preventDefault();
+        const id = document.getElementById('editClockLogId').value;
+        const name = document.getElementById('editClockLogName').value;
+        const date = document.getElementById('editClockLogDate').value;
+        const clockIn = document.getElementById('editClockLogIn').value;
+        const clockOut = document.getElementById('editClockLogOut').value;
+
+        if (!name) { alert('Please select a volunteer.'); return; }
+
+        if (!db.clockLogs) db.clockLogs = [];
+        const status = (clockOut && clockOut !== '-') ? 'Completed' : 'Clocked In';
+        const oldLog = id ? db.clockLogs.find(l => String(l.id) === String(id)) : null;
+        const oldDate = oldLog ? toISODate(oldLog.date) : null;
+
+        if (id && oldLog) {
+          oldLog.name = name;
+          oldLog.date = date;
+          oldLog.clockIn = clockIn;
+          oldLog.clockOut = clockOut;
+          oldLog.status = status;
+        } else {
+          db.clockLogs.push({ id: Date.now() + Math.random(), name, date, clockIn, clockOut, status });
+        }
+
+        // Keep historical archive attendance in sync for the affected date(s) — atomically.
+        syncArchiveForDate(date);
+        if (oldDate && oldDate !== toISODate(date)) syncArchiveForDate(oldDate);
+
+        dbUpdate({ clockLogs: db.clockLogs, historicalArchive: db.historicalArchive });
+
+        closeModal('editClockLogModal');
+        if (currentView === 'calendar') renderCalendarView();
+        else renderClockLogsPage();
       }
 
       function openEditArchiveModal(dateIso) {
@@ -3473,9 +3642,8 @@
           status: att.clockOut && att.clockOut !== '-' ? 'Completed' : 'Clocked In'
         }));
         db.clockLogs = [...existingLogsForDate, ...newClockLogs];
-        database.ref('EVLT_ADMIN_DB/clockLogs').set(db.clockLogs);
+        dbUpdate({ clockLogs: db.clockLogs, historicalArchive: db.historicalArchive });
 
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
         closeModal('editArchiveModal');
         renderArchives();
       }
