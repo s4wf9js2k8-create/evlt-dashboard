@@ -179,6 +179,37 @@
 
       .calendar-layout { display: grid; grid-template-columns: 1fr 350px; gap: 1.25rem; align-items: start; }
       .preview-thumb { width: 100%; max-height: 120px; object-fit: cover; border-radius: var(--radius); margin-top: 0.4rem; border: 1px solid var(--border); }
+      .track-diagram-wrap { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem; box-shadow: var(--shadow-sm); }
+      .track-diagram { display: block; width: 100%; min-height: 520px; background: #eef3ee; border-radius: var(--radius); }
+      .diagram-ground { fill: #eef3ee; }
+      .track-bed { fill: none; stroke: #475569; stroke-width: 24; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
+      .track-segment { fill: none; stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .18)); transition: stroke-width .15s ease, filter .15s ease; }
+      .track-segment:hover, .track-segment:focus { stroke-width: 20; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .28)); outline: none; }
+      .track-rail { fill: none; stroke: #f8fafc; stroke-width: 3; stroke-dasharray: 1 13; stroke-linecap: round; pointer-events: none; opacity: .95; }
+      .junction-marker { fill: #1e3a1e; stroke: #fff; stroke-width: 4; }
+      .yard-marker { fill: #fff; stroke: #475569; stroke-width: 2; }
+      .diagram-label { fill: #334155; font: 700 13px var(--font-sans); letter-spacing: .04em; }
+      .diagram-subtitle { fill: #64748b; font: 500 12px var(--font-sans); }
+      .diagram-legend text { fill: #475569; font: 600 12px var(--font-sans); }
+      .track-diagram-note { color: var(--text-muted); font-size: .72rem; margin-top: .65rem; }
+      [data-theme="dark"] .track-diagram-wrap { background: var(--card-bg); }
+      [data-theme="dark"] .track-diagram, [data-theme="dark"] .diagram-ground { background: #172033; fill: #172033; }
+      [data-theme="dark"] .diagram-label, [data-theme="dark"] .diagram-legend text { fill: #cbd5e1; }
+      .railway-layout-card { background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem; box-shadow:var(--shadow-sm); }
+      .railway-layout-toolbar { display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-wrap:wrap; margin-bottom:.75rem; }
+      .railway-palette { display:flex; gap:.4rem; flex-wrap:wrap; }
+      .railway-piece-button { display:inline-flex; align-items:center; gap:.35rem; padding:.4rem .55rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--card-bg); color:var(--text); cursor:pointer; font-size:.72rem; font-weight:700; }
+      .railway-piece-button:hover,.railway-piece-button:focus-visible { border-color:var(--primary); background:var(--primary-light); outline:none; }
+      .railway-layout-canvas { position:relative; width:100%; min-height:460px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background-color:#f8fafc; }
+      .railway-layout-canvas.editing { min-width:720px; }
+      .railway-layout-piece { position:absolute; width:120px; height:84px; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; color:#1e293b; cursor:grab; user-select:none; touch-action:none; font-size:.68rem; font-weight:700; }
+      .railway-layout-piece:active { cursor:grabbing; }
+      .railway-layout-piece svg { width:120px; height:84px; overflow:visible; pointer-events:none; filter:drop-shadow(0 1px 1px rgb(15 23 42 / .2)); }
+      .railway-layout-piece .rail { fill:none; stroke:#26364a; stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; }
+      .railway-layout-piece .sleeper { fill:none; stroke:#9aaabd; stroke-width:6; stroke-dasharray:1 12; stroke-linecap:butt; opacity:.7; }
+      .railway-layout-piece .branch { stroke:#315b31; }
+      .railway-layout-help { color:var(--text-muted); font-size:.72rem; margin-top:.65rem; }
+      [data-theme="dark"] .railway-layout-canvas { background-color:#172033; }
 
       #print-area { display: none; }
       @media print {
@@ -908,13 +939,19 @@
       let editingFleetIndex = null;
       let editingVolunteerIndex = null;
       let editingModuleKey = null;
+      let editingEurotunnelSequenceIndex = null;
+      let editingEurotunnelTrainIndex = null;
+      let editingRailwayTrackIndex = null;
+      let railwayTrackDraft = [];
+      let railwayLayoutDraft = [];
+      let railwayLayoutTrackIndex = null;
       let calendarCurrentDate = new Date();
       let selectedCalendarDateStr = getTodayString();
       let archiveSubView = 'historical';
 
       const AVAILABLE_TRAINS = ["Canadian Pacific", "DB", "Santa Fe", "George", "Edward", "Dylan", "June", "Daphne"];
       // Including "Management" role for page access controls
-      const DEFAULT_ROLES = ["Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom"];
+      const DEFAULT_ROLES = ["Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom", "Eurotunnel"];
 
       const ALL_PAGES = [
         { key: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', section: 'Main' },
@@ -927,8 +964,7 @@
         { key: 'actions', label: 'Actions', icon: 'check-square', section: 'Operations' },
         { key: 'maintenance', label: 'Maintenance & Fleet', icon: 'wrench', section: 'Operations' },
         { key: 'events', label: 'Events', icon: 'calendar-range', section: 'Operations' },
-        { key: 'assets', label: 'Assets', icon: 'box', section: 'Management' },
-        { key: 'stock', label: 'Stock', icon: 'package', section: 'Management' },
+        { key: 'eurotunnel', label: 'Eurotunnel N Gauge', icon: 'train-front', section: 'Operations' },
         { key: 'suppliers', label: 'Suppliers', icon: 'truck', section: 'Management' },
         { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
         { key: 'documents', label: 'Documents', icon: 'file-text', section: 'Management' },
@@ -1185,6 +1221,26 @@
           db.rolePageAccess = {};
         }
 
+        if (!db.eurotunnelTrains || !Array.isArray(db.eurotunnelTrains)) db.eurotunnelTrains = [];
+        if (!db.eurotunnelSequences || !Array.isArray(db.eurotunnelSequences)) db.eurotunnelSequences = [];
+        if (!db.eurotunnelTasks || !Array.isArray(db.eurotunnelTasks)) db.eurotunnelTasks = [];
+        if (!db.eurotunnelMaintenance || !Array.isArray(db.eurotunnelMaintenance)) db.eurotunnelMaintenance = [];
+        const railwayTrackDefaults = [
+          { id: 'running-loop', name: 'Running loop', health: 'Good', notes: '' },
+          { id: 'left-platform', name: 'Left platform', health: 'Good', notes: '' },
+          { id: 'right-platform', name: 'Right platform', health: 'Good', notes: '' },
+          { id: 'platform-crossover', name: 'Right exit to left platform crossover', health: 'Good', notes: '' },
+          { id: 'platform-throat', name: 'Platform convergence', health: 'Needs Inspection', notes: '' },
+          { id: 'northbound-line', name: 'Northbound single line', health: 'Good', notes: '' },
+          { id: 'right-platform-siding', name: 'Right platform short siding', health: 'Good', notes: '' }
+        ];
+        const previousTrackSections = Array.isArray(db.railwayTrackSections) ? db.railwayTrackSections : (db.eurotunnelTrackSections || []);
+        db.railwayTrackSections = railwayTrackDefaults.map(section => {
+          const previous = previousTrackSections.find(item => item.id === section.id || item.name === section.name);
+          return previous ? { ...section, health: previous.health || section.health, notes: previous.notes || '' } : section;
+        });
+        if (!db.railwayTracks || !Array.isArray(db.railwayTracks)) db.railwayTracks = [];
+
         if (!db.fleetItems || db.fleetItems.length === 0) {
           db.fleetItems = [
             { name: 'Canadian Pacific', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
@@ -1399,8 +1455,15 @@
       function userHasAccess(pageKey) {
         if (pageKey === 'myAccount') return !!(currentUser && currentUser.volData);
         if (!currentUser) return true;
-        if (currentUser.isSystemAdmin) return true;
         if (currentUser.isShopKiosk) return pageKey === 'clock';
+
+        if (pageKey === 'eurotunnel') {
+          const roles = String(currentUser.volData?.Roles || currentUser.volData?.roles || '')
+            .split(',').map(role => role.trim().toLowerCase());
+          return roles.includes('eurotunnel');
+        }
+
+        if (currentUser.isSystemAdmin) return true;
 
         // Always grant basic pages
         const alwaysGranted = ['dashboard', 'clock', 'incidents', 'calendar', 'actions', 'events', 'myAccount'];
@@ -1513,8 +1576,7 @@
           case 'actions': renderActionsPage(); break;
           case 'maintenance': renderMaintenancePage(); break;
           case 'events': renderEventsPage(); break;
-          case 'assets': renderGenericModule('Assets', 'Rolling stock and site equipment management.', 'assets'); break;
-          case 'stock': renderGenericModule('Stock', 'Shop and tearoom inventory tracking.', 'stock'); break;
+          case 'eurotunnel': renderEurotunnelPage(); break;
           case 'suppliers': renderGenericModule('Suppliers', 'Vendor contacts and accounts.', 'suppliers'); break;
           case 'enquiries': renderGenericModule('Enquiries', 'Visitor questions and bookings.', 'enquiries'); break;
           case 'documents': renderGenericModule('Documents', 'Rulebooks, policies, and safety guides.', 'documents'); break;
@@ -1676,6 +1738,7 @@
               <div class="stat-value" style="color:${overdueActions.length > 0 ? '#dc2626' : '#16a34a'};">${overdueActions.length}</div>
             </div>
           </div>
+          ${renderRailwayLayoutWorkspace()}
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
@@ -3413,6 +3476,483 @@
         renderEventsPage();
       }
 
+      function eurotunnelRoleRequired() {
+        const roles = String(currentUser?.volData?.Roles || currentUser?.volData?.roles || '')
+          .split(',').map(role => role.trim().toLowerCase());
+        return roles.includes('eurotunnel');
+      }
+
+      function eurotunnelSave(collection, records) {
+        db[collection] = records;
+        dbUpdate({ [collection]: records });
+      }
+
+      function trackHealthColor(health) {
+        return health === 'Good' ? '#16a34a' : health === 'Needs Inspection' ? '#ca8a04' : '#dc2626';
+      }
+
+      function renderTrackDiagram(sections) {
+        const byId = id => sections.find(section => section.id === id) || { health: 'Good', name: id, notes: '' };
+        const segment = id => {
+          const section = byId(id);
+          return `<path class="track-bed" d="${trackPaths[id]}" /><path class="track-segment" data-track-id="${id}" d="${trackPaths[id]}" stroke="${trackHealthColor(section.health)}" onclick="openTrackSectionModal('${id}')" onkeydown="if(event.key === 'Enter' || event.key === ' ') openTrackSectionModal('${id}')" tabindex="0" role="button" aria-label="${section.name}: ${section.health}" /><path class="track-rail" d="${trackPaths[id]}" />`;
+        };
+        return `<div class="track-diagram-wrap">
+          <svg class="track-diagram" viewBox="0 0 720 620" role="img" aria-label="Simplified 7 and a quarter inch railway diagram showing one running loop, two platforms, a crossover, a merged northbound line, and a short siding">
+            <rect class="diagram-ground" x="0" y="0" width="720" height="610" rx="10" />
+            <text class="diagram-label" x="24" y="30">PEENE YARD</text>
+            <text class="diagram-subtitle" x="24" y="49">7¼-inch northbound line</text>
+            <rect class="yard-marker" x="330" y="25" width="60" height="22" rx="4" />
+            ${segment('running-loop')}${segment('left-platform')}${segment('right-platform')}${segment('platform-crossover')}${segment('platform-throat')}${segment('northbound-line')}${segment('right-platform-siding')}
+            <text class="diagram-label" x="214" y="185">LEFT PLATFORM</text>
+            <text class="diagram-label" x="430" y="185">RIGHT PLATFORM</text>
+            <text class="diagram-subtitle" x="492" y="202">short siding</text>
+            <circle class="junction-marker" cx="360" cy="92" r="9" />
+            <text class="diagram-label" x="322" y="78">PLATFORM THROAT</text>
+            <text class="diagram-label" x="302" y="570">SINGLE RUNNING LOOP</text>
+            <g class="diagram-legend"><circle cx="24" cy="595" r="6" fill="#16a34a"/><text x="36" y="599">Good</text><circle cx="92" cy="595" r="6" fill="#ca8a04"/><text x="104" y="599">Needs inspection</text><circle cx="220" cy="595" r="6" fill="#dc2626"/><text x="232" y="599">Blocked / poor</text></g>
+          </svg>
+          <p class="track-diagram-note">Original operational sketch based on the supplied aerial trace. Select a coloured section to update its condition and notes.</p>
+        </div>`;
+      }
+
+      const trackPaths = {
+        'running-loop': 'M270 275 C170 245 105 325 135 425 C165 525 275 560 360 515 C445 560 555 525 585 425 C615 325 550 245 450 275',
+        'left-platform': 'M270 275 C300 250 320 205 335 145 C342 120 350 103 360 92',
+        'right-platform': 'M450 275 C420 250 400 205 385 145 C378 120 370 103 360 92',
+        'platform-crossover': 'M450 275 C415 285 380 270 350 235 C335 218 325 200 320 180',
+        'platform-throat': 'M335 145 C342 120 350 103 360 92 M385 145 C378 120 370 103 360 92',
+        'northbound-line': 'M360 92 L360 35',
+        'right-platform-siding': 'M420 235 C465 215 505 205 545 215'
+      };
+
+      function openTrackSectionModal(sectionId) {
+        const section = (db.railwayTrackSections || []).find(item => item.id === sectionId);
+        if (!section) return;
+        editingModuleKey = 'railwayTrackSections';
+        document.getElementById('genericModalTitle').innerText = `Update ${section.name}`;
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track section</label><input id="railwayTrackName" readonly value="${section.name}"></div><div class="form-group"><label>Health / state</label><select id="railwayTrackHealth"><option>Good</option><option>Needs Inspection</option><option>Blocked / Poor</option></select></div><div class="form-group"><label>Inspection notes</label><textarea id="railwayTrackNotes" rows="4" placeholder="Record defects, work required, or inspection notes"></textarea></div>`;
+        document.getElementById('railwayTrackHealth').value = section.health || 'Good';
+        document.getElementById('railwayTrackNotes').value = section.notes || '';
+        document.getElementById('genericModal').dataset.trackSectionId = sectionId;
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function saveRailwayTrackSection() {
+        const modal = document.getElementById('genericModal');
+        const sectionId = modal.dataset.trackSectionId;
+        const sections = db.railwayTrackSections || [];
+        const section = sections.find(item => item.id === sectionId);
+        if (!section) return;
+        section.health = document.getElementById('railwayTrackHealth').value;
+        section.notes = document.getElementById('railwayTrackNotes').value;
+        dbUpdate({ railwayTrackSections: sections });
+        closeModal('genericModal');
+        renderDashboard();
+      }
+
+      const RAILWAY_PIECES = [
+        ['straight', 'Straight', 'A standard straight track section'],
+        ['curve', '45° curve', 'Four pieces make a 180° turn'],
+        ['left-point', 'Left point', 'Branches left from the running line'],
+        ['right-point', 'Right point', 'Branches right from the running line'],
+        ['middle-point', 'Middle point', 'A central point or crossing section'],
+        ['curved-point', 'Curved point', 'A point leading into a curved route']
+      ];
+
+      function railwayPieceLabel(type) {
+        return (RAILWAY_PIECES.find(piece => piece[0] === type) || ['', type])[1];
+      }
+
+      function renderRailwayTrackBuilder() {
+        const tracks = db.railwayTracks || [];
+        return `<div class="section-group railway-builder"><div class="section-header">7¼-inch track builder <button class="btn btn-primary btn-sm" onclick="openRailwayTrackModal()"><i data-lucide="plus"></i> Create track</button></div><div class="card" style="padding:1rem;"><p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.85rem;">Admin-only workspace for assembling named track plans from standard reusable pieces.</p>${tracks.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.75rem;">${tracks.map((track, index) => `<article style="border:1px solid var(--border);border-radius:var(--radius);padding:.8rem;background:var(--bg);"><div style="display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;"><strong>${track.name}</strong><span style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} pieces</span></div><div style="display:flex;flex-wrap:wrap;gap:.3rem;margin:.65rem 0;">${track.pieces.map((piece, pieceIndex) => `<span class="train-tag">${pieceIndex + 1}. ${railwayPieceLabel(piece)}</span>`).join('')}</div><div style="display:flex;gap:.4rem;"><button class="btn btn-secondary btn-sm" onclick="openRailwayTrackModal(${index})"><i data-lucide="edit"></i> Edit</button><button class="btn btn-danger btn-sm" onclick="deleteRailwayTrack(${index})"><i data-lucide="trash-2"></i></button></div></article>`).join('')}</div>` : '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.8rem;">No saved track plans yet. Create one to start assembling the railway.</div>'}</div></div>`;
+      }
+
+      function renderRailwayPieceDraft() {
+        const container = document.getElementById('railwayPieceDraft');
+        if (!container) return;
+        container.innerHTML = railwayTrackDraft.length ? railwayTrackDraft.map((piece, index) => `<div style="display:flex;align-items:center;gap:.4rem;padding:.45rem .5rem;border:1px solid var(--border);border-radius:var(--radius);background:white;"><strong style="min-width:1.4rem;color:var(--text-muted);">${index + 1}</strong><span style="flex:1;font-size:.8rem;">${railwayPieceLabel(piece)}</span><button class="btn btn-secondary btn-sm" type="button" onclick="moveRailwayPiece(${index}, -1)" ${index === 0 ? 'disabled' : ''}><i data-lucide="chevron-up"></i></button><button class="btn btn-secondary btn-sm" type="button" onclick="moveRailwayPiece(${index}, 1)" ${index === railwayTrackDraft.length - 1 ? 'disabled' : ''}><i data-lucide="chevron-down"></i></button><button class="btn btn-danger btn-sm" type="button" onclick="removeRailwayPiece(${index})"><i data-lucide="x"></i></button></div>`).join('') : '<span style="font-size:.75rem;color:var(--text-muted);">No pieces added. Choose a preset above and press Add piece.</span>';
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function openRailwayTrackModal(index = null) {
+        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can create or edit track plans.');
+        editingRailwayTrackIndex = index;
+        const existing = index !== null ? (db.railwayTracks || [])[index] : null;
+        railwayTrackDraft = existing ? [...existing.pieces] : [];
+        editingModuleKey = 'railwayTracks';
+        document.getElementById('genericModalTitle').innerText = existing ? 'Edit 7¼-inch Track Plan' : 'Create 7¼-inch Track Plan';
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track plan name</label><input id="railwayTrackPlanName" required placeholder="e.g. Main running loop"></div><div class="form-group"><label>Add preset piece</label><div style="display:flex;gap:.4rem;"><select id="railwayPieceSelect" style="flex:1;">${RAILWAY_PIECES.map(piece => `<option value="${piece[0]}">${piece[1]} - ${piece[2]}</option>`).join('')}</select><button class="btn btn-secondary btn-sm" type="button" onclick="addRailwayPiece()"><i data-lucide="plus"></i> Add piece</button></div></div><div class="form-group"><label>Track plan order</label><div id="railwayPieceDraft" style="display:flex;flex-direction:column;gap:.4rem;border:1px solid var(--border);padding:.6rem;border-radius:var(--radius);background:#f8fafc;min-height:44px;"></div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">Build the track from left to right or from the yard outward. Reorder pieces with the arrows.</p></div>`;
+        document.getElementById('railwayTrackPlanName').value = existing?.name || '';
+        renderRailwayPieceDraft();
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function addRailwayPiece() {
+        const select = document.getElementById('railwayPieceSelect');
+        if (!select || !select.value) return;
+        railwayTrackDraft.push(select.value);
+        renderRailwayPieceDraft();
+      }
+
+      function moveRailwayPiece(index, direction) {
+        const target = index + direction;
+        if (target < 0 || target >= railwayTrackDraft.length) return;
+        [railwayTrackDraft[index], railwayTrackDraft[target]] = [railwayTrackDraft[target], railwayTrackDraft[index]];
+        renderRailwayPieceDraft();
+      }
+
+      function removeRailwayPiece(index) {
+        railwayTrackDraft.splice(index, 1);
+        renderRailwayPieceDraft();
+      }
+
+      function saveRailwayTrackPlan() {
+        if (!railwayTrackDraft.length) return alert('Add at least one preset track piece first.');
+        const tracks = db.railwayTracks || [];
+        const record = { id: editingRailwayTrackIndex === null ? Date.now() : (tracks[editingRailwayTrackIndex]?.id || Date.now()), name: document.getElementById('railwayTrackPlanName').value.trim(), pieces: [...railwayTrackDraft], updatedAt: getTodayString() };
+        if (!record.name) return alert('Give the track plan a name first.');
+        if (editingRailwayTrackIndex === null) tracks.push(record);
+        else tracks[editingRailwayTrackIndex] = record;
+        dbUpdate({ railwayTracks: tracks });
+        editingRailwayTrackIndex = null;
+        railwayTrackDraft = [];
+        closeModal('genericModal');
+        renderDashboard();
+      }
+
+      function deleteRailwayTrack(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete track plans.');
+        if (!confirm('Delete this saved track plan?')) return;
+        const tracks = db.railwayTracks || [];
+        tracks.splice(index, 1);
+        dbUpdate({ railwayTracks: tracks });
+        renderDashboard();
+      }
+
+      function renderRailwayLayoutWorkspace() {
+        const tracks = db.railwayTracks || [];
+        const admin = currentUser && currentUser.isSystemAdmin;
+        return `<div class="section-group"><div class="section-header">7¼-inch physical track plans ${admin ? '<button class="btn btn-primary btn-sm" onclick="openRailwayLayoutEditor()"><i data-lucide="plus"></i> Build track plan</button>' : ''}</div>${tracks.length ? tracks.map((track, index) => `<div class="railway-layout-card" style="margin-bottom:.85rem;"><div class="railway-layout-toolbar"><div><strong>${track.name}</strong><div style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} physical piece${track.pieces.length === 1 ? '' : 's'} · saved ${formatDisplayDate(track.updatedAt) || 'today'}</div></div>${admin ? `<div style="display:flex;gap:.4rem;"><button class="btn btn-secondary btn-sm" onclick="openRailwayLayoutEditor(${index})"><i data-lucide="edit"></i> Edit layout</button><button class="btn btn-danger btn-sm" onclick="deleteRailwayLayout(${index})"><i data-lucide="trash-2"></i></button></div>` : ''}</div>${renderRailwayLayoutCanvas(track, false)}</div>`).join('') : `<div class="railway-layout-card"><p style="font-size:.8rem;color:var(--text-muted);">No physical track plan has been saved yet.${admin ? ' Build one by choosing pieces from the editor.' : ''}</p></div>`}</div>`;
+      }
+
+      function railwayPieceSvg(type) {
+        const rail = (path, className = 'rail') => `<path class="${className}" d="${path}" />`;
+        const sleepers = path => `<path class="sleeper" d="${path}" />`;
+        if (type === 'curve') return `<svg viewBox="0 0 120 84" aria-label="45 degree curve"><path class="sleeper" d="M14 68 C27 38 48 18 76 12" />${rail('M16 64 C28 35 49 17 72 12')}${rail('M22 70 C34 41 55 23 78 18')}</svg>`;
+        if (type === 'left-point') return `<svg viewBox="0 0 120 84" aria-label="Left point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M58 37 L92 70', 'rail branch')}${rail('M58 47 L88 76', 'rail branch')}</svg>`;
+        if (type === 'right-point') return `<svg viewBox="0 0 120 84" aria-label="Right point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M62 37 L28 70', 'rail branch')}${rail('M62 47 L32 76', 'rail branch')}</svg>`;
+        if (type === 'middle-point') return `<svg viewBox="0 0 120 84" aria-label="Middle point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M48 37 L82 8', 'rail branch')}${rail('M48 47 L82 18', 'rail branch')}${rail('M72 37 L104 68', 'rail branch')}${rail('M72 47 L100 76', 'rail branch')}</svg>`;
+        if (type === 'curved-point') return `<svg viewBox="0 0 120 84" aria-label="Curved point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M52 37 Q76 14 108 20', 'rail branch')}${rail('M52 47 Q78 24 108 30', 'rail branch')}</svg>`;
+        return `<svg viewBox="0 0 120 84" aria-label="Straight">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}</svg>`;
+      }
+
+      function renderRailwayLayoutCanvas(track, editing) {
+        const pieces = track.pieces || [];
+        return `<div class="railway-layout-canvas${editing ? ' editing' : ''}" id="railwayLayoutCanvas">${pieces.map((piece, index) => { const item = typeof piece === 'string' ? { type: piece, x: 20 + (index % 4) * 140, y: 20 + Math.floor(index / 4) * 60, rotation: 0 } : piece; return `<div class="railway-layout-piece ${item.type}" data-layout-index="${index}" style="left:${item.x || 20}px;top:${item.y || 20}px;transform:rotate(${item.rotation || 0}deg);" ${editing ? `onpointerdown="startRailwayPieceDrag(event, ${index})" ondblclick="rotateRailwayPiece(${index})"` : ''}>${railwayPieceSvg(item.type)}</div>`; }).join('')}</div>`;
+      }
+
+      function openRailwayLayoutEditor(index = null) {
+        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can edit physical track plans.');
+        railwayLayoutTrackIndex = index;
+        const existing = index !== null ? (db.railwayTracks || [])[index] : null;
+        railwayLayoutDraft = existing ? existing.pieces.map((piece, pieceIndex) => typeof piece === 'string' ? { id: Date.now() + pieceIndex, type: piece, x: 20 + (pieceIndex % 4) * 140, y: 20 + Math.floor(pieceIndex / 4) * 60, rotation: 0 } : { ...piece }) : [];
+        editingModuleKey = 'railwayLayout';
+        document.getElementById('genericModalTitle').innerText = existing ? 'Edit Physical Track Plan' : 'Build Physical Track Plan';
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track plan name</label><input id="railwayLayoutName" required placeholder="e.g. Peene Yard running loop"></div><div class="railway-layout-toolbar"><div class="railway-palette">${RAILWAY_PIECES.map(piece => `<button class="railway-piece-button" type="button" onclick="addRailwayLayoutPiece('${piece[0]}')" title="${piece[2]}">${piece[1]}</button>`).join('')}</div><button class="btn btn-secondary btn-sm" type="button" onclick="clearRailwayLayout()"><i data-lucide="rotate-ccw"></i> Clear</button></div><div id="railwayLayoutEditorCanvas"></div><p class="railway-layout-help">Click a preset to add it. Drag pieces freely; matching rail connectors snap and align when they are brought close. Double-click a piece to rotate it 45°.</p>`;
+        document.getElementById('railwayLayoutName').value = existing?.name || '';
+        renderRailwayLayoutEditorCanvas();
+        document.getElementById('genericModal').style.display = 'flex';
+        if (window.lucide) lucide.createIcons();
+      }
+
+      function renderRailwayLayoutEditorCanvas() {
+        const target = document.getElementById('railwayLayoutEditorCanvas');
+        if (!target) return;
+        target.innerHTML = renderRailwayLayoutCanvas({ pieces: railwayLayoutDraft }, true);
+      }
+
+      function addRailwayLayoutPiece(type) {
+        const last = railwayLayoutDraft[railwayLayoutDraft.length - 1];
+        railwayLayoutDraft.push({ id: Date.now() + Math.random(), type, x: last ? Math.min((last.x || 20) + 140, 560) : 40, y: last ? Math.min((last.y || 20) + 60, 390) : 40, rotation: 0 });
+        renderRailwayLayoutEditorCanvas();
+      }
+
+      function clearRailwayLayout() {
+        if (!confirm('Clear all pieces from this track plan?')) return;
+        railwayLayoutDraft = [];
+        renderRailwayLayoutEditorCanvas();
+      }
+
+      function railwayPiecePorts(piece) {
+        const x = piece.x || 0;
+        const y = piece.y || 0;
+        const rotation = ((piece.rotation || 0) * Math.PI) / 180;
+        const localPorts = piece.type === 'curve'
+          ? [{ x: 16, y: 64, angle: -2.1 }, { x: 72, y: 12, angle: -0.45 }]
+          : piece.type.includes('point')
+            ? [{ x: 0, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }, { x: piece.type === 'left-point' ? 88 : 32, y: 76, angle: piece.type === 'left-point' ? 1.1 : 2.1 }]
+            : [{ x: 10, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }];
+        return localPorts.map(port => {
+          const cx = piece.type === 'curve' ? 48 : 60;
+          const cy = 42;
+          const dx = port.x - cx;
+          const dy = port.y - cy;
+          return { x: x + cx + dx * Math.cos(rotation) - dy * Math.sin(rotation), y: y + cy + dx * Math.sin(rotation) + dy * Math.cos(rotation), angle: port.angle + rotation };
+        });
+      }
+
+      function snapRailwayPiece(index) {
+        const piece = railwayLayoutDraft[index];
+        if (!piece) return;
+        const ownPorts = railwayPiecePorts(piece);
+        let best = null;
+        railwayLayoutDraft.forEach((other, otherIndex) => {
+          if (otherIndex === index) return;
+          railwayPiecePorts(other).forEach(target => {
+            ownPorts.forEach((source, sourceIndex) => {
+              const distance = Math.hypot(target.x - source.x, target.y - source.y);
+              if (distance <= 42 && (!best || distance < best.distance)) best = { target, source, sourceIndex, distance };
+            });
+          });
+        });
+        if (best) {
+          const alignedSource = railwayPiecePorts(piece)[best.sourceIndex];
+          piece.x += best.target.x - alignedSource.x;
+          piece.y += best.target.y - alignedSource.y;
+        }
+        piece.x = Math.max(0, Math.min(580, Math.round(piece.x)));
+        piece.y = Math.max(0, Math.min(410, Math.round(piece.y)));
+      }
+
+      function rotateRailwayPiece(index) {
+        if (!railwayLayoutDraft[index]) return;
+        railwayLayoutDraft[index].rotation = ((railwayLayoutDraft[index].rotation || 0) + 45) % 360;
+        renderRailwayLayoutEditorCanvas();
+      }
+
+      function startRailwayPieceDrag(event, index) {
+        event.preventDefault();
+        const piece = railwayLayoutDraft[index];
+        const canvas = event.currentTarget.parentElement;
+        const bounds = canvas.getBoundingClientRect();
+        const move = moveEvent => {
+          piece.x = Math.max(0, Math.min(580, Math.round(moveEvent.clientX - bounds.left - 60)));
+          piece.y = Math.max(0, Math.min(410, Math.round(moveEvent.clientY - bounds.top - 42)));
+          const element = canvas.querySelector(`[data-layout-index="${index}"]`);
+          if (element) { element.style.left = `${piece.x}px`; element.style.top = `${piece.y}px`; }
+        };
+        const stop = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', stop); snapRailwayPiece(index); renderRailwayLayoutEditorCanvas(); };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', stop, { once:true });
+      }
+
+      function saveRailwayLayout() {
+        if (!railwayLayoutDraft.length) return alert('Add at least one physical track piece first.');
+        const name = document.getElementById('railwayLayoutName').value.trim();
+        if (!name) return alert('Give the physical track plan a name first.');
+        const tracks = db.railwayTracks || [];
+        const record = { id: railwayLayoutTrackIndex === null ? Date.now() : (tracks[railwayLayoutTrackIndex]?.id || Date.now()), name, pieces: railwayLayoutDraft.map(piece => ({ ...piece })), updatedAt: getTodayString() };
+        if (railwayLayoutTrackIndex === null) tracks.push(record);
+        else tracks[railwayLayoutTrackIndex] = record;
+        dbUpdate({ railwayTracks: tracks });
+        railwayLayoutDraft = [];
+        railwayLayoutTrackIndex = null;
+        closeModal('genericModal');
+        renderDashboard();
+      }
+
+      function deleteRailwayLayout(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete physical track plans.');
+        if (!confirm('Delete this physical track plan?')) return;
+        const tracks = db.railwayTracks || [];
+        tracks.splice(index, 1);
+        dbUpdate({ railwayTracks: tracks });
+        renderDashboard();
+      }
+
+      function renderEurotunnelPage() {
+        if (!eurotunnelRoleRequired()) {
+          document.getElementById('content').innerHTML = '<div class="card" style="padding:2rem; text-align:center;"><h2>Access restricted</h2><p style="margin-top:.5rem; color:var(--text-muted);">This workspace is only available to volunteers with the Eurotunnel role.</p></div>';
+          return;
+        }
+
+        const content = document.getElementById('content');
+        const trains = db.eurotunnelTrains || [];
+        const sequences = db.eurotunnelSequences || [];
+        const tasks = db.eurotunnelTasks || [];
+        const maintenance = db.eurotunnelMaintenance || [];
+        const openTasks = tasks.filter(task => String(task.status || 'Open') !== 'Complete');
+        const serviceTrains = trains.filter(train => String(train.status || '').toLowerCase() === 'in service');
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title"><h2>Eurotunnel N Gauge Railway</h2><p>Manage the Folkestone terminal model railway, rolling stock, sequences, and maintenance.</p></div>
+            <div style="display:flex; gap:.4rem; flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="openEurotunnelModal('eurotunnelTrains')"><i data-lucide="train-front"></i> Add train</button>
+              <button class="btn btn-primary btn-sm" onclick="openEurotunnelModal('eurotunnelSequences')"><i data-lucide="list-ordered"></i> Add sequence</button>
+            </div>
+          </div>
+
+          <div class="grid-stats">
+            <div class="stat-card"><div class="stat-header"><span>Trains in service</span><div class="stat-icon"><i data-lucide="train-front"></i></div></div><div class="stat-value">${serviceTrains.length}</div></div>
+            <div class="stat-card"><div class="stat-header"><span>Saved sequences</span><div class="stat-icon"><i data-lucide="list-ordered"></i></div></div><div class="stat-value">${sequences.length}</div></div>
+            <div class="stat-card"><div class="stat-header"><span>Trains available</span><div class="stat-icon"><i data-lucide="train-front"></i></div></div><div class="stat-value">${trains.length}</div></div>
+            <div class="stat-card"><div class="stat-header"><span>Open tasks</span><div class="stat-icon"><i data-lucide="clipboard-list"></i></div></div><div class="stat-value">${openTasks.length}</div></div>
+          </div>
+
+          <div class="section-group"><div class="section-header">Rolling stock and consists <button class="btn btn-primary btn-sm" onclick="openEurotunnelModal('eurotunnelTrains')"><i data-lucide="plus"></i> Add train</button></div><div class="card"><div class="table-container"><table><thead><tr><th>Train / unit</th><th>Formation</th><th>Location</th><th>Condition</th><th>Status</th><th>Maintenance</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${trains.length ? trains.map((train, index) => { const trainLogs = maintenance.filter(log => log.trainName === train.name); return `<tr><td><strong>${train.name || '-'}</strong><div style="font-size:.7rem;color:var(--text-muted);">${train.className || 'N gauge unit'}</div></td><td>${train.formation || '-'}</td><td>${train.location || '-'}</td><td>${train.condition || '-'}</td><td>${train.status || 'Planned'}</td><td>${trainLogs.length} record${trainLogs.length === 1 ? '' : 's'}</td><td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="openEurotunnelModal('eurotunnelTrains', ${index})"><i data-lucide="edit"></i> Edit</button> <button class="btn btn-secondary btn-sm" onclick="openEurotunnelModal('eurotunnelMaintenance', null, '${String(train.name).replace(/'/g, "\\'")}')"><i data-lucide="wrench"></i> Log</button> <button class="btn btn-danger btn-sm" onclick="deleteEurotunnelRecord('eurotunnelTrains', ${index})"><i data-lucide="trash-2"></i></button></td></tr>`; }).join('') : '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">No N gauge trains recorded yet.</td></tr>'}</tbody></table></div></div></div>
+
+          <div style="display:grid;grid-template-columns:1fr;gap:1.25rem;align-items:start;">
+            <div class="section-group"><div class="section-header">Train sequences <button class="btn btn-primary btn-sm" onclick="openEurotunnelModal('eurotunnelSequences')"><i data-lucide="plus"></i> Add sequence</button></div><div class="card"><div class="table-container"><table><thead><tr><th>Sequence</th><th>Trains in order</th><th>Purpose</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${sequences.length ? sequences.map((sequence, index) => `<tr><td><strong>${sequence.name || '-'}</strong></td><td>${(sequence.trainNames || []).map((train, trainIndex) => `<span class="train-tag">${trainIndex + 1}. ${train}</span>`).join('') || '-'}</td><td>${sequence.purpose || '-'}</td><td>${sequence.status || 'Draft'}</td><td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="openEurotunnelModal('eurotunnelSequences', ${index})"><i data-lucide="edit"></i> Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteEurotunnelRecord('eurotunnelSequences', ${index})"><i data-lucide="trash-2"></i></button></td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No train sequences recorded yet. Add one to build an ordered consist.</td></tr>'}</tbody></table></div></div></div>
+            <div class="section-group"><div class="section-header">Maintenance and presentation tasks <button class="btn btn-secondary btn-sm" onclick="openEurotunnelModal('eurotunnelTasks')"><i data-lucide="plus"></i> Add task</button></div><div class="card"><div class="table-container"><table><thead><tr><th>Task</th><th>Area</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>${tasks.length ? tasks.map((task, index) => `<tr><td><strong>${task.title || '-'}</strong><div style="font-size:.7rem;color:var(--text-muted);">${task.assignedTo || 'Unassigned'}</div></td><td>${task.area || '-'}</td><td>${formatDisplayDate(task.dueDate) || '-'}</td><td>${task.status || 'Open'}</td><td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteEurotunnelRecord('eurotunnelTasks', ${index})"><i data-lucide="trash-2"></i></button></td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted);">No Eurotunnel tasks recorded yet.</td></tr>'}</tbody></table></div></div></div>
+          </div>
+          <div class="section-group"><div class="section-header">Per-train maintenance log <button class="btn btn-primary btn-sm" onclick="openEurotunnelModal('eurotunnelMaintenance')"><i data-lucide="plus"></i> Add maintenance record</button></div><div class="card"><div class="table-container"><table><thead><tr><th>Date</th><th>Train</th><th>Work completed</th><th>Condition after work</th><th>Completed by</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${maintenance.length ? maintenance.slice().reverse().map((log, index) => `<tr><td>${formatDisplayDate(log.date) || '-'}</td><td><strong>${log.trainName || '-'}</strong></td><td>${log.work || '-'}</td><td>${log.condition || '-'}</td><td>${log.completedBy || '-'}</td><td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteEurotunnelRecord('eurotunnelMaintenance', ${maintenance.length - 1 - index})"><i data-lucide="trash-2"></i></button></td></tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">No train maintenance records recorded yet.</td></tr>'}</tbody></table></div></div></div>
+          <p style="font-size:.72rem;color:var(--text-muted);margin-top:1rem;">This page is intentionally restricted to volunteers whose profile includes the exact Eurotunnel role.</p>
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openEurotunnelModal(collection, sequenceIndex = null, trainName = '') {
+        if (!eurotunnelRoleRequired()) return alert('Only volunteers with the Eurotunnel role can edit this workspace.');
+        editingModuleKey = collection;
+        editingEurotunnelSequenceIndex = collection === 'eurotunnelSequences' ? sequenceIndex : null;
+        editingEurotunnelTrainIndex = collection === 'eurotunnelTrains' ? sequenceIndex : null;
+        const fields = document.getElementById('genericFormFields');
+        const definitions = {
+          eurotunnelTrains: { title: sequenceIndex === null ? 'Add N Gauge Train' : 'Edit N Gauge Train', html: '<div class="form-group"><label>Train / unit name</label><input id="euroName" required placeholder="e.g. Eurostar Class 373"></div><div class="form-group"><label>Class or identity</label><input id="euroClass" placeholder="e.g. 373 / power car"></div><div class="form-group"><label>Formation</label><input id="euroFormation" placeholder="e.g. 8-car set"></div><div class="form-group"><label>Location</label><input id="euroLocation" placeholder="e.g. Terminal platform 2"></div><div class="form-group"><label>Condition</label><input id="euroCondition" placeholder="e.g. Good, repair needed"></div><div class="form-group"><label>Status</label><select id="euroStatus"><option>In Service</option><option>Stored</option><option>Under Repair</option><option>Planned</option></select></div>' },
+          eurotunnelSequences: { title: sequenceIndex === null ? 'Add Train Sequence' : 'Edit Train Sequence', html: '<div class="form-group"><label>Sequence name</label><input id="euroSequenceName" required placeholder="e.g. Folkestone terminal departure"></div><div class="form-group"><label>Purpose or operating note</label><input id="euroPurpose" placeholder="e.g. Passenger service display"></div><div class="form-group"><label>Status</label><select id="euroSequenceStatus"><option>Draft</option><option>Ready</option><option>In Use</option><option>Archived</option></select></div><div class="form-group"><label>Add trains to this sequence</label><div style="display:flex;gap:.4rem;"><select id="euroTrainSelect" style="flex:1;"></select><button class="btn btn-secondary btn-sm" type="button" onclick="addEurotunnelSequenceTrain()"><i data-lucide="plus"></i> Add</button></div></div><div class="form-group"><label>Sequence order</label><div id="euroSequenceBuilder" style="display:flex;flex-direction:column;gap:.4rem;border:1px solid var(--border);padding:.6rem;border-radius:var(--radius);background:#f8fafc;min-height:42px;"></div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">Use the arrows to set the exact order of the trains.</p></div>' },
+          eurotunnelTasks: { title: 'Add Eurotunnel Task', html: '<div class="form-group"><label>Task title</label><input id="euroTitle" required placeholder="e.g. Clean terminal platform edges"></div><div class="form-group"><label>Area</label><input id="euroArea" placeholder="e.g. Passenger terminal"></div><div class="form-group"><label>Due date</label><input id="euroDueDate" type="date" value="' + getTodayString() + '"></div><div class="form-group"><label>Assigned to</label><input id="euroAssigned" placeholder="Volunteer or team"></div><div class="form-group"><label>Status</label><select id="euroStatus"><option>Open</option><option>In Progress</option><option>Complete</option><option>Blocked</option></select></div>' },
+          eurotunnelMaintenance: { title: 'Add Train Maintenance Record', html: '<div class="form-group"><label>Train</label><select id="euroMaintenanceTrain" required></select></div><div class="form-group"><label>Date</label><input id="euroMaintenanceDate" type="date" required value="' + getTodayString() + '"></div><div class="form-group"><label>Work completed</label><textarea id="euroMaintenanceWork" rows="3" required placeholder="Describe cleaning, repair, inspection, or wheel work"></textarea></div><div class="form-group"><label>Condition after work</label><input id="euroMaintenanceCondition" placeholder="e.g. Ready for service"></div><div class="form-group"><label>Completed by</label><input id="euroMaintenanceBy" placeholder="Volunteer name"></div>' },
+        };
+        const definition = definitions[collection];
+        document.getElementById('genericModalTitle').innerText = definition.title;
+        fields.innerHTML = definition.html;
+        if (collection === 'eurotunnelSequences') {
+          const availableTrains = db.eurotunnelTrains || [];
+          const select = document.getElementById('euroTrainSelect');
+          select.innerHTML = availableTrains.length
+            ? availableTrains.map(train => `<option value="${train.name}">${train.name} (${train.className || 'N gauge unit'})</option>`).join('')
+            : '<option value="">Add a train first</option>';
+          const existing = sequenceIndex !== null ? (db.eurotunnelSequences || [])[sequenceIndex] : null;
+          document.getElementById('euroSequenceName').value = existing?.name || '';
+          document.getElementById('euroPurpose').value = existing?.purpose || '';
+          document.getElementById('euroSequenceStatus').value = existing?.status || 'Draft';
+          renderEurotunnelSequenceBuilder(existing?.trainNames || []);
+        }
+        if (collection === 'eurotunnelTrains') {
+          const existing = sequenceIndex !== null ? (db.eurotunnelTrains || [])[sequenceIndex] : null;
+          document.getElementById('euroName').value = existing?.name || '';
+          document.getElementById('euroClass').value = existing?.className || '';
+          document.getElementById('euroFormation').value = existing?.formation || '';
+          document.getElementById('euroLocation').value = existing?.location || '';
+          document.getElementById('euroCondition').value = existing?.condition || '';
+          document.getElementById('euroStatus').value = existing?.status || 'In Service';
+        }
+        if (collection === 'eurotunnelMaintenance') {
+          const trainSelect = document.getElementById('euroMaintenanceTrain');
+          trainSelect.innerHTML = (db.eurotunnelTrains || []).map(train => `<option value="${train.name}">${train.name}</option>`).join('');
+          if (trainName) trainSelect.value = trainName;
+        }
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function getEurotunnelSequenceTrains() {
+        return Array.from(document.querySelectorAll('.euro-sequence-train')).map(input => input.value);
+      }
+
+      function renderEurotunnelSequenceBuilder(trainNames) {
+        const builder = document.getElementById('euroSequenceBuilder');
+        if (!builder) return;
+        builder.innerHTML = trainNames.length ? trainNames.map((name, index) => `
+          <div style="display:flex;align-items:center;gap:.4rem;padding:.4rem .45rem;border:1px solid var(--border);border-radius:var(--radius);background:white;">
+            <strong style="min-width:1.4rem;color:var(--text-muted);">${index + 1}</strong>
+            <span style="flex:1;font-size:.8rem;">${name}</span>
+            <input class="euro-sequence-train" type="hidden" value="${name}">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="moveEurotunnelSequenceTrain(${index}, -1)" aria-label="Move ${name} up" ${index === 0 ? 'disabled' : ''}><i data-lucide="chevron-up"></i></button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="moveEurotunnelSequenceTrain(${index}, 1)" aria-label="Move ${name} down" ${index === trainNames.length - 1 ? 'disabled' : ''}><i data-lucide="chevron-down"></i></button>
+            <button class="btn btn-danger btn-sm" type="button" onclick="removeEurotunnelSequenceTrain(${index})" aria-label="Remove ${name}"><i data-lucide="x"></i></button>
+          </div>
+        `).join('') : '<span style="font-size:.75rem;color:var(--text-muted);">No trains added. Choose a train above, then press Add.</span>';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addEurotunnelSequenceTrain() {
+        const select = document.getElementById('euroTrainSelect');
+        if (!select || !select.value) return;
+        const trainNames = getEurotunnelSequenceTrains();
+        trainNames.push(select.value);
+        renderEurotunnelSequenceBuilder(trainNames);
+      }
+
+      function moveEurotunnelSequenceTrain(index, direction) {
+        const trainNames = getEurotunnelSequenceTrains();
+        const target = index + direction;
+        if (target < 0 || target >= trainNames.length) return;
+        [trainNames[index], trainNames[target]] = [trainNames[target], trainNames[index]];
+        renderEurotunnelSequenceBuilder(trainNames);
+      }
+
+      function removeEurotunnelSequenceTrain(index) {
+        const trainNames = getEurotunnelSequenceTrains();
+        trainNames.splice(index, 1);
+        renderEurotunnelSequenceBuilder(trainNames);
+      }
+
+      function saveGenericItem(e) {
+        e.preventDefault();
+        if (editingModuleKey === 'railwayTrackSections') {
+          saveRailwayTrackSection();
+          return;
+        }
+        if (editingModuleKey === 'railwayTracks') {
+          saveRailwayTrackPlan();
+          return;
+        }
+        if (editingModuleKey === 'railwayLayout') {
+          saveRailwayLayout();
+          return;
+        }
+        if (editingModuleKey && editingModuleKey.startsWith('eurotunnel')) {
+          const collection = editingModuleKey;
+          let record;
+          if (collection === 'eurotunnelTrains') record = { id: editingEurotunnelTrainIndex === null ? Date.now() : (db.eurotunnelTrains[editingEurotunnelTrainIndex]?.id || Date.now()), name: document.getElementById('euroName').value, className: document.getElementById('euroClass').value, formation: document.getElementById('euroFormation').value, location: document.getElementById('euroLocation').value, condition: document.getElementById('euroCondition').value, status: document.getElementById('euroStatus').value };
+          if (collection === 'eurotunnelSequences') {
+            const selectedTrains = getEurotunnelSequenceTrains();
+            if (!selectedTrains.length) return alert('Select at least one available train for this sequence.');
+            record = { id: editingEurotunnelSequenceIndex === null ? Date.now() : (db.eurotunnelSequences[editingEurotunnelSequenceIndex]?.id || Date.now()), name: document.getElementById('euroSequenceName').value, purpose: document.getElementById('euroPurpose').value, status: document.getElementById('euroSequenceStatus').value, trainNames: selectedTrains };
+          }
+          if (collection === 'eurotunnelTasks') record = { id: Date.now(), title: document.getElementById('euroTitle').value, area: document.getElementById('euroArea').value, dueDate: document.getElementById('euroDueDate').value, assignedTo: document.getElementById('euroAssigned').value, status: document.getElementById('euroStatus').value };
+          if (collection === 'eurotunnelMaintenance') record = { id: Date.now(), trainName: document.getElementById('euroMaintenanceTrain').value, date: document.getElementById('euroMaintenanceDate').value, work: document.getElementById('euroMaintenanceWork').value, condition: document.getElementById('euroMaintenanceCondition').value, completedBy: document.getElementById('euroMaintenanceBy').value };
+          const records = db[collection] || [];
+          if (collection === 'eurotunnelSequences' && editingEurotunnelSequenceIndex !== null) records[editingEurotunnelSequenceIndex] = record;
+          else if (collection === 'eurotunnelTrains' && editingEurotunnelTrainIndex !== null) records[editingEurotunnelTrainIndex] = record;
+          else records.push(record);
+          eurotunnelSave(collection, records);
+          closeModal('genericModal');
+          editingEurotunnelSequenceIndex = null;
+          editingEurotunnelTrainIndex = null;
+          renderEurotunnelPage();
+          return;
+        }
+        if (!editingModuleKey) return;
+        if (!db[editingModuleKey]) db[editingModuleKey] = [];
+        db[editingModuleKey].push({ id: Date.now(), name: document.getElementById('genName').value, details: document.getElementById('genDetails').value, date: getTodayString() });
+        database.ref('EVLT_ADMIN_DB/' + editingModuleKey).set(db[editingModuleKey]);
+        closeModal('genericModal');
+        renderGenericModule(editingModuleKey.toUpperCase(), '', editingModuleKey);
+      }
+
+      function deleteEurotunnelRecord(collection, index) {
+        if (!eurotunnelRoleRequired()) return alert('Only volunteers with the Eurotunnel role can edit this workspace.');
+        if (!confirm('Delete this Eurotunnel record?')) return;
+        const records = db[collection] || [];
+        records.splice(index, 1);
+        eurotunnelSave(collection, records);
+        renderEurotunnelPage();
+      }
+
       function renderGenericModule(title, description, dbKey) {
         const content = document.getElementById('content');
         const items = db[dbKey] || [];
@@ -3475,21 +4015,6 @@
           </div>
         `;
         document.getElementById('genericModal').style.display = 'flex';
-      }
-
-      function saveGenericItem(e) {
-        e.preventDefault();
-        if (!editingModuleKey) return;
-        if (!db[editingModuleKey]) db[editingModuleKey] = [];
-        db[editingModuleKey].push({
-          id: Date.now(),
-          name: document.getElementById('genName').value,
-          details: document.getElementById('genDetails').value,
-          date: getTodayString()
-        });
-        database.ref('EVLT_ADMIN_DB/' + editingModuleKey).set(db[editingModuleKey]);
-        closeModal('genericModal');
-        renderGenericModule(editingModuleKey.toUpperCase(), '', editingModuleKey);
       }
 
       function deleteGenericItem(dbKey, index) {
