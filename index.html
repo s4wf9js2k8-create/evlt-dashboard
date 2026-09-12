@@ -200,16 +200,40 @@
       .railway-palette { display:flex; gap:.4rem; flex-wrap:wrap; }
       .railway-piece-button { display:inline-flex; align-items:center; gap:.35rem; padding:.4rem .55rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--card-bg); color:var(--text); cursor:pointer; font-size:.72rem; font-weight:700; }
       .railway-piece-button:hover,.railway-piece-button:focus-visible { border-color:var(--primary); background:var(--primary-light); outline:none; }
-      .railway-layout-canvas { position:relative; width:100%; min-height:460px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background-color:#f8fafc; }
-      .railway-layout-canvas.editing { min-width:720px; }
-      .railway-layout-piece { position:absolute; width:120px; height:84px; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; color:#1e293b; cursor:grab; user-select:none; touch-action:none; font-size:.68rem; font-weight:700; }
-      .railway-layout-piece:active { cursor:grabbing; }
-      .railway-layout-piece svg { width:120px; height:84px; overflow:visible; pointer-events:none; filter:drop-shadow(0 1px 1px rgb(15 23 42 / .2)); }
-      .railway-layout-piece .rail { fill:none; stroke:#26364a; stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; }
-      .railway-layout-piece .sleeper { fill:none; stroke:#9aaabd; stroke-width:6; stroke-dasharray:1 12; stroke-linecap:butt; opacity:.7; }
-      .railway-layout-piece .branch { stroke:#315b31; }
+      .railway-piece-with-length { display:inline-flex; align-items:center; gap:.3rem; }
+      .railway-length-input { display:inline-flex; align-items:center; gap:.2rem; font-size:.68rem; color:var(--text-muted); font-weight:700; }
+      .railway-length-input input { width:52px; padding:.25rem .3rem; border:1px solid var(--border); border-radius:6px; font-size:.72rem; background:var(--card-bg); color:var(--text); }
+      .railway-layout-canvas { position:relative; width:100%; min-height:1360px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background-color:#f8fafc; }
+      .railway-layout-canvas.editing { min-width:2000px; background-image: radial-gradient(circle, rgb(100 116 139 / .3) 1px, transparent 1px); background-size:20px 20px; }
+      .railway-layout-piece-wrap { position:absolute; }
+      .railway-layout-piece { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border:0; border-radius:8px; background:transparent; color:#1e293b; user-select:none; touch-action:none; font-size:.68rem; font-weight:700; }
+      .railway-layout-piece.editable { cursor:grab; }
+      .railway-layout-piece.editable:active { cursor:grabbing; }
+      .railway-layout-piece svg { overflow:visible; pointer-events:none; display:block; }
+      .railway-piece-bed { fill:none; stroke:#475569; stroke-width:11; stroke-linecap:round; stroke-linejoin:round; opacity:.85; }
+      .railway-piece-health { fill:none; stroke-width:6; stroke-linecap:round; stroke-linejoin:round; transition:stroke-width .15s ease; }
+      .railway-piece-tie { fill:none; stroke:#f8fafc; stroke-width:1.5; stroke-dasharray:1 6; stroke-linecap:round; opacity:.9; }
+      .railway-layout-piece-wrap.inspectable { cursor:pointer; }
+      .railway-layout-piece-wrap.inspectable:hover .railway-piece-health,
+      .railway-layout-piece-wrap.inspectable:focus-visible .railway-piece-health { stroke-width:8; }
+      .railway-layout-piece-wrap.inspectable:focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:8px; }
+      .railway-health-legend { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; font-size:.7rem; color:var(--text-muted); margin-top:.6rem; }
+      .railway-health-legend span { display:inline-flex; align-items:center; gap:.3rem; font-weight:600; }
+      .railway-health-legend i.dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+      .railway-track-status { display:inline-flex; align-items:center; gap:.35rem; font-size:.7rem; font-weight:700; padding:.15rem .5rem; border-radius:10px; }
+      .railway-piece-remove, .railway-piece-rotate { position:absolute; top:-8px; width:20px; height:20px; border-radius:50%; border:1px solid var(--border); background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:800; line-height:1; cursor:pointer; box-shadow:var(--shadow-sm); z-index:2; padding:0; }
+      .railway-piece-rotate { left:-8px; color:var(--text-muted); }
+      .railway-piece-remove { right:-8px; color:#dc2626; }
+      .railway-piece-rotate:hover { background:var(--primary-light); border-color:var(--primary); color:var(--primary); }
+      .railway-piece-remove:hover { background:#fef2f2; border-color:#dc2626; }
+      .railway-piece-shrink, .railway-piece-grow { position:absolute; bottom:-8px; width:20px; height:20px; border-radius:50%; border:1px solid var(--border); background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:.85rem; font-weight:800; line-height:1; cursor:pointer; box-shadow:var(--shadow-sm); z-index:2; padding:0; color:var(--text-muted); }
+      .railway-piece-shrink { left:-8px; }
+      .railway-piece-grow { right:-8px; }
+      .railway-piece-shrink:hover, .railway-piece-grow:hover { background:var(--primary-light); border-color:var(--primary); color:var(--primary); }
       .railway-layout-help { color:var(--text-muted); font-size:.72rem; margin-top:.65rem; }
       [data-theme="dark"] .railway-layout-canvas { background-color:#172033; }
+      [data-theme="dark"] .railway-layout-canvas.editing { background-image: radial-gradient(circle, rgb(148 163 184 / .25) 1px, transparent 1px); }
+      [data-theme="dark"] .railway-piece-remove, [data-theme="dark"] .railway-piece-rotate, [data-theme="dark"] .railway-piece-shrink, [data-theme="dark"] .railway-piece-grow { background:#1e293b; border-color:#334155; }
 
       #print-area { display: none; }
       @media print {
@@ -941,8 +965,6 @@
       let editingModuleKey = null;
       let editingEurotunnelSequenceIndex = null;
       let editingEurotunnelTrainIndex = null;
-      let editingRailwayTrackIndex = null;
-      let railwayTrackDraft = [];
       let railwayLayoutDraft = [];
       let railwayLayoutTrackIndex = null;
       let calendarCurrentDate = new Date();
@@ -3556,111 +3578,204 @@
         ['curve', '45° curve', 'Four pieces make a 180° turn'],
         ['left-point', 'Left point', 'Branches left from the running line'],
         ['right-point', 'Right point', 'Branches right from the running line'],
-        ['middle-point', 'Middle point', 'A central point or crossing section'],
-        ['curved-point', 'Curved point', 'A point leading into a curved route']
+        ['middle-point', 'Middle point', 'Symmetrical Y-split — both routes curve, no straight-through'],
+        ['curved-point', 'Curved point', 'Both routes stay curved: a gentle through curve plus a sharper diverging one']
       ];
 
-      function railwayPieceLabel(type) {
-        return (RAILWAY_PIECES.find(piece => piece[0] === type) || ['', type])[1];
+      function railwayTrackWorstHealth(pieces) {
+        const rank = { 'Good': 0, 'Needs Inspection': 1, 'Blocked / Poor': 2 };
+        let worst = 'Good';
+        (pieces || []).forEach(piece => {
+          const health = (typeof piece === 'object' && piece.health) || 'Good';
+          if ((rank[health] || 0) > (rank[worst] || 0)) worst = health;
+        });
+        return worst;
       }
 
-      function renderRailwayTrackBuilder() {
-        const tracks = db.railwayTracks || [];
-        return `<div class="section-group railway-builder"><div class="section-header">7¼-inch track builder <button class="btn btn-primary btn-sm" onclick="openRailwayTrackModal()"><i data-lucide="plus"></i> Create track</button></div><div class="card" style="padding:1rem;"><p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.85rem;">Admin-only workspace for assembling named track plans from standard reusable pieces.</p>${tracks.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.75rem;">${tracks.map((track, index) => `<article style="border:1px solid var(--border);border-radius:var(--radius);padding:.8rem;background:var(--bg);"><div style="display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;"><strong>${track.name}</strong><span style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} pieces</span></div><div style="display:flex;flex-wrap:wrap;gap:.3rem;margin:.65rem 0;">${track.pieces.map((piece, pieceIndex) => `<span class="train-tag">${pieceIndex + 1}. ${railwayPieceLabel(piece)}</span>`).join('')}</div><div style="display:flex;gap:.4rem;"><button class="btn btn-secondary btn-sm" onclick="openRailwayTrackModal(${index})"><i data-lucide="edit"></i> Edit</button><button class="btn btn-danger btn-sm" onclick="deleteRailwayTrack(${index})"><i data-lucide="trash-2"></i></button></div></article>`).join('')}</div>` : '<div style="padding:1rem;text-align:center;color:var(--text-muted);font-size:.8rem;">No saved track plans yet. Create one to start assembling the railway.</div>'}</div></div>`;
-      }
-
-      function renderRailwayPieceDraft() {
-        const container = document.getElementById('railwayPieceDraft');
-        if (!container) return;
-        container.innerHTML = railwayTrackDraft.length ? railwayTrackDraft.map((piece, index) => `<div style="display:flex;align-items:center;gap:.4rem;padding:.45rem .5rem;border:1px solid var(--border);border-radius:var(--radius);background:white;"><strong style="min-width:1.4rem;color:var(--text-muted);">${index + 1}</strong><span style="flex:1;font-size:.8rem;">${railwayPieceLabel(piece)}</span><button class="btn btn-secondary btn-sm" type="button" onclick="moveRailwayPiece(${index}, -1)" ${index === 0 ? 'disabled' : ''}><i data-lucide="chevron-up"></i></button><button class="btn btn-secondary btn-sm" type="button" onclick="moveRailwayPiece(${index}, 1)" ${index === railwayTrackDraft.length - 1 ? 'disabled' : ''}><i data-lucide="chevron-down"></i></button><button class="btn btn-danger btn-sm" type="button" onclick="removeRailwayPiece(${index})"><i data-lucide="x"></i></button></div>`).join('') : '<span style="font-size:.75rem;color:var(--text-muted);">No pieces added. Choose a preset above and press Add piece.</span>';
-        if (window.lucide) lucide.createIcons();
-      }
-
-      function openRailwayTrackModal(index = null) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can create or edit track plans.');
-        editingRailwayTrackIndex = index;
-        const existing = index !== null ? (db.railwayTracks || [])[index] : null;
-        railwayTrackDraft = existing ? [...existing.pieces] : [];
-        editingModuleKey = 'railwayTracks';
-        document.getElementById('genericModalTitle').innerText = existing ? 'Edit 7¼-inch Track Plan' : 'Create 7¼-inch Track Plan';
-        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track plan name</label><input id="railwayTrackPlanName" required placeholder="e.g. Main running loop"></div><div class="form-group"><label>Add preset piece</label><div style="display:flex;gap:.4rem;"><select id="railwayPieceSelect" style="flex:1;">${RAILWAY_PIECES.map(piece => `<option value="${piece[0]}">${piece[1]} - ${piece[2]}</option>`).join('')}</select><button class="btn btn-secondary btn-sm" type="button" onclick="addRailwayPiece()"><i data-lucide="plus"></i> Add piece</button></div></div><div class="form-group"><label>Track plan order</label><div id="railwayPieceDraft" style="display:flex;flex-direction:column;gap:.4rem;border:1px solid var(--border);padding:.6rem;border-radius:var(--radius);background:#f8fafc;min-height:44px;"></div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">Build the track from left to right or from the yard outward. Reorder pieces with the arrows.</p></div>`;
-        document.getElementById('railwayTrackPlanName').value = existing?.name || '';
-        renderRailwayPieceDraft();
-        document.getElementById('genericModal').style.display = 'flex';
-      }
-
-      function addRailwayPiece() {
-        const select = document.getElementById('railwayPieceSelect');
-        if (!select || !select.value) return;
-        railwayTrackDraft.push(select.value);
-        renderRailwayPieceDraft();
-      }
-
-      function moveRailwayPiece(index, direction) {
-        const target = index + direction;
-        if (target < 0 || target >= railwayTrackDraft.length) return;
-        [railwayTrackDraft[index], railwayTrackDraft[target]] = [railwayTrackDraft[target], railwayTrackDraft[index]];
-        renderRailwayPieceDraft();
-      }
-
-      function removeRailwayPiece(index) {
-        railwayTrackDraft.splice(index, 1);
-        renderRailwayPieceDraft();
-      }
-
-      function saveRailwayTrackPlan() {
-        if (!railwayTrackDraft.length) return alert('Add at least one preset track piece first.');
-        const tracks = db.railwayTracks || [];
-        const record = { id: editingRailwayTrackIndex === null ? Date.now() : (tracks[editingRailwayTrackIndex]?.id || Date.now()), name: document.getElementById('railwayTrackPlanName').value.trim(), pieces: [...railwayTrackDraft], updatedAt: getTodayString() };
-        if (!record.name) return alert('Give the track plan a name first.');
-        if (editingRailwayTrackIndex === null) tracks.push(record);
-        else tracks[editingRailwayTrackIndex] = record;
-        dbUpdate({ railwayTracks: tracks });
-        editingRailwayTrackIndex = null;
-        railwayTrackDraft = [];
-        closeModal('genericModal');
-        renderDashboard();
-      }
-
-      function deleteRailwayTrack(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete track plans.');
-        if (!confirm('Delete this saved track plan?')) return;
-        const tracks = db.railwayTracks || [];
-        tracks.splice(index, 1);
-        dbUpdate({ railwayTracks: tracks });
-        renderDashboard();
+      function railwayPieceTypeLabel(type) {
+        return (RAILWAY_PIECES.find(p => p[0] === type) || ['', type])[1];
       }
 
       function renderRailwayLayoutWorkspace() {
         const tracks = db.railwayTracks || [];
         const admin = currentUser && currentUser.isSystemAdmin;
-        return `<div class="section-group"><div class="section-header">7¼-inch physical track plans ${admin ? '<button class="btn btn-primary btn-sm" onclick="openRailwayLayoutEditor()"><i data-lucide="plus"></i> Build track plan</button>' : ''}</div>${tracks.length ? tracks.map((track, index) => `<div class="railway-layout-card" style="margin-bottom:.85rem;"><div class="railway-layout-toolbar"><div><strong>${track.name}</strong><div style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} physical piece${track.pieces.length === 1 ? '' : 's'} · saved ${formatDisplayDate(track.updatedAt) || 'today'}</div></div>${admin ? `<div style="display:flex;gap:.4rem;"><button class="btn btn-secondary btn-sm" onclick="openRailwayLayoutEditor(${index})"><i data-lucide="edit"></i> Edit layout</button><button class="btn btn-danger btn-sm" onclick="deleteRailwayLayout(${index})"><i data-lucide="trash-2"></i></button></div>` : ''}</div>${renderRailwayLayoutCanvas(track, false)}</div>`).join('') : `<div class="railway-layout-card"><p style="font-size:.8rem;color:var(--text-muted);">No physical track plan has been saved yet.${admin ? ' Build one by choosing pieces from the editor.' : ''}</p></div>`}</div>`;
+        const legend = `<div class="railway-health-legend"><span><i class="dot" style="background:#16a34a;"></i>Good</span><span><i class="dot" style="background:#ca8a04;"></i>Needs inspection</span><span><i class="dot" style="background:#dc2626;"></i>Blocked / poor</span><span style="font-weight:400;">· Tap a piece to log an inspection</span></div>`;
+        return `<div class="section-group"><div class="section-header">7¼-inch physical track plans ${admin ? '<button class="btn btn-primary btn-sm" onclick="openRailwayLayoutEditor()"><i data-lucide="plus"></i> Build track plan</button>' : ''}</div>${tracks.length ? tracks.map((track, index) => { const worst = railwayTrackWorstHealth(track.pieces); const color = trackHealthColor(worst); return `<div class="railway-layout-card" style="margin-bottom:.85rem;"><div class="railway-layout-toolbar"><div><div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><strong>${track.name}</strong><span class="railway-track-status" style="background:${color}1a;color:${color};">${worst}</span></div><div style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} physical piece${track.pieces.length === 1 ? '' : 's'} · saved ${formatDisplayDate(track.updatedAt) || 'today'}</div></div>${admin ? `<div style="display:flex;gap:.4rem;"><button class="btn btn-secondary btn-sm" onclick="openRailwayLayoutEditor(${index})"><i data-lucide="edit"></i> Edit layout</button><button class="btn btn-danger btn-sm" onclick="deleteRailwayLayout(event, ${index})"><i data-lucide="trash-2"></i></button></div>` : ''}</div>${renderRailwayLayoutCanvas(track, false, index)}${legend}</div>`; }).join('') : `<div class="railway-layout-card"><p style="font-size:.8rem;color:var(--text-muted);">No physical track plan has been saved yet.${admin ? ' Build one by choosing pieces from the editor.' : ''}</p></div>`}</div>`;
       }
 
-      function railwayPieceSvg(type) {
-        const rail = (path, className = 'rail') => `<path class="${className}" d="${path}" />`;
-        const sleepers = path => `<path class="sleeper" d="${path}" />`;
-        if (type === 'curve') return `<svg viewBox="0 0 120 84" aria-label="45 degree curve"><path class="sleeper" d="M14 68 C27 38 48 18 76 12" />${rail('M16 64 C28 35 49 17 72 12')}${rail('M22 70 C34 41 55 23 78 18')}</svg>`;
-        if (type === 'left-point') return `<svg viewBox="0 0 120 84" aria-label="Left point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M58 37 L92 70', 'rail branch')}${rail('M58 47 L88 76', 'rail branch')}</svg>`;
-        if (type === 'right-point') return `<svg viewBox="0 0 120 84" aria-label="Right point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M62 37 L28 70', 'rail branch')}${rail('M62 47 L32 76', 'rail branch')}</svg>`;
-        if (type === 'middle-point') return `<svg viewBox="0 0 120 84" aria-label="Middle point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M48 37 L82 8', 'rail branch')}${rail('M48 47 L82 18', 'rail branch')}${rail('M72 37 L104 68', 'rail branch')}${rail('M72 47 L100 76', 'rail branch')}</svg>`;
-        if (type === 'curved-point') return `<svg viewBox="0 0 120 84" aria-label="Curved point">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}${rail('M52 37 Q76 14 108 20', 'rail branch')}${rail('M52 47 Q78 24 108 30', 'rail branch')}</svg>`;
-        return `<svg viewBox="0 0 120 84" aria-label="Straight">${sleepers('M10 42 H110')}${rail('M10 37 H110')}${rail('M10 47 H110')}</svg>`;
+      function railwayArc(ex, ey, turnDeg, radius) {
+        // Generic 2-decimal-safe helper: a circular arc starting at (ex,ey) with entry
+        // tangent 0° (pointing along +x), bending by turnDeg (negative = curves left/up,
+        // positive = curves right/down), returned as a cubic-bezier path plus the exact
+        // exit point and exit tangent angle — so artwork and connection maths always agree.
+        const rad = (Math.abs(turnDeg) * Math.PI) / 180;
+        const sign = turnDeg < 0 ? -1 : 1;
+        const cx = ex, cy = ey + sign * radius;
+        const theta1 = sign < 0 ? Math.PI / 2 : -Math.PI / 2;
+        const theta2 = theta1 + sign * rad;
+        const exitX = cx + radius * Math.cos(theta2);
+        const exitY = cy + radius * Math.sin(theta2);
+        const alpha = (4 / 3) * Math.tan((theta2 - theta1) / 4);
+        const c1x = ex + alpha * radius * -Math.sin(theta1);
+        const c1y = ey + alpha * radius * Math.cos(theta1);
+        const c2x = exitX - alpha * radius * -Math.sin(theta2);
+        const c2y = exitY - alpha * radius * Math.cos(theta2);
+        const r = n => Math.round(n * 10) / 10;
+        return {
+          exit: { x: r(exitX), y: r(exitY) },
+          exitAngle: (turnDeg * Math.PI) / 180,
+          path: `M${r(ex)} ${r(ey)} C ${r(c1x)} ${r(c1y)} ${r(c2x)} ${r(c2y)} ${r(exitX)} ${r(exitY)}`
+        };
       }
 
-      function renderRailwayLayoutCanvas(track, editing) {
+      const RAILWAY_MARGIN = 20;
+      const RAILWAY_DEFAULT_LENGTH = 100;
+      const RAILWAY_DEFAULT_RADIUS = 55;
+      const RAILWAY_MIN_LENGTH = 20;
+      const RAILWAY_MAX_LENGTH = 400;
+      const RAILWAY_MIN_RADIUS = 25;
+      const RAILWAY_MAX_RADIUS = 200;
+
+      function railwayPieceGeometry(piece) {
+        // Single source of truth for a piece's size, ports and drawn paths — straights and
+        // curves size themselves from piece.length / piece.radius, so the box, the artwork
+        // and the connection maths for a stretched piece can never drift apart.
+        const M = RAILWAY_MARGIN;
+        const type = piece.type;
+        if (type === 'straight') {
+          const L = piece.length || RAILWAY_DEFAULT_LENGTH;
+          const width = L + 2 * M, height = 84;
+          return { width, height, pivot: { x: width / 2, y: height / 2 }, ports: [{ x: M, y: height / 2, angle: Math.PI }, { x: M + L, y: height / 2, angle: 0 }], paths: [`M${M} ${height / 2} L${M + L} ${height / 2}`] };
+        }
+        if (type === 'curve') {
+          const R = piece.radius || RAILWAY_DEFAULT_RADIUS;
+          const dx = R * Math.sin(Math.PI / 4), dy = R * (1 - Math.cos(Math.PI / 4));
+          const width = dx + 2 * M, height = dy + 2 * M;
+          const entry = { x: M, y: height - M };
+          const arc = railwayArc(entry.x, entry.y, -45, R);
+          return { width, height, pivot: { x: width / 2, y: height / 2 }, ports: [{ x: entry.x, y: entry.y, angle: Math.PI }, { x: arc.exit.x, y: arc.exit.y, angle: arc.exitAngle }], paths: [arc.path] };
+        }
+        const width = 120, height = 84, R = RAILWAY_DEFAULT_RADIUS, pivot = { x: 60, y: 42 };
+        if (type === 'left-point') {
+          const branch = railwayArc(45, 42, -45, R);
+          return { width, height, pivot, ports: [{ x: 0, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }, { x: branch.exit.x, y: branch.exit.y, angle: branch.exitAngle }], paths: ['M0 42 L110 42', branch.path] };
+        }
+        if (type === 'right-point') {
+          const branch = railwayArc(45, 42, 45, R);
+          return { width, height, pivot, ports: [{ x: 0, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }, { x: branch.exit.x, y: branch.exit.y, angle: branch.exitAngle }], paths: ['M0 42 L110 42', branch.path] };
+        }
+        if (type === 'curved-point') {
+          // Both routes curve the SAME direction (left/upward) — a gentle through curve
+          // plus a sharper diverging curve — like a real curved turnout, not a mirror split.
+          const stubEnd = 20;
+          const through = railwayArc(stubEnd, 42, -20, R);
+          const diverge = railwayArc(stubEnd, 42, -45, R);
+          return { width, height, pivot, ports: [{ x: 0, y: 42, angle: Math.PI }, { x: through.exit.x, y: through.exit.y, angle: through.exitAngle }, { x: diverge.exit.x, y: diverge.exit.y, angle: diverge.exitAngle }], paths: [`M0 42 L${stubEnd} 42`, through.path, diverge.path] };
+        }
+        if (type === 'middle-point') {
+          const up = railwayArc(0, 42, -30, R);
+          const down = railwayArc(0, 42, 30, R);
+          return { width, height, pivot, ports: [{ x: 0, y: 42, angle: Math.PI }, { x: up.exit.x, y: up.exit.y, angle: up.exitAngle }, { x: down.exit.x, y: down.exit.y, angle: down.exitAngle }], paths: [up.path, down.path] };
+        }
+        return { width, height, pivot, ports: [{ x: 10, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }], paths: ['M10 42 L110 42'] };
+      }
+
+      function railwayPieceSvg(piece) {
+        const color = trackHealthColor(piece.health || 'Good');
+        const geometry = railwayPieceGeometry(piece);
+        const line = d => `<path class="railway-piece-bed" d="${d}" /><path class="railway-piece-health" d="${d}" stroke="${color}" /><path class="railway-piece-tie" d="${d}" />`;
+        const label = `${railwayPieceTypeLabel(piece.type)}, ${piece.health || 'Good'}`;
+        return `<svg viewBox="0 0 ${geometry.width} ${geometry.height}" style="width:${geometry.width}px;height:${geometry.height}px;" aria-label="${label}">${geometry.paths.map(line).join('')}</svg>`;
+      }
+
+      function renderRailwayConnectionMarkers(items) {
+        const ports = [];
+        items.forEach((item, pieceIndex) => railwayPiecePorts(item).forEach(port => ports.push({ ...port, pieceIndex })));
+        const markers = [];
+        const seen = new Set();
+        ports.forEach((a, ai) => ports.forEach((b, bi) => {
+          if (bi <= ai || a.pieceIndex === b.pieceIndex) return;
+          const key = `${ai}-${bi}`;
+          if (seen.has(key) || Math.hypot(a.x - b.x, a.y - b.y) >= 6) return;
+          seen.add(key);
+          markers.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        }));
+        return markers.map(m => `<span style="position:absolute;left:${m.x - 3}px;top:${m.y - 3}px;width:6px;height:6px;border-radius:50%;background:#f8fafc;border:1.5px solid #475569;pointer-events:none;"></span>`).join('');
+      }
+
+      function railwayLengthControls(item, index) {
+        if (item.type !== 'straight' && item.type !== 'curve') return '';
+        const step = item.type === 'straight' ? 20 : 10;
+        return `<button type="button" class="railway-piece-shrink" onpointerdown="event.stopPropagation()" onclick="adjustRailwayPieceLength(${index}, ${-step})" aria-label="Shorten piece" title="Shorten">&minus;</button><button type="button" class="railway-piece-grow" onpointerdown="event.stopPropagation()" onclick="adjustRailwayPieceLength(${index}, ${step})" aria-label="Lengthen piece" title="Lengthen">&plus;</button>`;
+      }
+
+      function renderRailwayLayoutCanvas(track, editing, trackIndex) {
         const pieces = track.pieces || [];
-        return `<div class="railway-layout-canvas${editing ? ' editing' : ''}" id="railwayLayoutCanvas">${pieces.map((piece, index) => { const item = typeof piece === 'string' ? { type: piece, x: 20 + (index % 4) * 140, y: 20 + Math.floor(index / 4) * 60, rotation: 0 } : piece; return `<div class="railway-layout-piece ${item.type}" data-layout-index="${index}" style="left:${item.x || 20}px;top:${item.y || 20}px;transform:rotate(${item.rotation || 0}deg);" ${editing ? `onpointerdown="startRailwayPieceDrag(event, ${index})" ondblclick="rotateRailwayPiece(${index})"` : ''}>${railwayPieceSvg(item.type)}</div>`; }).join('')}</div>`;
+        const items = pieces.map((piece, index) => typeof piece === 'string' ? { type: piece, x: 20 + (index % 4) * 140, y: 20 + Math.floor(index / 4) * 60, rotation: 0, health: 'Good', notes: '' } : piece);
+        return `<div class="railway-layout-canvas${editing ? ' editing' : ''}" id="railwayLayoutCanvas">${items.map((item, index) => {
+          const geometry = railwayPieceGeometry(item);
+          const controls = editing ? `<button type="button" class="railway-piece-rotate" onpointerdown="event.stopPropagation()" onclick="rotateRailwayPiece(${index})" aria-label="Rotate piece 45 degrees" title="Rotate 45°">&#8635;</button><button type="button" class="railway-piece-remove" onpointerdown="event.stopPropagation()" onclick="removeRailwayLayoutPiece(${index})" aria-label="Remove piece" title="Remove piece">&times;</button>${railwayLengthControls(item, index)}` : '';
+          const inspectAttrs = !editing ? ` onclick="openRailwayPieceHealthModal(${trackIndex}, ${index})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openRailwayPieceHealthModal(${trackIndex}, ${index});}" tabindex="0" role="button" aria-label="${railwayPieceTypeLabel(item.type)}, piece ${index + 1}, condition ${item.health || 'Good'}. Press to log an inspection."` : '';
+          return `<div class="railway-layout-piece-wrap${!editing ? ' inspectable' : ''}" data-layout-index="${index}" style="left:${item.x || 20}px;top:${item.y || 20}px;width:${geometry.width}px;height:${geometry.height}px;"${inspectAttrs}>
+            <div class="railway-layout-piece ${item.type}${editing ? ' editable' : ''}" style="transform:rotate(${item.rotation || 0}deg);" ${editing ? `onpointerdown="startRailwayPieceDrag(event, ${index})" ondblclick="rotateRailwayPiece(${index})"` : ''}>${railwayPieceSvg(item)}</div>
+            ${controls}
+          </div>`;
+        }).join('')}${renderRailwayConnectionMarkers(items)}</div>`;
+      }
+
+      function openRailwayPieceHealthModal(trackIndex, pieceIndex) {
+        const tracks = db.railwayTracks || [];
+        const track = tracks[trackIndex];
+        if (!track) return;
+        const piece = track.pieces[pieceIndex];
+        if (!piece) return;
+        const type = typeof piece === 'string' ? piece : piece.type;
+        editingModuleKey = 'railwayPieceHealth';
+        document.getElementById('genericModalTitle').innerText = `Inspect: ${railwayPieceTypeLabel(type)} (piece ${pieceIndex + 1} of ${track.name})`;
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Health / state</label><select id="railwayPieceHealthSelect"><option>Good</option><option>Needs Inspection</option><option>Blocked / Poor</option></select></div><div class="form-group"><label>Inspection notes</label><textarea id="railwayPieceHealthNotes" rows="4" placeholder="Record defects, work required, or inspection notes"></textarea></div>`;
+        document.getElementById('railwayPieceHealthSelect').value = (typeof piece === 'object' && piece.health) || 'Good';
+        document.getElementById('railwayPieceHealthNotes').value = (typeof piece === 'object' && piece.notes) || '';
+        const modal = document.getElementById('genericModal');
+        modal.dataset.railwayTrackIndex = trackIndex;
+        modal.dataset.railwayPieceIndex = pieceIndex;
+        modal.style.display = 'flex';
+      }
+
+      function saveRailwayPieceHealth() {
+        const modal = document.getElementById('genericModal');
+        const trackIndex = Number(modal.dataset.railwayTrackIndex);
+        const pieceIndex = Number(modal.dataset.railwayPieceIndex);
+        const tracks = db.railwayTracks || [];
+        const track = tracks[trackIndex];
+        if (!track) return;
+        const piece = track.pieces[pieceIndex];
+        if (!piece) return;
+        const health = document.getElementById('railwayPieceHealthSelect').value;
+        const notes = document.getElementById('railwayPieceHealthNotes').value;
+        if (typeof piece === 'string') {
+          track.pieces[pieceIndex] = { id: Date.now(), type: piece, x: 20 + (pieceIndex % 4) * 140, y: 20 + Math.floor(pieceIndex / 4) * 60, rotation: 0, health, notes };
+        } else {
+          piece.health = health;
+          piece.notes = notes;
+        }
+        dbUpdate({ railwayTracks: tracks });
+        closeModal('genericModal');
+        renderDashboard();
       }
 
       function openRailwayLayoutEditor(index = null) {
         if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can edit physical track plans.');
         railwayLayoutTrackIndex = index;
         const existing = index !== null ? (db.railwayTracks || [])[index] : null;
-        railwayLayoutDraft = existing ? existing.pieces.map((piece, pieceIndex) => typeof piece === 'string' ? { id: Date.now() + pieceIndex, type: piece, x: 20 + (pieceIndex % 4) * 140, y: 20 + Math.floor(pieceIndex / 4) * 60, rotation: 0 } : { ...piece }) : [];
+        railwayLayoutDraft = existing ? existing.pieces.map((piece, pieceIndex) => typeof piece === 'string' ? { id: Date.now() + pieceIndex, type: piece, x: 20 + (pieceIndex % 4) * 140, y: 20 + Math.floor(pieceIndex / 4) * 60, rotation: 0, health: 'Good', notes: '' } : { health: 'Good', notes: '', length: RAILWAY_DEFAULT_LENGTH, radius: RAILWAY_DEFAULT_RADIUS, ...piece }) : [];
         editingModuleKey = 'railwayLayout';
         document.getElementById('genericModalTitle').innerText = existing ? 'Edit Physical Track Plan' : 'Build Physical Track Plan';
-        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track plan name</label><input id="railwayLayoutName" required placeholder="e.g. Peene Yard running loop"></div><div class="railway-layout-toolbar"><div class="railway-palette">${RAILWAY_PIECES.map(piece => `<button class="railway-piece-button" type="button" onclick="addRailwayLayoutPiece('${piece[0]}')" title="${piece[2]}">${piece[1]}</button>`).join('')}</div><button class="btn btn-secondary btn-sm" type="button" onclick="clearRailwayLayout()"><i data-lucide="rotate-ccw"></i> Clear</button></div><div id="railwayLayoutEditorCanvas"></div><p class="railway-layout-help">Click a preset to add it. Drag pieces freely; matching rail connectors snap and align when they are brought close. Double-click a piece to rotate it 45°.</p>`;
+        const paletteButtons = RAILWAY_PIECES.map(piece => {
+          if (piece[0] === 'straight') return `<span class="railway-piece-with-length"><button class="railway-piece-button" type="button" onclick="addRailwayLayoutPiece('straight')" title="${piece[2]}">${piece[1]}</button><label class="railway-length-input">L<input type="number" id="railwayStraightLength" value="${RAILWAY_DEFAULT_LENGTH}" min="${RAILWAY_MIN_LENGTH}" max="${RAILWAY_MAX_LENGTH}" step="10"></label></span>`;
+          if (piece[0] === 'curve') return `<span class="railway-piece-with-length"><button class="railway-piece-button" type="button" onclick="addRailwayLayoutPiece('curve')" title="${piece[2]}">${piece[1]}</button><label class="railway-length-input">R<input type="number" id="railwayCurveRadius" value="${RAILWAY_DEFAULT_RADIUS}" min="${RAILWAY_MIN_RADIUS}" max="${RAILWAY_MAX_RADIUS}" step="5"></label></span>`;
+          return `<button class="railway-piece-button" type="button" onclick="addRailwayLayoutPiece('${piece[0]}')" title="${piece[2]}">${piece[1]}</button>`;
+        }).join('');
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track plan name</label><input id="railwayLayoutName" required placeholder="e.g. Peene Yard running loop"></div><div class="railway-layout-toolbar"><div class="railway-palette">${paletteButtons}</div><button class="btn btn-secondary btn-sm" type="button" onclick="clearRailwayLayout(event)"><i data-lucide="rotate-ccw"></i> Clear</button></div><div id="railwayLayoutEditorCanvas"></div><p class="railway-layout-help">Click a preset to add it (set a length/radius first for straights and curves). Drag a piece and bring two rail ends close together — they'll snap into position and angle automatically. Use ↻ to rotate 45°, − / + to resize a straight or curve, and × to remove a piece.</p>`;
         document.getElementById('railwayLayoutName').value = existing?.name || '';
         renderRailwayLayoutEditorCanvas();
         document.getElementById('genericModal').style.display = 'flex';
@@ -3673,33 +3788,114 @@
         target.innerHTML = renderRailwayLayoutCanvas({ pieces: railwayLayoutDraft }, true);
       }
 
+      function findFreeRailwayLayoutSlot() {
+        const stepX = 140, stepY = 70, maxX = RAILWAY_CANVAS_MAX_X, maxY = RAILWAY_CANVAS_MAX_Y, halfW = 70, halfH = 46;
+        for (let row = 0; row * stepY <= maxY; row++) {
+          for (let col = 0; col * stepX <= maxX; col++) {
+            const x = 20 + col * stepX;
+            const y = 20 + row * stepY;
+            const overlaps = railwayLayoutDraft.some(p => Math.abs((p.x || 0) - x) < halfW && Math.abs((p.y || 0) - y) < halfH);
+            if (!overlaps) return { x, y };
+          }
+        }
+        const cascade = railwayLayoutDraft.length % 6;
+        return { x: 20 + cascade * 22, y: 20 + cascade * 22 };
+      }
+
       function addRailwayLayoutPiece(type) {
-        const last = railwayLayoutDraft[railwayLayoutDraft.length - 1];
-        railwayLayoutDraft.push({ id: Date.now() + Math.random(), type, x: last ? Math.min((last.x || 20) + 140, 560) : 40, y: last ? Math.min((last.y || 20) + 60, 390) : 40, rotation: 0 });
+        const slot = findFreeRailwayLayoutSlot();
+        const piece = { id: Date.now() + Math.random(), type, x: slot.x, y: slot.y, rotation: 0, health: 'Good', notes: '' };
+        if (type === 'straight') {
+          const input = document.getElementById('railwayStraightLength');
+          const value = input ? Number(input.value) : RAILWAY_DEFAULT_LENGTH;
+          piece.length = Math.max(RAILWAY_MIN_LENGTH, Math.min(RAILWAY_MAX_LENGTH, value || RAILWAY_DEFAULT_LENGTH));
+        }
+        if (type === 'curve') {
+          const input = document.getElementById('railwayCurveRadius');
+          const value = input ? Number(input.value) : RAILWAY_DEFAULT_RADIUS;
+          piece.radius = Math.max(RAILWAY_MIN_RADIUS, Math.min(RAILWAY_MAX_RADIUS, value || RAILWAY_DEFAULT_RADIUS));
+        }
+        railwayLayoutDraft.push(piece);
         renderRailwayLayoutEditorCanvas();
       }
 
-      function clearRailwayLayout() {
-        if (!confirm('Clear all pieces from this track plan?')) return;
-        railwayLayoutDraft = [];
+      function adjustRailwayPieceLength(index, delta) {
+        const piece = railwayLayoutDraft[index];
+        if (!piece) return;
+        if (piece.type === 'straight') {
+          piece.length = Math.max(RAILWAY_MIN_LENGTH, Math.min(RAILWAY_MAX_LENGTH, (piece.length || RAILWAY_DEFAULT_LENGTH) + delta));
+        } else if (piece.type === 'curve') {
+          piece.radius = Math.max(RAILWAY_MIN_RADIUS, Math.min(RAILWAY_MAX_RADIUS, (piece.radius || RAILWAY_DEFAULT_RADIUS) + delta));
+        } else {
+          return;
+        }
         renderRailwayLayoutEditorCanvas();
       }
+
+      function removeRailwayLayoutPiece(index) {
+        railwayLayoutDraft.splice(index, 1);
+        renderRailwayLayoutEditorCanvas();
+      }
+
+      function armDangerousButton(button, confirmHtml, action) {
+        // Some embedded/preview browsers silently block window.confirm(), which made
+        // "Clear" and "Delete" look broken (the confirm always resolved to false).
+        // This does the same job without relying on a native dialog: tap once to arm,
+        // tap again within a few seconds to actually do it.
+        if (button.dataset.armed === '1') {
+          delete button.dataset.armed;
+          button.classList.remove('btn-danger');
+          action();
+          return;
+        }
+        button.dataset.armed = '1';
+        const original = button.innerHTML;
+        button.innerHTML = confirmHtml;
+        button.classList.add('btn-danger');
+        setTimeout(() => {
+          if (button.dataset.armed === '1' && document.body.contains(button)) {
+            delete button.dataset.armed;
+            button.innerHTML = original;
+            button.classList.remove('btn-danger');
+          }
+        }, 3000);
+      }
+
+      function clearRailwayLayout(event) {
+        if (!railwayLayoutDraft.length) return;
+        armDangerousButton(event.currentTarget, 'Tap again to clear', () => {
+          railwayLayoutDraft = [];
+          renderRailwayLayoutEditorCanvas();
+        });
+      }
+
+      // Canvas is 3x the original working area so bigger layouts have room to breathe.
+      const RAILWAY_CANVAS_MAX_X = 1740;
+      const RAILWAY_CANVAS_MAX_Y = 1230;
+      const RAILWAY_SNAP_THRESHOLD = 26;
 
       function railwayPiecePorts(piece) {
         const x = piece.x || 0;
         const y = piece.y || 0;
         const rotation = ((piece.rotation || 0) * Math.PI) / 180;
-        const localPorts = piece.type === 'curve'
-          ? [{ x: 16, y: 64, angle: -2.1 }, { x: 72, y: 12, angle: -0.45 }]
-          : piece.type.includes('point')
-            ? [{ x: 0, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }, { x: piece.type === 'left-point' ? 88 : 32, y: 76, angle: piece.type === 'left-point' ? 1.1 : 2.1 }]
-            : [{ x: 10, y: 42, angle: Math.PI }, { x: 110, y: 42, angle: 0 }];
-        return localPorts.map(port => {
-          const cx = piece.type === 'curve' ? 48 : 60;
-          const cy = 42;
+        // Pivot comes from this exact piece's geometry (which depends on its own length/
+        // radius), and CSS rotates around the same box centre by default — so a stretched
+        // piece rotates correctly without any extra bookkeeping.
+        const geometry = railwayPieceGeometry(piece);
+        const { x: cx, y: cy } = geometry.pivot;
+        return geometry.ports.map(port => {
           const dx = port.x - cx;
           const dy = port.y - cy;
           return { x: x + cx + dx * Math.cos(rotation) - dy * Math.sin(rotation), y: y + cy + dx * Math.sin(rotation) + dy * Math.cos(rotation), angle: port.angle + rotation };
+        });
+      }
+
+      function isRailwayPortTaken(skipIndexA, skipIndexB, port) {
+        // Stops a third piece snapping onto a port that's already joined to something else,
+        // which is what caused pieces to pile invisibly on top of one another.
+        return railwayLayoutDraft.some((p, i) => {
+          if (i === skipIndexA || i === skipIndexB) return false;
+          return railwayPiecePorts(p).some(other => Math.hypot(other.x - port.x, other.y - port.y) < 6);
         });
       }
 
@@ -3711,19 +3907,33 @@
         railwayLayoutDraft.forEach((other, otherIndex) => {
           if (otherIndex === index) return;
           railwayPiecePorts(other).forEach(target => {
+            if (isRailwayPortTaken(index, otherIndex, target)) return;
             ownPorts.forEach((source, sourceIndex) => {
               const distance = Math.hypot(target.x - source.x, target.y - source.y);
-              if (distance <= 42 && (!best || distance < best.distance)) best = { target, source, sourceIndex, distance };
+              if (distance <= RAILWAY_SNAP_THRESHOLD && (!best || distance < best.distance)) best = { target, sourceIndex, distance };
             });
           });
         });
         if (best) {
-          const alignedSource = railwayPiecePorts(piece)[best.sourceIndex];
-          piece.x += best.target.x - alignedSource.x;
-          piece.y += best.target.y - alignedSource.y;
+          // Snap both position AND rotation so the two rail ends actually line up,
+          // instead of just nudging the piece near its neighbour.
+          const geometry = railwayPieceGeometry(piece);
+          const { x: cx, y: cy } = geometry.pivot;
+          const localPort = geometry.ports[best.sourceIndex];
+          const rawRotationDeg = ((best.target.angle + Math.PI - localPort.angle) * 180) / Math.PI;
+          const snappedRotationDeg = Math.round(rawRotationDeg / 45) * 45;
+          piece.rotation = ((snappedRotationDeg % 360) + 360) % 360;
+
+          const rotationRad = (piece.rotation * Math.PI) / 180;
+          const dx = localPort.x - cx;
+          const dy = localPort.y - cy;
+          const portOffsetX = cx + dx * Math.cos(rotationRad) - dy * Math.sin(rotationRad);
+          const portOffsetY = cy + dx * Math.sin(rotationRad) + dy * Math.cos(rotationRad);
+          piece.x = best.target.x - portOffsetX;
+          piece.y = best.target.y - portOffsetY;
         }
-        piece.x = Math.max(0, Math.min(580, Math.round(piece.x)));
-        piece.y = Math.max(0, Math.min(410, Math.round(piece.y)));
+        piece.x = Math.max(0, Math.min(RAILWAY_CANVAS_MAX_X, Math.round(piece.x)));
+        piece.y = Math.max(0, Math.min(RAILWAY_CANVAS_MAX_Y, Math.round(piece.y)));
       }
 
       function rotateRailwayPiece(index) {
@@ -3735,11 +3945,14 @@
       function startRailwayPieceDrag(event, index) {
         event.preventDefault();
         const piece = railwayLayoutDraft[index];
-        const canvas = event.currentTarget.parentElement;
+        const canvas = event.currentTarget.closest('.railway-layout-canvas');
+        if (!canvas || !piece) return;
+        const { width, height } = railwayPieceGeometry(piece);
+        const halfW = width / 2, halfH = height / 2;
         const bounds = canvas.getBoundingClientRect();
         const move = moveEvent => {
-          piece.x = Math.max(0, Math.min(580, Math.round(moveEvent.clientX - bounds.left - 60)));
-          piece.y = Math.max(0, Math.min(410, Math.round(moveEvent.clientY - bounds.top - 42)));
+          piece.x = Math.max(0, Math.min(RAILWAY_CANVAS_MAX_X, Math.round(moveEvent.clientX - bounds.left - halfW)));
+          piece.y = Math.max(0, Math.min(RAILWAY_CANVAS_MAX_Y, Math.round(moveEvent.clientY - bounds.top - halfH)));
           const element = canvas.querySelector(`[data-layout-index="${index}"]`);
           if (element) { element.style.left = `${piece.x}px`; element.style.top = `${piece.y}px`; }
         };
@@ -3763,13 +3976,14 @@
         renderDashboard();
       }
 
-      function deleteRailwayLayout(index) {
+      function deleteRailwayLayout(event, index) {
         if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete physical track plans.');
-        if (!confirm('Delete this physical track plan?')) return;
-        const tracks = db.railwayTracks || [];
-        tracks.splice(index, 1);
-        dbUpdate({ railwayTracks: tracks });
-        renderDashboard();
+        armDangerousButton(event.currentTarget, 'Confirm delete?', () => {
+          const tracks = db.railwayTracks || [];
+          tracks.splice(index, 1);
+          dbUpdate({ railwayTracks: tracks });
+          renderDashboard();
+        });
       }
 
       function renderEurotunnelPage() {
@@ -3906,12 +4120,12 @@
           saveRailwayTrackSection();
           return;
         }
-        if (editingModuleKey === 'railwayTracks') {
-          saveRailwayTrackPlan();
-          return;
-        }
         if (editingModuleKey === 'railwayLayout') {
           saveRailwayLayout();
+          return;
+        }
+        if (editingModuleKey === 'railwayPieceHealth') {
+          saveRailwayPieceHealth();
           return;
         }
         if (editingModuleKey && editingModuleKey.startsWith('eurotunnel')) {
