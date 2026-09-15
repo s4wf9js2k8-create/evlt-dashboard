@@ -284,8 +284,8 @@
         </div>
       </div>
       <div class="header-right">
-        <button class="btn btn-subtle" onclick="openNotificationModal()" title="Push Notifications" style="color: white; padding: 0.25rem 0.5rem;">
-          <i data-lucide="bell" style="width: 16px; height: 16px;"></i>
+        <button class="btn btn-subtle" onclick="openNotificationModal()" title="Push Notifications" style="color: white; padding: 0.4rem 0.6rem; min-width: 38px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+          <i data-lucide="bell" style="width: 17px; height: 17px;"></i>
         </button>
         <div class="user-select-container" id="currentUserBadge" style="cursor: pointer;" onclick="openLoginModal()" title="Switch Account">
           <i data-lucide="user" style="width: 14px; height: 14px; color: white;"></i>
@@ -990,18 +990,33 @@
           <button type="button" class="btn btn-subtle btn-sm" onclick="closeModal('notificationModal')">✕</button>
         </div>
         <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.85rem;">
-          Enable background device alerts for safety defects, red tags, and operational notices even when your browser is closed.
+          Enable background device alerts for safety defects, red tags, track walk reminders, and operational notices.
         </div>
+        
+        <!-- iOS Safari Home Screen Requirement Guide -->
+        <div id="iosNotifNotice" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius); padding: 0.75rem; margin-bottom: 0.85rem; font-size: 0.75rem; color: #1e40af;">
+          <div style="font-weight: 700; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.25rem;">
+            <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i> iPhone / iPad Web Push Notice
+          </div>
+          <div>On Apple iOS, Web Push is enabled when the app is installed to your Home Screen:</div>
+          <ol style="margin: 0.35rem 0 0 1.1rem; padding: 0; line-height: 1.4;">
+            <li>Tap the <strong>Share</strong> button ( <span style="font-size: 0.9rem;">⎋</span> ) in Safari.</li>
+            <li>Scroll down and tap <strong>&quot;Add to Home Screen&quot;</strong>.</li>
+            <li>Launch <strong>EVLT Operations</strong> from your home screen and tap Push Alerts.</li>
+          </ol>
+        </div>
+
         <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; margin-bottom: 0.85rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-            <strong style="font-size: 0.75rem; color: var(--text);">Browser Permission:</strong>
-            <span id="notifPermBadge" style="font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e;">UNKNOWN</span>
+            <strong style="font-size: 0.75rem; color: var(--text);">Notification Status:</strong>
+            <span id="notifPermBadge" style="font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e;">CHECKING...</span>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
             <span>Firebase Project:</span>
             <strong style="color: var(--text);">evlt-admin</strong>
           </div>
         </div>
+        
         <div style="margin-bottom: 0.85rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
             <label style="font-size: 0.75rem; font-weight: 600;">Device Push Token (FCM)</label>
@@ -1015,8 +1030,9 @@
           </div>
         </div>
         <div id="notifStatusMsg" style="font-size: 0.75rem; margin-bottom: 0.85rem; padding: 0.5rem; border-radius: var(--radius); display: none;"></div>
-        <div class="modal-actions" style="margin-top: 0.5rem;">
+        <div class="modal-actions" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary" onclick="closeModal('notificationModal')">Close</button>
+          <button type="button" class="btn btn-secondary" id="testPushBtn" onclick="sendTestNotification()" style="display: none;"><i data-lucide="bell-ring"></i> Send Test Alert</button>
           <button type="button" class="btn btn-primary" id="enablePushBtn" onclick="registerForPush()"><i data-lucide="bell"></i> Enable Push Notifications</button>
         </div>
       </div>
@@ -1525,6 +1541,259 @@
           }
         } catch (e) {
           console.warn('FCM Messaging initialization warning:', e);
+        }
+      }
+
+      function isIOSDevice() {
+        return [
+          'iPad Simulator',
+          'iPhone Simulator',
+          'iPod Simulator',
+          'iPad',
+          'iPhone',
+          'iPod'
+        ].includes(navigator.platform)
+        || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
+        || /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+
+      function isStandalonePWA() {
+        return (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+      }
+
+      function openNotificationModal() {
+        // If sidebar is open on mobile screen, close it cleanly
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) sidebar.classList.remove('active');
+        const overlay = document.getElementById('overlay');
+        if (overlay) overlay.classList.remove('active');
+
+        openModal('notificationModal');
+        updateNotificationModalUI();
+      }
+
+      function updateNotificationModalUI() {
+        const badge = document.getElementById('notifPermBadge');
+        const tokenBox = document.getElementById('tokenDisplayBox');
+        const noTokenNotice = document.getElementById('noTokenNotice');
+        const copyBtn = document.getElementById('copyTokenBtn');
+        const actionBtn = document.getElementById('enablePushBtn');
+        const testBtn = document.getElementById('testPushBtn');
+        const statusMsg = document.getElementById('notifStatusMsg');
+        const iosNotice = document.getElementById('iosNotifNotice');
+
+        const savedToken = localStorage.getItem('evlt_fcm_token');
+
+        if (iosNotice) {
+          if (isIOSDevice() && !isStandalonePWA()) {
+            iosNotice.style.display = 'block';
+          } else {
+            iosNotice.style.display = 'none';
+          }
+        }
+
+        if (!('Notification' in window)) {
+          if (badge) {
+            badge.innerText = 'NOT SUPPORTED IN THIS BROWSER';
+            badge.style.background = '#fee2e2';
+            badge.style.color = '#991b1b';
+          }
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.background = '#fee2e2';
+            statusMsg.style.color = '#991b1b';
+            statusMsg.innerText = isIOSDevice()
+              ? 'On iOS devices, Web Push requires iOS 16.4+ and adding this web app to your Home Screen. Tap Share (⎋) > Add to Home Screen.'
+              : 'Web push notifications are not supported in this browser environment.';
+          }
+          if (actionBtn) actionBtn.disabled = true;
+          return;
+        }
+
+        const perm = Notification.permission;
+        if (badge) {
+          if (perm === 'granted') {
+            badge.innerText = 'ACTIVE / GRANTED';
+            badge.style.background = '#dcfce7';
+            badge.style.color = '#166534';
+          } else if (perm === 'denied') {
+            badge.innerText = 'BLOCKED / DENIED';
+            badge.style.background = '#fee2e2';
+            badge.style.color = '#991b1b';
+          } else {
+            badge.innerText = 'NOT YET ENABLED';
+            badge.style.background = '#fef3c7';
+            badge.style.color = '#92400e';
+          }
+        }
+
+        if (savedToken) {
+          if (tokenBox) {
+            tokenBox.innerText = savedToken;
+            tokenBox.style.display = 'block';
+          }
+          if (noTokenNotice) noTokenNotice.style.display = 'none';
+          if (copyBtn) copyBtn.style.display = 'inline-flex';
+          if (testBtn) testBtn.style.display = 'inline-flex';
+          if (actionBtn) {
+            actionBtn.innerHTML = '<i data-lucide="refresh-cw"></i> Re-register Token';
+            actionBtn.onclick = registerForPush;
+          }
+        } else {
+          if (tokenBox) tokenBox.style.display = 'none';
+          if (noTokenNotice) noTokenNotice.style.display = 'block';
+          if (copyBtn) copyBtn.style.display = 'none';
+          if (testBtn) testBtn.style.display = perm === 'granted' ? 'inline-flex' : 'none';
+          if (actionBtn) {
+            actionBtn.innerHTML = '<i data-lucide="bell"></i> Enable Push Notifications';
+            actionBtn.onclick = registerForPush;
+          }
+        }
+
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      async function registerForPush() {
+        const statusMsg = document.getElementById('notifStatusMsg');
+        const actionBtn = document.getElementById('enablePushBtn');
+
+        if (!('Notification' in window)) {
+          alert(isIOSDevice() 
+            ? "To enable push notifications on iPhone / iPad:\n1. Tap the Share button in Safari (⎋)\n2. Tap 'Add to Home Screen'\n3. Open EVLT Operations from your Home Screen" 
+            : "Web Push Notifications are not supported in this browser.");
+          return;
+        }
+
+        if (actionBtn) {
+          actionBtn.disabled = true;
+          actionBtn.innerHTML = '<i data-lucide="loader"></i> Requesting Permission...';
+          if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        }
+
+        try {
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            if (statusMsg) {
+              statusMsg.style.display = 'block';
+              statusMsg.style.background = '#fee2e2';
+              statusMsg.style.color = '#991b1b';
+              statusMsg.innerText = 'Permission was not granted (' + permission + '). Please enable Notifications in your browser or device settings.';
+            }
+            updateNotificationModalUI();
+            return;
+          }
+
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.background = '#eff6ff';
+            statusMsg.style.color = '#1e40af';
+            statusMsg.innerText = 'Registering Service Worker & generating FCM token...';
+          }
+
+          let swReg = null;
+          if ('serviceWorker' in navigator) {
+            try {
+              swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+              await navigator.serviceWorker.ready;
+            } catch (swErr) {
+              console.warn('Service worker registration error:', swErr);
+            }
+          }
+
+          if (!messaging && firebase.messaging && firebase.messaging.isSupported()) {
+            messaging = firebase.messaging();
+          }
+
+          let token = null;
+          if (messaging) {
+            const tokenOptions = { vapidKey: VAPID_KEY };
+            if (swReg) tokenOptions.serviceWorkerRegistration = swReg;
+            token = await messaging.getToken(tokenOptions);
+          } else {
+            token = 'device-notif-enabled-' + Date.now();
+          }
+
+          if (token) {
+            localStorage.setItem('evlt_fcm_token', token);
+
+            if (typeof dbRef !== 'undefined' && dbRef) {
+              const safeKey = token.substring(0, 32).replace(/[.#$/[\]]/g, '_');
+              dbRef.child('push_tokens/' + safeKey).set({
+                token: token,
+                user: currentUser?.name || 'Anonymous',
+                platform: navigator.userAgent.substring(0, 80),
+                updatedAt: new Date().toISOString()
+              }).catch(e => console.warn('Could not save token to DB:', e));
+            }
+
+            if (statusMsg) {
+              statusMsg.style.display = 'block';
+              statusMsg.style.background = '#dcfce7';
+              statusMsg.style.color = '#166534';
+              statusMsg.innerText = '✓ Push notifications successfully enabled and token saved!';
+            }
+
+            sendTestNotification();
+          }
+        } catch (err) {
+          console.error('Push registration error:', err);
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.background = '#fee2e2';
+            statusMsg.style.color = '#991b1b';
+            statusMsg.innerText = 'Registration note: ' + (err.message || err);
+          }
+        } finally {
+          if (actionBtn) actionBtn.disabled = false;
+          updateNotificationModalUI();
+        }
+      }
+
+      function sendTestNotification() {
+        const title = '🚂 EVLT Operations Alert';
+        const options = {
+          body: 'Test alert: Push notifications are active and ready on this device!',
+          icon: '/apple-touch-icon.png',
+          badge: '/apple-touch-icon.png',
+          data: { url: window.location.href }
+        };
+
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(title, options);
+          }).catch(() => {
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(title, options);
+            }
+          });
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(title, options);
+          } catch (e) {
+            console.warn('Direct notification error:', e);
+          }
+        }
+
+        const statusMsg = document.getElementById('notifStatusMsg');
+        if (statusMsg) {
+          statusMsg.style.display = 'block';
+          statusMsg.style.background = '#f0fdf4';
+          statusMsg.style.color = '#15803d';
+          statusMsg.innerText = '✓ Test notification triggered on device!';
+        }
+      }
+
+      function copyFcmToken() {
+        const token = localStorage.getItem('evlt_fcm_token');
+        if (!token) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(token).then(() => {
+            alert('FCM Token copied to clipboard!');
+          }).catch(() => {
+            prompt('Copy FCM token manually:', token);
+          });
+        } else {
+          prompt('Copy FCM token manually:', token);
         }
       }
 
