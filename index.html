@@ -5064,43 +5064,6 @@
         }
       }
 
-      function navigate(view) {
-        currentView = view;
-        document.querySelectorAll('.nav-item').forEach(item => {
-          item.classList.remove('active');
-          if (item.getAttribute('onclick')?.includes(view)) {
-            item.classList.add('active');
-          }
-        });
-
-        if (!canAccessView(view)) {
-          renderAccessForbidden(view);
-          return;
-        }
-
-        switch (view) {
-          case 'dashboard': renderDashboard(); break;
-          case 'clock': renderClock(); break;
-          case 'calendar': renderCalendarView(); break;
-          case 'clockLogs': renderClockLogsPage(); break;
-          case 'volunteers': renderVolunteers(); break;
-          case 'competencies': renderCompetencyMatrix(); break;
-          case 'maintenance': renderMaintenancePage(); break;
-          case 'archives': renderArchives(); break;
-          case 'incidents': renderIncidents(); break;
-          case 'actions': renderActionsPage(); break;
-          case 'events': renderEventsPage(); break;
-          case 'eurotunnel': renderEurotunnelPage(); break;
-          case 'settings': renderSettings(); break;
-          default:
-            if (MODULE_SCHEMAS[view]) {
-              renderGenericModule(view);
-            } else {
-              renderDashboard();
-            }
-        }
-      }
-
       function openModal(id) {
         const el = document.getElementById(id);
         if (el) el.style.display = 'flex';
