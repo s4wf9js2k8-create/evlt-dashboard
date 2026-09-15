@@ -4916,6 +4916,40 @@
         renderGenericModule(moduleKey);
       }
 
+      function openAccessControlModal(userName) {
+        document.getElementById('accessControlUserName').value = userName;
+        document.getElementById('accessControlTitle').innerText = `Page Permissions: ${userName}`;
+
+        const container = document.getElementById('permissionsCheckboxesList');
+        const permsMap = db.userPermissions || {};
+        const activePerms = permsMap[userName] || [];
+
+        container.innerHTML = ALL_PAGES.map(p => {
+          const checked = activePerms.includes(p.key);
+          return `
+            <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; cursor:pointer;">
+              <input type="checkbox" value="${p.key}" class="perm-cb" ${checked ? 'checked' : ''}>
+              <strong>${p.label}</strong> <span style="font-size:0.7rem; color:var(--text-muted);">(${p.section})</span>
+            </label>
+          `;
+        }).join('');
+
+        document.getElementById('accessControlModal').style.display = 'flex';
+      }
+
+      function saveUserPermissions(e) {
+        e.preventDefault();
+        const userName = document.getElementById('accessControlUserName').value;
+        const selected = Array.from(document.querySelectorAll('.perm-cb:checked')).map(cb => cb.value);
+
+        if (!db.userPermissions) db.userPermissions = {};
+        db.userPermissions[userName] = selected;
+
+        database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions);
+        closeModal('accessControlModal');
+        renderVolunteers();
+      }
+
       function canAccessView(view) {
         if (!currentUser) return false;
         if (currentUser.isSystemAdmin) return true;
