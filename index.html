@@ -4667,13 +4667,27 @@
             </div>
 
             <div class="card" style="padding:1.25rem;">
-              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Database Export & Backup</h3>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Download a complete JSON snapshot of all EVLT operations records.</p>
-              <button class="btn btn-secondary btn-sm" onclick="exportDatabaseJson()"><i data-lucide="download"></i> Download DB Snapshot</button>
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Export & Repository Backup</h3>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Download the full application source file for GitHub or local backup, or download a snapshot of all database records.</p>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-sm" onclick="exportAppHtml()"><i data-lucide="file-code"></i> Download App (index.html)</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportDatabaseJson()"><i data-lucide="download"></i> Download DB Snapshot</button>
+              </div>
             </div>
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function exportAppHtml() {
+        const fullSource = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+        const blob = new Blob([fullSource], { type: "text/html;charset=utf-8" });
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute("href", URL.createObjectURL(blob));
+        dlAnchor.setAttribute("download", "index.html");
+        document.body.appendChild(dlAnchor);
+        dlAnchor.click();
+        dlAnchor.remove();
       }
 
       function exportDatabaseJson() {
