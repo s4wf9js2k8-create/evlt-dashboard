@@ -1,0 +1,6 @@
+{
+  "name": "EVLT Operations Platform",
+  "description": "Railway operations, volunteer attendance, daily safety checks, fleet maintenance, and background push notifications for Elham Valley Line Trust.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
