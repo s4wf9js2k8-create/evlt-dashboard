@@ -1544,6 +1544,43 @@
         }
       }
 
+      function getAppBaseDirectory() {
+        let path = window.location.pathname;
+        if (!path.endsWith('/')) {
+          if (path.includes('.')) {
+            path = path.substring(0, path.lastIndexOf('/') + 1);
+          } else {
+            path = path + '/';
+          }
+        }
+        return path;
+      }
+
+      function getSwScriptUrl() {
+        return getAppBaseDirectory() + 'firebase-messaging-sw.js';
+      }
+
+      async function getOrRegisterServiceWorker() {
+        if (!('serviceWorker' in navigator)) return null;
+        try {
+          const swUrl = getSwScriptUrl();
+          const baseScope = getAppBaseDirectory();
+          const reg = await navigator.serviceWorker.register(swUrl, { scope: baseScope });
+          await navigator.serviceWorker.ready;
+          return reg;
+        } catch (err) {
+          console.warn('Primary SW registration failed, trying relative path:', err);
+          try {
+            const fallbackReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+            await navigator.serviceWorker.ready;
+            return fallbackReg;
+          } catch (fallbackErr) {
+            console.warn('Fallback SW registration failed:', fallbackErr);
+            return null;
+          }
+        }
+      }
+
       function isIOSDevice() {
         return [
           'iPad Simulator',
@@ -1690,25 +1727,26 @@
             statusMsg.innerText = 'Registering Service Worker & generating FCM token...';
           }
 
-          let swReg = null;
-          if ('serviceWorker' in navigator) {
-            try {
-              swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-              await navigator.serviceWorker.ready;
-            } catch (swErr) {
-              console.warn('Service worker registration error:', swErr);
-            }
-          }
+          let swReg = await getOrRegisterServiceWorker();
 
           if (!messaging && firebase.messaging && firebase.messaging.isSupported()) {
             messaging = firebase.messaging();
           }
 
           let token = null;
-          if (messaging) {
-            const tokenOptions = { vapidKey: VAPID_KEY };
-            if (swReg) tokenOptions.serviceWorkerRegistration = swReg;
-            token = await messaging.getToken(tokenOptions);
+          if (messaging && swReg) {
+            try {
+              token = await messaging.getToken({
+                vapidKey: VAPID_KEY,
+                serviceWorkerRegistration: swReg
+              });
+            } catch (tokenErr) {
+              console.warn('FCM token retrieval error with SW registration:', tokenErr);
+              token = 'evlt-device-' + Date.now();
+            }
+          } else if (messaging && !swReg) {
+            // Do not call getToken() without registration to avoid Firebase loading root /firebase-messaging-sw.js on GitHub Pages
+            token = 'evlt-device-' + Date.now();
           } else {
             token = 'device-notif-enabled-' + Date.now();
           }
@@ -1750,11 +1788,12 @@
       }
 
       function sendTestNotification() {
+        const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
         const title = '🚂 EVLT Operations Alert';
         const options = {
           body: 'Test alert: Push notifications are active and ready on this device!',
-          icon: '/apple-touch-icon.png',
-          badge: '/apple-touch-icon.png',
+          icon: iconUrl,
+          badge: iconUrl,
           data: { url: window.location.href }
         };
 
