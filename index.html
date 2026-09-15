@@ -1121,7 +1121,8 @@
         { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
         { key: 'documents', label: 'Documents', icon: 'file-text', section: 'Management' },
         { key: 'notes', label: 'Notes', icon: 'sticky-note', section: 'Management' },
-        { key: 'archives', label: 'Historical Archives', icon: 'archive', section: 'Archives' }
+        { key: 'archives', label: 'Historical Archives', icon: 'archive', section: 'Archives' },
+        { key: 'notifications', label: 'Notification Centre', icon: 'bell-ring', section: 'Communication' }
       ];
 
       function getAvailableRoles() {
@@ -1381,7 +1382,7 @@
       function normaliseDb() {
         if (!db || typeof db !== 'object') db = {};
         
-        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads']
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads']
           .forEach(key => {
             const val = db[key];
             if (Array.isArray(val)) return;
@@ -1455,6 +1456,7 @@
             db = val;
             normaliseDb();
           }
+          processIncomingNotifications();
           archiveAndResetIfNewDay();
           renderInitialApp();
         }, (err) => {
@@ -1754,9 +1756,9 @@
           if (token) {
             localStorage.setItem('evlt_fcm_token', token);
 
-            if (typeof dbRef !== 'undefined' && dbRef) {
+            if (database) {
               const safeKey = token.substring(0, 32).replace(/[.#$/[\]]/g, '_');
-              dbRef.child('push_tokens/' + safeKey).set({
+              database.ref('push_tokens/' + safeKey).set({
                 token: token,
                 user: currentUser?.name || 'Anonymous',
                 platform: navigator.userAgent.substring(0, 80),
@@ -1834,6 +1836,154 @@
         } else {
           prompt('Copy FCM token manually:', token);
         }
+      }
+
+      // ============================================================
+      // NOTIFICATION CENTRE — broadcast messages, visible to anyone
+      // granted access to the 'notifications' page (via Manage Page
+      // Permissions or Qualification-Based Page Access, same as any
+      // other page). Messages sync to everyone via the normal
+      // EVLT_ADMIN_DB realtime listener, and trigger a device
+      // notification for anyone with the app open at the time.
+      // ============================================================
+
+      let notifBaselineSet = false;
+      const seenNotificationIds = new Set();
+
+      function showLocalNotification(title, body) {
+        const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
+        const options = { body: body || '', icon: iconUrl, badge: iconUrl };
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(title, options);
+          }).catch(() => {
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try { new Notification(title, options); } catch (e) {}
+            }
+          });
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+          try { new Notification(title, options); } catch (e) {}
+        }
+      }
+
+      // Called every time fresh data arrives from Firebase. Skips the
+      // very first snapshot (so logging in doesn't re-notify you about
+      // every message ever sent) and never notifies you about your own
+      // broadcasts.
+      function processIncomingNotifications() {
+        const list = db.notifications || [];
+        if (!notifBaselineSet) {
+          list.forEach(n => seenNotificationIds.add(n.id));
+          notifBaselineSet = true;
+          return;
+        }
+        list.forEach(n => {
+          if (seenNotificationIds.has(n.id)) return;
+          seenNotificationIds.add(n.id);
+          if (currentUser && n.sentBy === currentUser.name) return;
+          showLocalNotification('🚂 ' + n.title, n.body);
+        });
+      }
+
+      function getNotificationLastSeenKey() {
+        return 'evlt_notif_last_seen_' + (currentUser ? currentUser.name : 'anon');
+      }
+
+      function getUnreadNotificationCount() {
+        const list = db.notifications || [];
+        if (!list.length) return 0;
+        const lastSeen = localStorage.getItem(getNotificationLastSeenKey());
+        if (!lastSeen) return list.length;
+        return list.filter(n => n.sentAt > lastSeen).length;
+      }
+
+      function markNotificationsSeen() {
+        try { localStorage.setItem(getNotificationLastSeenKey(), new Date().toISOString()); } catch (e) {}
+      }
+
+      function renderNotificationsPage() {
+        const content = document.getElementById('content');
+        const list = (db.notifications || []).slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Notification Centre</h2>
+              <p>Send an alert to everyone using the system, and see what's been sent before.</p>
+            </div>
+          </div>
+          <div class="card" style="padding:1rem; margin-bottom:1.25rem;">
+            <div class="form-group">
+              <label>Title</label>
+              <input type="text" id="notif_title" placeholder="e.g. Track closed this Saturday" maxlength="80">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Message</label>
+              <textarea id="notif_body" rows="3" placeholder="Details for everyone..."></textarea>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
+              <button type="button" class="btn btn-primary" onclick="sendBroadcastNotification()"><i data-lucide="send"></i> Send to Everyone</button>
+            </div>
+          </div>
+          <div class="section-header">Sent Notifications</div>
+          <div class="card">
+            <div class="table-container">
+              <table>
+                <thead><tr><th>Title</th><th>Message</th><th>Sent By</th><th>Date</th>${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}</tr></thead>
+                <tbody>
+                  ${list.length === 0 ? `<tr><td colspan="5" style="text-align:center;padding:2rem;">No notifications sent yet.</td></tr>` :
+                    list.map(n => `
+                      <tr>
+                        <td>${escapeHtml(n.title)}</td>
+                        <td>${escapeHtml(n.body)}</td>
+                        <td>${escapeHtml(n.sentBy)}</td>
+                        <td>${n.sentAt ? new Date(n.sentAt).toLocaleString() : '-'}</td>
+                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteBroadcastNotification('${n.id}')"><i data-lucide="trash-2"></i></button></td>` : ''}
+                      </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+
+        markNotificationsSeen();
+        renderSidebar();
+      }
+
+      function sendBroadcastNotification() {
+        const titleEl = document.getElementById('notif_title');
+        const bodyEl = document.getElementById('notif_body');
+        const title = (titleEl.value || '').trim();
+        const body = (bodyEl.value || '').trim();
+        if (!title) { alert('Please enter a title for the notification.'); return; }
+
+        const entry = {
+          id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+          title: title,
+          body: body,
+          sentBy: (currentUser && currentUser.name) || 'Unknown',
+          sentAt: new Date().toISOString()
+        };
+
+        if (!db.notifications) db.notifications = [];
+        db.notifications.push(entry);
+        seenNotificationIds.add(entry.id);
+        if (database) database.ref('EVLT_ADMIN_DB/notifications').set(db.notifications);
+
+        showLocalNotification('🚂 ' + entry.title, entry.body);
+        renderNotificationsPage();
+      }
+
+      function deleteBroadcastNotification(id) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can delete notifications.');
+          return;
+        }
+        if (!confirm('Delete this notification for everyone?')) return;
+        db.notifications = (db.notifications || []).filter(n => n.id !== id);
+        if (database) database.ref('EVLT_ADMIN_DB/notifications').set(db.notifications);
+        renderNotificationsPage();
       }
 
       document.addEventListener("DOMContentLoaded", () => {
@@ -1999,9 +2149,11 @@
         Object.entries(sections).forEach(([secName, pages]) => {
           html += `<div class="sidebar-section-label">${secName}</div>`;
           pages.forEach(p => {
+            const unread = p.key === 'notifications' ? getUnreadNotificationCount() : 0;
             html += `
               <a href="#" class="${currentView === p.key ? 'active' : ''}" onclick="navigate('${p.key}'); return false;">
                 <i data-lucide="${p.icon}"></i> ${p.label}
+                ${unread > 0 ? `<span class="cal-badge" style="margin-left:auto;">${unread}</span>` : ''}
               </a>
             `;
           });
@@ -2079,6 +2231,7 @@
           case 'documents': renderGenericModule('documents'); break;
           case 'notes': renderGenericModule('notes'); break;
           case 'archives': renderArchives(); break;
+          case 'notifications': renderNotificationsPage(); break;
           case 'myAccount': renderMyAccount(); break;
           default: renderDashboard();
         }
