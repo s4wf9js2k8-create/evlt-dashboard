@@ -2074,10 +2074,10 @@
           case 'maintenance': renderMaintenancePage(); break;
           case 'events': renderEventsPage(); break;
           case 'eurotunnel': renderEurotunnelPage(); break;
-          case 'suppliers': renderGenericModule('Suppliers', 'Vendor contacts and accounts.', 'suppliers'); break;
-          case 'enquiries': renderGenericModule('Enquiries', 'Visitor questions and bookings.', 'enquiries'); break;
-          case 'documents': renderGenericModule('Documents', 'Rulebooks, policies, and safety guides.', 'documents'); break;
-          case 'notes': renderGenericModule('Notes', 'Shift handover and operational logs.', 'notes'); break;
+          case 'suppliers': renderGenericModule('suppliers'); break;
+          case 'enquiries': renderGenericModule('enquiries'); break;
+          case 'documents': renderGenericModule('documents'); break;
+          case 'notes': renderGenericModule('notes'); break;
           case 'archives': renderArchives(); break;
           case 'myAccount': renderMyAccount(); break;
           default: renderDashboard();
@@ -4837,6 +4837,51 @@
         renderEurotunnelPage();
       }
 
+      const MODULE_SCHEMAS = {
+        suppliers: {
+          title: 'Suppliers',
+          description: 'Vendor contacts and accounts.',
+          fields: [
+            { name: 'name', label: 'Supplier Name', type: 'text' },
+            { name: 'contact', label: 'Contact Person', type: 'text' },
+            { name: 'phone', label: 'Phone', type: 'text' },
+            { name: 'email', label: 'Email', type: 'email' },
+            { name: 'account', label: 'Account Number', type: 'text' },
+            { name: 'notes', label: 'Notes', type: 'textarea' }
+          ]
+        },
+        enquiries: {
+          title: 'Enquiries',
+          description: 'Visitor questions and bookings.',
+          fields: [
+            { name: 'date', label: 'Date', type: 'date' },
+            { name: 'name', label: 'Name', type: 'text' },
+            { name: 'contact', label: 'Contact', type: 'text' },
+            { name: 'enquiry', label: 'Enquiry', type: 'textarea' },
+            { name: 'status', label: 'Status', type: 'select', options: ['Open', 'Responded', 'Closed'] }
+          ]
+        },
+        documents: {
+          title: 'Documents',
+          description: 'Rulebooks, policies, and safety guides.',
+          fields: [
+            { name: 'title', label: 'Title', type: 'text' },
+            { name: 'category', label: 'Category', type: 'text' },
+            { name: 'dateAdded', label: 'Date Added', type: 'date' },
+            { name: 'link', label: 'Link / Reference', type: 'text' }
+          ]
+        },
+        notes: {
+          title: 'Notes',
+          description: 'Shift handover and operational logs.',
+          fields: [
+            { name: 'date', label: 'Date', type: 'date' },
+            { name: 'author', label: 'Author', type: 'text' },
+            { name: 'note', label: 'Note', type: 'textarea' }
+          ]
+        }
+      };
+
       function renderGenericModule(moduleKey) {
         const content = document.getElementById('content');
         const schema = MODULE_SCHEMAS[moduleKey];
@@ -4848,7 +4893,7 @@
           <div class="page-header">
             <div class="page-title">
               <h2>${schema.title}</h2>
-              <p>Operational data and records management.</p>
+              <p>${schema.description || 'Operational data and records management.'}</p>
             </div>
             <button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')"><i data-lucide="plus"></i> Add Entry</button>
           </div>
