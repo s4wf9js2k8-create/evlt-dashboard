@@ -5076,15 +5076,6 @@
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       }
-
-      // Initialisation on window load
-      window.addEventListener('DOMContentLoaded', () => {
-        initAuth();
-        initFirebaseDatabase();
-        if (window.lucide && typeof lucide.createIcons === 'function') {
-          lucide.createIcons();
-        }
-      });
     </script>
   </body>
 </html>
