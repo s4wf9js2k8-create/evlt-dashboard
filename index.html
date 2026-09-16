@@ -1049,6 +1049,19 @@
       // ============================================================
       const SCAN_WORKER_URL = "https://hidden-tooth-2a78.s4wf9js2k8.workers.dev";
 
+      // ============================================================
+      // BACKGROUND PUSH — SERVERLESS FUNCTION URL
+      // Deploy the evlt-broadcast-api project to Vercel, then paste
+      // its URL below (ends in /api/send-broadcast).
+      // BROADCAST_SECRET_CLIENT must exactly match the
+      // BROADCAST_SECRET environment variable set on that deployment.
+      // Until both are filled in, notifications still save and show
+      // in-app for anyone with the tab open, they just won't reach
+      // devices where the app is fully closed.
+      // ============================================================
+      const BROADCAST_WORKER_URL = "https://YOUR-PROJECT.vercel.app/api/send-broadcast";
+      const BROADCAST_SECRET_CLIENT = "PASTE-THE-SAME-SECRET-HERE";
+
       const firebaseConfig = {
         apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
         authDomain: "evlt-admin.firebaseapp.com",
@@ -1972,7 +1985,48 @@
         if (database) database.ref('EVLT_ADMIN_DB/notifications').set(db.notifications);
 
         showLocalNotification('🚂 ' + entry.title, entry.body);
+        triggerBackgroundPush(entry);
         renderNotificationsPage();
+      }
+
+      // Fetches all registered device tokens and asks the Cloudflare
+      // Worker to push to each of them, so devices with the app fully
+      // closed still get the alert. Fails silently (console only) if
+      // the worker isn't configured yet or is unreachable — the
+      // in-app Notification Centre and open-tab alert above already
+      // happened regardless.
+      async function triggerBackgroundPush(entry) {
+        if (!database) return;
+        if (!BROADCAST_WORKER_URL || BROADCAST_WORKER_URL.includes('YOUR-WORKER')) return;
+
+        try {
+          const snap = await database.ref('push_tokens').once('value');
+          const val = snap.val() || {};
+          const tokens = Object.values(val).map(v => v && v.token).filter(Boolean);
+          if (!tokens.length) return;
+
+          const res = await fetch(BROADCAST_WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              secret: BROADCAST_SECRET_CLIENT,
+              title: entry.title,
+              body: entry.body,
+              tokens: tokens
+            })
+          });
+          const result = await res.json().catch(() => ({}));
+
+          if (result && Array.isArray(result.invalidTokens) && result.invalidTokens.length) {
+            const updates = {};
+            Object.entries(val).forEach(([key, v]) => {
+              if (v && result.invalidTokens.includes(v.token)) updates[key] = null;
+            });
+            if (Object.keys(updates).length) database.ref('push_tokens').update(updates);
+          }
+        } catch (e) {
+          console.warn('Background push dispatch failed (in-app notification still worked):', e);
+        }
       }
 
       function deleteBroadcastNotification(id) {
