@@ -1059,8 +1059,8 @@
       // in-app for anyone with the tab open, they just won't reach
       // devices where the app is fully closed.
       // ============================================================
-      const BROADCAST_WORKER_URL = "https://vercel.com/evlt/evlt-broadcast-api/D2poYdytqxdaCS5f4MciErhDTKyo";
-      const BROADCAST_SECRET_CLIENT = "evlt";
+      const BROADCAST_WORKER_URL = "https://YOUR-PROJECT.vercel.app/api/send-broadcast";
+      const BROADCAST_SECRET_CLIENT = "PASTE-THE-SAME-SECRET-HERE";
 
       const firebaseConfig = {
         apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
@@ -1748,22 +1748,43 @@
             messaging = firebase.messaging();
           }
 
-          let token = null;
-          if (messaging && swReg) {
-            try {
-              token = await messaging.getToken({
-                vapidKey: VAPID_KEY,
-                serviceWorkerRegistration: swReg
-              });
-            } catch (tokenErr) {
-              console.warn('FCM token retrieval error with SW registration:', tokenErr);
-              token = 'evlt-device-' + Date.now();
+          if (!swReg) {
+            if (statusMsg) {
+              statusMsg.style.display = 'block';
+              statusMsg.style.background = '#fee2e2';
+              statusMsg.style.color = '#991b1b';
+              statusMsg.innerText = 'Service worker registration failed, so push notifications cannot work on this device yet. Try fully closing and reopening the app, or check the browser console for the specific error.';
             }
-          } else if (messaging && !swReg) {
-            // Do not call getToken() without registration to avoid Firebase loading root /firebase-messaging-sw.js on GitHub Pages
-            token = 'evlt-device-' + Date.now();
-          } else {
-            token = 'device-notif-enabled-' + Date.now();
+            updateNotificationModalUI();
+            return;
+          }
+          if (!messaging) {
+            if (statusMsg) {
+              statusMsg.style.display = 'block';
+              statusMsg.style.background = '#fee2e2';
+              statusMsg.style.color = '#991b1b';
+              statusMsg.innerText = 'Firebase Messaging is not supported in this browser, so background push cannot work here.';
+            }
+            updateNotificationModalUI();
+            return;
+          }
+
+          let token = null;
+          try {
+            token = await messaging.getToken({
+              vapidKey: VAPID_KEY,
+              serviceWorkerRegistration: swReg
+            });
+          } catch (tokenErr) {
+            console.warn('FCM token retrieval error with SW registration:', tokenErr);
+            if (statusMsg) {
+              statusMsg.style.display = 'block';
+              statusMsg.style.background = '#fee2e2';
+              statusMsg.style.color = '#991b1b';
+              statusMsg.innerText = 'Could not get a push token: ' + (tokenErr && tokenErr.message ? tokenErr.message : tokenErr) + '. Background push will not work until this succeeds.';
+            }
+            updateNotificationModalUI();
+            return;
           }
 
           if (token) {
