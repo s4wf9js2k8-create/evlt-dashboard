@@ -4866,12 +4866,16 @@
                         </div>
                         <div style="display:flex;flex-direction:column;gap:.4rem;">
                           ${(seq.locoIds || []).length === 0 ? '<span style="font-size:.8rem;color:var(--text-muted);">No locos added to this sequence.</span>' :
-                            seq.locoIds.map((locoId, i) => `
+                            seq.locoIds.map((slot, i) => {
+                              const isPair = Array.isArray(slot);
+                              return `
                               <div style="display:flex;align-items:center;gap:.6rem;background:var(--primary-light);border-radius:var(--radius);padding:.45rem .65rem;">
                                 <span style="width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;">${i + 1}</span>
-                                <i data-lucide="train-front" style="width:15px;height:15px;color:var(--primary);flex-shrink:0;"></i>
-                                <span style="font-size:.82rem;font-weight:600;">${escapeHtml(eurotunnelLocoLabel(locoId))}</span>
-                              </div>`).join('')}
+                                <i data-lucide="${isPair ? 'repeat' : 'train-front'}" style="width:15px;height:15px;color:var(--primary);flex-shrink:0;"></i>
+                                <span style="font-size:.82rem;font-weight:600;flex:1;">${isPair ? `${escapeHtml(eurotunnelLocoLabel(slot[0]))} <span style="font-weight:400;color:var(--text-muted);">⇄</span> ${escapeHtml(eurotunnelLocoLabel(slot[1]))}` : escapeHtml(eurotunnelLocoLabel(slot))}</span>
+                                ${isPair ? '<span style="font-size:.62rem;font-weight:700;color:var(--primary);background:#fff;padding:2px 7px;border-radius:999px;flex-shrink:0;">SWAP SHUTTLE</span>' : ''}
+                              </div>`;
+                            }).join('')}
                         </div>
                       </div>`).join('')}
                 </div>`;
@@ -4884,7 +4888,7 @@
         editingEurotunnelSequenceIndex = index;
         const sequences = db.eurotunnelSequences || [];
         const existing = (index !== null && index !== undefined) ? sequences[index] : null;
-        eurotunnelSequenceBuilderLocoIds = existing ? [...(existing.locoIds || [])] : [];
+        eurotunnelSequenceBuilderLocoIds = existing ? (existing.locoIds || []).map(slot => Array.isArray(slot) ? [...slot] : slot) : [];
 
         document.getElementById('genericModalTitle').innerText = existing ? `Edit Sequence — ${loop}` : `Add Sequence — ${loop}`;
         document.getElementById('genericFormFields').innerHTML = `
@@ -4893,8 +4897,12 @@
           <div class="form-group"><label>Notes</label><textarea id="euroSeqNotes" rows="2">${escapeHtml(existing?.notes || '')}</textarea></div>
           <div class="form-group">
             <label>Running order</label>
+            <label style="display:flex;align-items:center;gap:.4rem;font-weight:normal;font-size:.78rem;margin-bottom:.4rem;">
+              <input type="checkbox" id="euroSeqPairToggle" onchange="eurotunnelSeqTogglePairPicker()"> This slot is a swap shuttle (two trains sharing one position)
+            </label>
             <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
               <select id="euroSeqLocoPicker" style="flex:1;"></select>
+              <select id="euroSeqLocoPickerB" style="flex:1;display:none;"></select>
               <button type="button" class="btn btn-secondary btn-sm" onclick="eurotunnelSeqAddLoco()">Add</button>
             </div>
             <div id="euroSeqLocoList" style="display:flex;flex-direction:column;gap:.35rem;"></div>
@@ -4904,14 +4912,33 @@
         document.getElementById('genericModal').style.display = 'flex';
       }
 
+      function eurotunnelSeqTogglePairPicker() {
+        const toggle = document.getElementById('euroSeqPairToggle');
+        const pickerB = document.getElementById('euroSeqLocoPickerB');
+        if (pickerB) pickerB.style.display = (toggle && toggle.checked) ? 'block' : 'none';
+        eurotunnelRefreshSeqLocoPicker();
+      }
+
+      function eurotunnelUsedSeqLocoIds() {
+        const used = [];
+        eurotunnelSequenceBuilderLocoIds.forEach(slot => {
+          if (Array.isArray(slot)) used.push(...slot); else used.push(slot);
+        });
+        return used;
+      }
+
       function eurotunnelRefreshSeqLocoPicker() {
-        const picker = document.getElementById('euroSeqLocoPicker');
-        if (!picker) return;
+        const pickerA = document.getElementById('euroSeqLocoPicker');
+        const pickerB = document.getElementById('euroSeqLocoPickerB');
+        if (!pickerA) return;
         const stock = db.eurotunnelTrains || [];
-        const available = stock.filter(t => !eurotunnelSequenceBuilderLocoIds.includes(t.id));
-        picker.innerHTML = available.length === 0
+        const used = eurotunnelUsedSeqLocoIds();
+        const available = stock.filter(t => !used.includes(t.id));
+        const optionsHtml = available.length === 0
           ? '<option value="">No more locos in stock</option>'
-          : `<option value="">Choose a loco to add...</option>` + available.map(t => `<option value="${t.id}">${escapeHtml(eurotunnelLocoLabel(t.id))}</option>`).join('');
+          : `<option value="">Choose a loco...</option>` + available.map(t => `<option value="${t.id}">${escapeHtml(eurotunnelLocoLabel(t.id))}</option>`).join('');
+        pickerA.innerHTML = optionsHtml;
+        if (pickerB) pickerB.innerHTML = optionsHtml;
       }
 
       function eurotunnelRenderSeqLocoList() {
@@ -4919,23 +4946,41 @@
         if (!listEl) return;
         listEl.innerHTML = eurotunnelSequenceBuilderLocoIds.length === 0
           ? '<span style="font-size:.78rem;color:var(--text-muted);">No locos added yet — pick one above.</span>'
-          : eurotunnelSequenceBuilderLocoIds.map((id, i) => `
+          : eurotunnelSequenceBuilderLocoIds.map((slot, i) => {
+            const isPair = Array.isArray(slot);
+            const label = isPair
+              ? `${escapeHtml(eurotunnelLocoLabel(slot[0]))} <span style="color:var(--text-muted);">⇄</span> ${escapeHtml(eurotunnelLocoLabel(slot[1]))} <span style="font-size:.65rem;color:var(--primary);font-weight:700;">(swap)</span>`
+              : escapeHtml(eurotunnelLocoLabel(slot));
+            return `
             <div style="display:flex;align-items:center;gap:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;">
               <span style="width:20px;height:20px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;">${i + 1}</span>
-              <span style="flex:1;font-size:.8rem;">${escapeHtml(eurotunnelLocoLabel(id))}</span>
+              ${isPair ? '<i data-lucide="repeat" style="width:14px;height:14px;color:var(--primary);flex-shrink:0;"></i>' : ''}
+              <span style="flex:1;font-size:.8rem;">${label}</span>
               <button type="button" class="btn-subtle btn-sm" ${i === 0 ? 'disabled' : ''} onclick="eurotunnelSeqMoveLoco(${i}, -1)"><i data-lucide="chevron-up"></i></button>
               <button type="button" class="btn-subtle btn-sm" ${i === eurotunnelSequenceBuilderLocoIds.length - 1 ? 'disabled' : ''} onclick="eurotunnelSeqMoveLoco(${i}, 1)"><i data-lucide="chevron-down"></i></button>
               <button type="button" class="btn-subtle btn-sm" onclick="eurotunnelSeqRemoveLoco(${i})"><i data-lucide="x"></i></button>
-            </div>`).join('');
+            </div>`;
+          }).join('');
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
       function eurotunnelSeqAddLoco() {
-        const picker = document.getElementById('euroSeqLocoPicker');
-        const id = Number(picker.value);
-        if (!id) return;
-        eurotunnelSequenceBuilderLocoIds.push(id);
-        eurotunnelRefreshSeqLocoPicker();
+        const toggle = document.getElementById('euroSeqPairToggle');
+        const isPair = !!(toggle && toggle.checked);
+        const pickerA = document.getElementById('euroSeqLocoPicker');
+        const idA = Number(pickerA.value);
+        if (!idA) return;
+        if (isPair) {
+          const pickerB = document.getElementById('euroSeqLocoPickerB');
+          const idB = Number(pickerB.value);
+          if (!idB) { alert('Select the second loco for the swap shuttle.'); return; }
+          if (idA === idB) { alert('Choose two different locos for a swap shuttle.'); return; }
+          eurotunnelSequenceBuilderLocoIds.push([idA, idB]);
+        } else {
+          eurotunnelSequenceBuilderLocoIds.push(idA);
+        }
+        if (toggle) toggle.checked = false;
+        eurotunnelSeqTogglePairPicker();
         eurotunnelRenderSeqLocoList();
       }
 
@@ -5076,7 +5121,18 @@
         stock.splice(index, 1);
         eurotunnelSave('eurotunnelTrains', stock);
         if (removedId !== undefined) {
-          const sequences = (db.eurotunnelSequences || []).map(s => ({ ...s, locoIds: (s.locoIds || []).filter(id => id !== removedId) }));
+          const sequences = (db.eurotunnelSequences || []).map(s => {
+            const newLocoIds = (s.locoIds || [])
+              .map(slot => {
+                if (Array.isArray(slot)) {
+                  const remaining = slot.filter(id => id !== removedId);
+                  return remaining.length === 0 ? null : (remaining.length === 1 ? remaining[0] : remaining);
+                }
+                return slot === removedId ? null : slot;
+              })
+              .filter(slot => slot !== null);
+            return { ...s, locoIds: newLocoIds };
+          });
           db.eurotunnelSequences = sequences;
           eurotunnelSave('eurotunnelSequences', sequences);
         }
