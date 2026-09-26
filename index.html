@@ -1115,7 +1115,6 @@
       let eurotunnelSequenceBuilderLocoIds = [];
       let tempEuroLocoPhoto = '';
       let tempEuroStepImages = [];
-      let eurotunnelStepDragIndex = null;
       let eurotunnelMaintenanceLocoFilter = null;
       let calendarCurrentDate = new Date();
       let selectedCalendarDateStr = getTodayString();
@@ -4897,17 +4896,18 @@
           <div class="form-group"><label>Notes</label><textarea id="euroSeqNotes" rows="2">${escapeHtml(existing?.notes || '')}</textarea></div>
           <div class="form-group">
             <label>Running order</label>
-            <label style="display:flex;align-items:center;gap:.4rem;font-weight:normal;font-size:.78rem;margin-bottom:.4rem;">
-              <input type="checkbox" id="euroSeqPairToggle" onchange="eurotunnelSeqTogglePairPicker()"> This slot is a swap shuttle (two trains sharing one position)
+            <label style="display:flex;align-items:flex-start;gap:.4rem;font-weight:normal;font-size:.78rem;margin-bottom:.4rem;">
+              <input type="checkbox" id="euroSeqPairToggle" ${existing && (existing.locoIds || []).some(s => Array.isArray(s)) ? 'checked' : ''} onchange="eurotunnelSeqTogglePairPicker()" style="margin-top:.15rem;flex-shrink:0;">
+              <span style="min-width:0;">Swap shuttle sequence — each position added below will hold two trains that swap in and out</span>
             </label>
             <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
-              <select id="euroSeqLocoPicker" style="flex:1;"></select>
-              <select id="euroSeqLocoPickerB" style="flex:1;display:none;"></select>
+              <select id="euroSeqLocoPicker" style="flex:1;min-width:0;"></select>
+              <select id="euroSeqLocoPickerB" style="flex:1;min-width:0;display:none;"></select>
               <button type="button" class="btn btn-secondary btn-sm" onclick="eurotunnelSeqAddLoco()">Add</button>
             </div>
             <div id="euroSeqLocoList" style="display:flex;flex-direction:column;gap:.35rem;"></div>
           </div>`;
-        eurotunnelRefreshSeqLocoPicker();
+        eurotunnelSeqTogglePairPicker();
         eurotunnelRenderSeqLocoList();
         document.getElementById('genericModal').style.display = 'flex';
       }
@@ -4979,8 +4979,7 @@
         } else {
           eurotunnelSequenceBuilderLocoIds.push(idA);
         }
-        if (toggle) toggle.checked = false;
-        eurotunnelSeqTogglePairPicker();
+        eurotunnelRefreshSeqLocoPicker();
         eurotunnelRenderSeqLocoList();
       }
 
@@ -5074,8 +5073,12 @@
           <div class="form-group">
             <label>Photo</label>
             <input type="file" accept="image/*" id="euroLocoPhotoInput" onchange="eurotunnelHandleLocoPhoto(event)">
-            <img id="euroLocoPhotoPreview" src="${tempEuroLocoPhoto}" style="margin-top:.5rem;max-width:140px;border-radius:var(--radius);display:${tempEuroLocoPhoto ? 'block' : 'none'};">
+            <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem;">
+              <img id="euroLocoPhotoPreview" src="${tempEuroLocoPhoto}" style="max-width:140px;border-radius:var(--radius);display:${tempEuroLocoPhoto ? 'block' : 'none'};">
+              <button type="button" id="euroLocoPhotoRemoveBtn" class="btn btn-danger btn-sm" style="display:${tempEuroLocoPhoto ? 'inline-flex' : 'none'};" onclick="eurotunnelRemoveLocoPhoto()"><i data-lucide="trash-2"></i> Remove Photo</button>
+            </div>
           </div>`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
         document.getElementById('genericModal').style.display = 'flex';
       }
 
@@ -5086,9 +5089,21 @@
         reader.onload = (evt) => {
           tempEuroLocoPhoto = evt.target.result;
           const img = document.getElementById('euroLocoPhotoPreview');
+          const btn = document.getElementById('euroLocoPhotoRemoveBtn');
           if (img) { img.src = tempEuroLocoPhoto; img.style.display = 'block'; }
+          if (btn) btn.style.display = 'inline-flex';
         };
         reader.readAsDataURL(file);
+      }
+
+      function eurotunnelRemoveLocoPhoto() {
+        tempEuroLocoPhoto = '';
+        const img = document.getElementById('euroLocoPhotoPreview');
+        const btn = document.getElementById('euroLocoPhotoRemoveBtn');
+        const input = document.getElementById('euroLocoPhotoInput');
+        if (img) { img.src = ''; img.style.display = 'none'; }
+        if (btn) btn.style.display = 'none';
+        if (input) input.value = '';
       }
 
       function saveEurotunnelStock() {
@@ -5144,14 +5159,13 @@
       function renderEurotunnelInstructionsTab(isAdmin) {
         const steps = db.eurotunnelTasks || [];
         return `
-          ${isAdmin ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;"><span style="font-size:.78rem;color:var(--text-muted);">${steps.length > 1 ? 'Drag a step by its handle to reorder it.' : ''}</span><button class="btn btn-primary btn-sm" onclick="eurotunnelOpenStepModal(null)"><i data-lucide="plus"></i> Add Step</button></div>` : ''}
+          ${isAdmin ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem;"><button class="btn btn-primary btn-sm" onclick="eurotunnelOpenStepModal(null)"><i data-lucide="plus"></i> Add Step</button></div>` : ''}
           ${steps.length === 0 ? '<div class="card" style="padding:2rem;text-align:center;color:var(--text-muted);">No running instructions added yet.</div>' :
             `<div style="display:flex;flex-direction:column;gap:.85rem;">
               ${steps.map((step, index) => `
-                <div class="card" style="padding:1rem;" ${isAdmin ? `draggable="true" ondragstart="eurotunnelStepDragStart(event, ${index})" ondragover="eurotunnelStepDragOver(event)" ondrop="eurotunnelStepDrop(event, ${index})"` : ''}>
+                <div class="card" style="padding:1rem;">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;">
                     <div style="display:flex;gap:.65rem;align-items:flex-start;flex:1;min-width:0;">
-                      ${isAdmin ? '<i data-lucide="grip-vertical" style="cursor:grab;color:var(--text-muted);flex-shrink:0;margin-top:.15rem;"></i>' : ''}
                       <span style="width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0;">${index + 1}</span>
                       <div style="min-width:0;">
                         <strong style="font-size:.92rem;">${escapeHtml(step.title || 'Untitled step')}</strong>
@@ -5160,6 +5174,8 @@
                     </div>
                     ${isAdmin ? `
                       <div style="display:flex;gap:.35rem;flex-shrink:0;">
+                        <button class="btn btn-secondary btn-sm" ${index === 0 ? 'disabled' : ''} onclick="eurotunnelMoveStep(${index}, -1)"><i data-lucide="chevron-up"></i></button>
+                        <button class="btn btn-secondary btn-sm" ${index === steps.length - 1 ? 'disabled' : ''} onclick="eurotunnelMoveStep(${index}, 1)"><i data-lucide="chevron-down"></i></button>
                         <button class="btn btn-secondary btn-sm" onclick="eurotunnelOpenStepModal(${index})"><i data-lucide="pencil"></i></button>
                         <button class="btn btn-danger btn-sm" onclick="eurotunnelDeleteStep(${index})"><i data-lucide="trash-2"></i></button>
                       </div>` : ''}
@@ -5172,22 +5188,11 @@
             </div>`}`;
       }
 
-      function eurotunnelStepDragStart(e, index) {
-        eurotunnelStepDragIndex = index;
-        e.dataTransfer.effectAllowed = 'move';
-      }
-
-      function eurotunnelStepDragOver(e) {
-        e.preventDefault();
-      }
-
-      function eurotunnelStepDrop(e, dropIndex) {
-        e.preventDefault();
-        if (eurotunnelStepDragIndex === null || eurotunnelStepDragIndex === dropIndex) return;
+      function eurotunnelMoveStep(index, dir) {
         const steps = db.eurotunnelTasks || [];
-        const [moved] = steps.splice(eurotunnelStepDragIndex, 1);
-        steps.splice(dropIndex, 0, moved);
-        eurotunnelStepDragIndex = null;
+        const newIndex = index + dir;
+        if (newIndex < 0 || newIndex >= steps.length) return;
+        [steps[index], steps[newIndex]] = [steps[newIndex], steps[index]];
         eurotunnelSave('eurotunnelTasks', steps);
         renderEurotunnelPage();
       }
@@ -5304,12 +5309,12 @@
               </select>
               ${filterLocoName ? `<span style="font-size:.78rem;color:var(--text-muted);">Showing history for <strong>${escapeHtml(filterLocoName)}</strong></span>` : ''}
             </div>
-            ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="eurotunnelOpenMaintenanceModal(null)"><i data-lucide="plus"></i> Log Maintenance</button>` : ''}
+            <button class="btn btn-primary btn-sm" onclick="eurotunnelOpenMaintenanceModal(null)"><i data-lucide="plus"></i> Log Maintenance</button>
           </div>
           <div class="card">
             <div class="table-container">
               <table>
-                <thead><tr><th>Date</th><th>Loco</th><th>Performed By</th><th>Work Done</th><th>Notes</th>${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}</tr></thead>
+                <thead><tr><th>Date</th><th>Loco</th><th>Performed By</th><th>Work Done</th><th>Notes</th><th style="text-align:right;">Actions</th></tr></thead>
                 <tbody>
                   ${logs.length === 0 ? `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);">No maintenance logged${filterLocoName ? ' for this loco' : ''} yet.</td></tr>` :
                     logs.map(log => {
@@ -5321,10 +5326,10 @@
                         <td>${escapeHtml(log.performedBy || '-')}</td>
                         <td>${escapeHtml(log.workDone || '-')}</td>
                         <td>${escapeHtml(log.notes || '-')}</td>
-                        ${isAdmin ? `<td style="text-align:right;white-space:nowrap;">
+                        <td style="text-align:right;white-space:nowrap;">
                           <button class="btn btn-secondary btn-sm" onclick="eurotunnelOpenMaintenanceModal(${realIndex})"><i data-lucide="pencil"></i></button>
-                          <button class="btn btn-danger btn-sm" onclick="eurotunnelDeleteMaintenance(${realIndex})"><i data-lucide="trash-2"></i></button>
-                        </td>` : ''}
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="eurotunnelDeleteMaintenance(${realIndex})"><i data-lucide="trash-2"></i></button>` : ''}
+                        </td>
                       </tr>`;
                     }).join('')}
                 </tbody>
