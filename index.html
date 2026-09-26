@@ -151,7 +151,7 @@
       .train-tag { display: inline-block; background: #e2e8f0; color: #1e293b; padding: 2px 7px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-right: 3px; margin-top: 2px; }
 
       .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 1rem; }
-      .modal { background: white; padding: 1.25rem; border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
+      .modal { background: white; padding: 1.25rem; border-radius: var(--radius-lg); width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; overflow-x: hidden; box-shadow: var(--shadow-lg); border: 1px solid var(--border); }
       .modal h3 { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
       .form-group { margin-bottom: 0.75rem; }
       .form-group label { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.2rem; color: var(--text); }
@@ -1116,6 +1116,8 @@
       let tempEuroLocoPhoto = '';
       let tempEuroStepImages = [];
       let eurotunnelMaintenanceLocoFilter = null;
+      let editingHelpGuideIndex = null;
+      let helpExpandedIds = new Set();
       let calendarCurrentDate = new Date();
       let selectedCalendarDateStr = getTodayString();
       let archiveSubView = 'historical';
@@ -1144,6 +1146,111 @@
         { key: 'archives', label: 'Historical Archives', icon: 'archive', section: 'Archives' },
         { key: 'notifications', label: 'Notification Centre', icon: 'bell-ring', section: 'Communication' }
       ];
+
+      const DEFAULT_HELP_GUIDES = [
+        {
+          category: 'Getting Started',
+          title: 'Signing in',
+          steps: [
+            'On the sign-in screen, choose your name from "Select Account".',
+            'Enter your PIN Code / Password.',
+            'Tick "Remember this device" if this is your own phone or a device you use regularly — you won\'t be asked to sign in again on it.',
+            'Tap "Sign In".'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Getting Started',
+          title: 'Clocking in and out',
+          steps: [
+            'Open "Clock In/Out" from the menu.',
+            'Find your name and tap Clock In when you arrive.',
+            'Tap Clock Out when you finish for the day.',
+            'Your hours are recorded automatically and can be reviewed under "Attendance & Hours" or "Clock Log Records".'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Getting Started',
+          title: 'My Account — changing your PIN',
+          steps: [
+            'Open "My Account" from the Session section of the menu.',
+            'Under "Change PIN / Password", enter your current PIN.',
+            'Enter and confirm your new PIN.',
+            'Tap "Update PIN". You\'ll use the new PIN next time you sign in.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Safety & Reporting',
+          title: 'Reporting an incident or defect',
+          steps: [
+            'Open "Incident & Defect Log".',
+            'Tap "Add" and fill in what happened, where, and when.',
+            'Attach a photo if it helps explain the issue.',
+            'Save — it will appear in the log for the team to follow up on.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Operations',
+          title: 'Eurotunnel — running sequences',
+          steps: [
+            'Open "Eurotunnel N Gauge" and choose the "Sequences" tab.',
+            'Each loop (Loop 1 / Loop 2) shows its own running order of locos, in the order they run.',
+            'Admins: tap "Add Sequence" on a loop, name it, then pick locos from Stock one at a time to build the running order.',
+            'For a swap shuttle (two trains sharing one position), tick "Swap shuttle" before adding — every loco you add from then on pairs up automatically.',
+            'Use the up/down arrows next to a loco to reorder it, or the × to remove it, before saving.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Operations',
+          title: 'Eurotunnel — stock (locos)',
+          steps: [
+            'Open "Eurotunnel N Gauge" and choose the "Stock" tab to see every loco.',
+            'Admins: tap "Add Loco" to add a new one, with a name, number, status and an optional photo.',
+            'Tap "History" on any loco to jump straight to its maintenance log.',
+            'Removing a loco also removes it from any sequences it was part of.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Operations',
+          title: 'Eurotunnel — running instructions',
+          steps: [
+            'Open "Eurotunnel N Gauge" and choose the "Instructions" tab for the step-by-step guide to running the layout.',
+            'Admins: tap "Add Step" to add a new step, with a title, description and photos.',
+            'Use the up/down arrows on a step to reorder it.',
+            'Tap any photo to view it full-size.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Operations',
+          title: 'Eurotunnel — logging maintenance',
+          steps: [
+            'Open "Eurotunnel N Gauge" and choose the "Maintenance" tab.',
+            'Anyone with Eurotunnel access can tap "Log Maintenance" to add a record — pick the loco, the date, who did the work, and what was done.',
+            'Use the dropdown filter to see the history for just one loco.',
+            'Only the System Admin can delete a maintenance entry.'
+          ],
+          videoUrl: ''
+        },
+        {
+          category: 'Admin',
+          title: 'Managing volunteers & PINs (Admin)',
+          steps: [
+            'Open "Volunteers" from the menu.',
+            'Tap "Add" to create a new volunteer, or the pencil icon to edit an existing one.',
+            'Set their PIN and tick which roles/qualifications apply to them — this controls what they can access, like the Eurotunnel suite.',
+            'Volunteers can change their own PIN later from "My Account".'
+          ],
+          videoUrl: ''
+        }
+      ];
+
+      
 
       function getAvailableRoles() {
         const customRoles = db.customRoles || [];
@@ -1433,6 +1540,9 @@
         if (!db.eurotunnelSequences || !Array.isArray(db.eurotunnelSequences)) db.eurotunnelSequences = [];
         if (!db.eurotunnelTasks || !Array.isArray(db.eurotunnelTasks)) db.eurotunnelTasks = [];
         if (!db.eurotunnelMaintenance || !Array.isArray(db.eurotunnelMaintenance)) db.eurotunnelMaintenance = [];
+        if (!db.helpGuides || !Array.isArray(db.helpGuides) || db.helpGuides.length === 0) {
+          db.helpGuides = DEFAULT_HELP_GUIDES.map((g, i) => ({ id: 1000 + i, ...g }));
+        }
         const railwayTrackDefaults = [
           { id: 'running-loop', name: 'Running loop', health: 'Good', notes: '' },
           { id: 'left-platform', name: 'Left platform', health: 'Good', notes: '' },
@@ -2179,7 +2289,7 @@
           return roles.includes('eurotunnel');
         }
 
-        const alwaysGranted = ['dashboard', 'clock', 'incidents', 'calendar', 'actions', 'events', 'myAccount'];
+        const alwaysGranted = ['dashboard', 'clock', 'incidents', 'calendar', 'actions', 'events', 'myAccount', 'help'];
         if (alwaysGranted.includes(pageKey)) return true;
 
         if (hasManagementPermission()) return true;
@@ -2227,6 +2337,9 @@
 
         html += `
           <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
+          <a href="#" class="${currentView === 'help' ? 'active' : ''}" onclick="navigate('help'); return false;">
+            <i data-lucide="life-buoy"></i> Help & Tutorials
+          </a>
           ${currentUser.volData ? `
             <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
               <i data-lucide="user-cog"></i> My Account
@@ -2299,6 +2412,7 @@
           case 'archives': renderArchives(); break;
           case 'notifications': renderNotificationsPage(); break;
           case 'myAccount': renderMyAccount(); break;
+          case 'help': renderHelpPage(); break;
           default: renderDashboard();
         }
       }
@@ -4896,9 +5010,9 @@
           <div class="form-group"><label>Notes</label><textarea id="euroSeqNotes" rows="2">${escapeHtml(existing?.notes || '')}</textarea></div>
           <div class="form-group">
             <label>Running order</label>
-            <label style="display:flex;align-items:flex-start;gap:.4rem;font-weight:normal;font-size:.78rem;margin-bottom:.4rem;">
-              <input type="checkbox" id="euroSeqPairToggle" ${existing && (existing.locoIds || []).some(s => Array.isArray(s)) ? 'checked' : ''} onchange="eurotunnelSeqTogglePairPicker()" style="margin-top:.15rem;flex-shrink:0;">
-              <span style="min-width:0;">Swap shuttle sequence — each position added below will hold two trains that swap in and out</span>
+            <label style="display:flex;align-items:flex-start;gap:.4rem;font-weight:normal;font-size:.78rem;margin-bottom:.4rem;max-width:100%;">
+              <input type="checkbox" id="euroSeqPairToggle" ${existing && (existing.locoIds || []).some(s => Array.isArray(s)) ? 'checked' : ''} onchange="eurotunnelSeqTogglePairPicker()" style="margin-top:.2rem;flex-shrink:0;">
+              <span style="flex:1 1 0%;min-width:0;word-break:break-word;overflow-wrap:anywhere;line-height:1.4;">Swap shuttle — each slot below holds two trains that swap in and out</span>
             </label>
             <div style="display:flex;gap:.5rem;margin-bottom:.5rem;">
               <select id="euroSeqLocoPicker" style="flex:1;min-width:0;"></select>
@@ -5491,6 +5605,7 @@
         if (editingModuleKey === 'eurotunnelStock') return saveEurotunnelStock();
         if (editingModuleKey === 'eurotunnelStep') return saveEurotunnelStep();
         if (editingModuleKey === 'eurotunnelMaintenance') return saveEurotunnelMaintenance();
+        if (editingModuleKey === 'helpGuide') return saveHelpGuide();
 
         const schema = MODULE_SCHEMAS[editingModuleKey];
         if (!schema) return;
@@ -5686,6 +5801,131 @@
         document.getElementById('myAccountNewPin').value = '';
         document.getElementById('myAccountConfirmPin').value = '';
         successDiv.style.display = 'block';
+      }
+
+      function renderHelpPage() {
+        const content = document.getElementById('content');
+        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const guides = db.helpGuides || [];
+        const categories = [...new Set(guides.map(g => g.category || 'General'))];
+
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Help & Tutorials</h2>
+              <p>Step-by-step guides for using this app. Tap a topic to expand it.</p>
+            </div>
+            ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="helpOpenGuideModal(null)"><i data-lucide="plus"></i> Add Guide</button>` : ''}
+          </div>
+          ${guides.length === 0 ? '<div class="card" style="padding:2rem;text-align:center;color:var(--text-muted);">No help guides added yet.</div>' :
+            categories.map(cat => `
+              <div class="section-group">
+                <div class="section-header">${escapeHtml(cat)}</div>
+                ${guides.filter(g => (g.category || 'General') === cat).map(g => {
+                  const realIndex = guides.indexOf(g);
+                  const expanded = helpExpandedIds.has(g.id);
+                  return `
+                    <div class="card" style="padding:0;margin-bottom:.75rem;overflow:hidden;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.85rem 1rem;cursor:pointer;" onclick="helpToggleGuide(${g.id})">
+                        <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+                          <i data-lucide="${g.videoUrl ? 'play-circle' : 'book-open'}" style="width:18px;height:18px;color:var(--primary);flex-shrink:0;"></i>
+                          <strong style="font-size:.88rem;min-width:0;">${escapeHtml(g.title || 'Untitled guide')}</strong>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;">
+                          ${isAdmin ? `
+                            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); helpOpenGuideModal(${realIndex})"><i data-lucide="pencil"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); helpDeleteGuide(${realIndex})"><i data-lucide="trash-2"></i></button>
+                          ` : ''}
+                          <i data-lucide="${expanded ? 'chevron-up' : 'chevron-down'}" style="width:16px;height:16px;color:var(--text-muted);flex-shrink:0;"></i>
+                        </div>
+                      </div>
+                      ${expanded ? `
+                        <div style="padding:0 1rem 1rem;border-top:1px solid var(--border-subtle);">
+                          ${(g.steps || []).length > 0 ? `
+                            <ol style="margin:.75rem 0 0;padding-left:1.1rem;display:flex;flex-direction:column;gap:.4rem;">
+                              ${g.steps.map(s => `<li style="font-size:.82rem;color:var(--text);">${escapeHtml(s)}</li>`).join('')}
+                            </ol>` : '<p style="font-size:.8rem;color:var(--text-muted);margin-top:.75rem;">No steps added for this guide yet.</p>'}
+                          ${g.videoUrl ? `
+                            <div style="margin-top:.85rem;">
+                              <video id="helpVideo_${g.id}" controls playsinline src="${escapeHtml(g.videoUrl)}" style="width:100%;max-height:280px;border-radius:var(--radius);background:#000;"></video>
+                              <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem;" onclick="helpTryPiP('helpVideo_${g.id}')"><i data-lucide="picture-in-picture-2"></i> Watch in Picture-in-Picture</button>
+                            </div>` : ''}
+                        </div>` : ''}
+                    </div>`;
+                }).join('')}
+              </div>`).join('')}
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function helpToggleGuide(id) {
+        if (helpExpandedIds.has(id)) helpExpandedIds.delete(id); else helpExpandedIds.add(id);
+        renderHelpPage();
+      }
+
+      function helpTryPiP(videoElId) {
+        const video = document.getElementById(videoElId);
+        if (!video) return;
+        if (document.pictureInPictureElement) {
+          document.exitPictureInPicture().catch(() => {});
+          return;
+        }
+        if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+          video.requestPictureInPicture().catch(() => alert("Picture-in-Picture isn't available for this video on your device/browser."));
+        } else if (video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === 'function') {
+          video.webkitSetPresentationMode(video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+        } else {
+          alert("Picture-in-Picture isn't supported on this device/browser — use the video's own controls instead.");
+        }
+      }
+
+      function helpOpenGuideModal(index) {
+        editingModuleKey = 'helpGuide';
+        editingHelpGuideIndex = index;
+        const guides = db.helpGuides || [];
+        const existing = (index !== null && index !== undefined) ? guides[index] : null;
+
+        document.getElementById('genericModalTitle').innerText = existing ? 'Edit Help Guide' : 'Add Help Guide';
+        document.getElementById('genericFormFields').innerHTML = `
+          <div class="form-group"><label>Category</label><input id="helpGuideCategory" placeholder="e.g. Getting Started" value="${escapeHtml(existing?.category || '')}"></div>
+          <div class="form-group"><label>Title</label><input id="helpGuideTitle" placeholder="e.g. How to clock in" value="${escapeHtml(existing?.title || '')}" required></div>
+          <div class="form-group"><label>Steps (one per line)</label><textarea id="helpGuideSteps" rows="5" placeholder="Open the Clock In/Out page...">${escapeHtml((existing?.steps || []).join('\n'))}</textarea></div>
+          <div class="form-group">
+            <label>Video URL (optional)</label>
+            <input id="helpGuideVideoUrl" placeholder="Link to a video you've hosted elsewhere" value="${escapeHtml(existing?.videoUrl || '')}">
+            <p style="font-size:.7rem;color:var(--text-muted);margin-top:.3rem;">Paste a direct link to a video file you've recorded and hosted elsewhere (e.g. Google Drive, Loom, YouTube) — this app can't record or generate videos itself.</p>
+          </div>`;
+        document.getElementById('genericModal').style.display = 'flex';
+      }
+
+      function saveHelpGuide() {
+        const title = document.getElementById('helpGuideTitle').value.trim();
+        if (!title) return;
+        const data = {
+          category: document.getElementById('helpGuideCategory').value.trim() || 'General',
+          title,
+          steps: document.getElementById('helpGuideSteps').value.split('\n').map(s => s.trim()).filter(Boolean),
+          videoUrl: document.getElementById('helpGuideVideoUrl').value.trim()
+        };
+        if (!db.helpGuides) db.helpGuides = [];
+        if (editingHelpGuideIndex !== null && editingHelpGuideIndex !== undefined && db.helpGuides[editingHelpGuideIndex]) {
+          const existingId = db.helpGuides[editingHelpGuideIndex].id;
+          db.helpGuides[editingHelpGuideIndex] = { id: existingId, ...data };
+        } else {
+          db.helpGuides.push({ id: Date.now(), ...data });
+        }
+        dbUpdate({ helpGuides: db.helpGuides });
+        closeModal('genericModal');
+        renderHelpPage();
+      }
+
+      function helpDeleteGuide(index) {
+        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!confirm('Delete this help guide?')) return;
+        const guides = db.helpGuides || [];
+        guides.splice(index, 1);
+        dbUpdate({ helpGuides: guides });
+        renderHelpPage();
       }
 
       function renderSettings() {
