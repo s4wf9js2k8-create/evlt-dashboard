@@ -237,6 +237,45 @@
       [data-theme="dark"] .railway-layout-canvas { background-color:#172033; }
 
       #print-area { display: none; }
+
+      /* Dedicated authentication screen */
+      #loginPage {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: var(--bg);
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem;
+        overflow-y: auto;
+      }
+      #loginPage .login-card {
+        width: 100%;
+        max-width: 400px;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        padding: 1.5rem;
+      }
+      #loginPage .login-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .55rem;
+        margin-bottom: 1.25rem;
+        text-align: center;
+      }
+      #loginPage .login-brand .header-logo { width: 64px; height: 64px; }
+      #loginPage .login-brand h1 { font-size: 1.2rem; font-weight: 750; color: var(--text); }
+      #loginPage .login-brand p { font-size: .78rem; color: var(--text-muted); }
+      body.authenticated #loginPage { display: none; }
+      body.authenticated > header,
+      body.authenticated > .app-container { display: flex; }
+      body:not(.authenticated) > header,
+      body:not(.authenticated) > .app-container { display: none; }
+
       @media print {
         body * { visibility: hidden !important; }
         #print-area, #print-area * { visibility: visible !important; }
@@ -265,6 +304,56 @@
   <body>
     <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-16-FLEET-MAINT-MGMT</div>
     <div id="print-area"></div>
+
+    <!-- Dedicated Login Page -->
+    <section id="loginPage" aria-label="EVLT Operations sign in">
+      <div class="login-card">
+        <div class="login-brand">
+          <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+            <defs>
+              <path id="loginTopArc" d="M 15,50 A 35,35 0 0,1 85,50" />
+              <path id="loginBottomArc" d="M 85,50 A 35,35 0 0,1 15,50" />
+            </defs>
+            <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+              <textPath href="#loginTopArc" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+            </text>
+            <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+              <textPath href="#loginBottomArc" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+            </text>
+            <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+            <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+            <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+            <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+          </svg>
+          <h1>EVLT Operations</h1>
+          <p>Sign in to access the operations platform</p>
+        </div>
+        <form onsubmit="handleUserLogin(event)">
+          <div class="form-group">
+            <label for="loginUserSelect">Account</label>
+            <select id="loginUserSelect" required>
+              <option value="">Loading accounts...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="loginUserPin">PIN Code / Password</label>
+            <input type="password" id="loginUserPin" placeholder="Enter PIN" autocomplete="current-password" required>
+          </div>
+          <div id="loginErrorMsg" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
+            Incorrect PIN. Please try again.
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:.5rem;">
+            <input type="checkbox" id="rememberDeviceCheckbox" style="width:auto;" checked>
+            <label for="rememberDeviceCheckbox" style="margin:0;font-weight:500;">Remember this device (skip sign-in next time)</label>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
+            <i data-lucide="log-in"></i> Sign In
+          </button>
+        </form>
+      </div>
+    </section>
+
     <header>
       <div class="header-left">
         <button class="menu-btn" onclick="toggleMenu()" aria-label="Toggle navigation menu">
@@ -298,10 +387,7 @@
         <button class="btn btn-subtle" onclick="openNotificationModal()" title="Push Notifications" style="color: white; padding: 0.4rem 0.6rem; min-width: 38px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
           <i data-lucide="bell" style="width: 17px; height: 17px;"></i>
         </button>
-        <div class="user-select-container" id="currentUserBadge" style="cursor: pointer;" onclick="openLoginModal()" title="Switch Account">
-          <i data-lucide="user" style="width: 14px; height: 14px; color: white;"></i>
-          <span id="currentUserDisplayName">Not Logged In</span>
-        </div>
+
       </div>
     </header>
 
@@ -313,33 +399,6 @@
       <main id="content">
         <!-- Renders dynamically -->
       </main>
-    </div>
-
-    <!-- Login Modal -->
-    <div class="modal-overlay" id="loginModal">
-      <div class="modal" style="max-width: 380px;">
-        <h3>Sign In to EVLT Operations</h3>
-        <form onsubmit="handleUserLogin(event)">
-          <div class="form-group">
-            <label>Select Account</label>
-            <select id="loginUserSelect" required class="form-group">
-              <option value="">-- Choose Account --</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>PIN Code / Password</label>
-            <input type="password" id="loginUserPin" placeholder="Enter PIN" required>
-          </div>
-          <div id="loginErrorMsg" style="color: #dc2626; font-size: 0.75rem; margin-bottom: 0.5rem; display: none;">Incorrect PIN. Please try again.</div>
-          <div class="form-group" style="display:flex; align-items:center; gap:0.5rem;">
-            <input type="checkbox" id="rememberDeviceCheckbox" style="width:auto;" checked>
-            <label for="rememberDeviceCheckbox" style="margin:0; font-weight:500;">Remember this device (skip sign-in next time)</label>
-          </div>
-          <div class="modal-actions" style="border:none; padding:0; margin-top:1rem;">
-            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Sign In</button>
-          </div>
-        </form>
-      </div>
     </div>
 
     <!-- Page Access Control Modal (Admin) -->
@@ -1879,21 +1938,22 @@
       function logoutDevice() {
         clearRememberedUser();
         currentUser = null;
-        document.getElementById('currentUserDisplayName').innerText = 'Not Logged In';
-        openLoginModal();
+        showLoginPage();
       }
 
       function renderInitialApp() {
         updateLoginUserDropdown();
+        if (!currentUser && tryRestoreRememberedUser()) {
+          hideLoginPage();
+          renderSidebar();
+          navigate(currentUser.isShopKiosk ? 'clock' : currentView);
+          return;
+        }
+
         if (!currentUser) {
-          if (tryRestoreRememberedUser()) {
-            document.getElementById('currentUserDisplayName').innerText = currentUser.name;
-            renderSidebar();
-            navigate(currentUser.isShopKiosk ? 'clock' : currentView);
-            return;
-          }
-          openLoginModal();
+          showLoginPage();
         } else {
+          hideLoginPage();
           renderSidebar();
           navigate(currentView);
         }
@@ -2438,11 +2498,25 @@
         select.value = currentVal;
       }
 
-      function openLoginModal() {
+      function showLoginPage() {
+        document.body.classList.remove('authenticated');
         updateLoginUserDropdown();
-        document.getElementById('loginUserPin').value = '';
-        document.getElementById('loginErrorMsg').style.display = 'none';
-        document.getElementById('loginModal').style.display = 'flex';
+        const pin = document.getElementById('loginUserPin');
+        const err = document.getElementById('loginErrorMsg');
+        if (pin) pin.value = '';
+        if (err) err.style.display = 'none';
+        const page = document.getElementById('loginPage');
+        if (page) page.style.display = 'flex';
+      }
+
+      function hideLoginPage() {
+        const page = document.getElementById('loginPage');
+        if (page) page.style.display = 'none';
+        document.body.classList.add('authenticated');
+      }
+
+      function openLoginModal() {
+        showLoginPage();
       }
 
       function handleUserLogin(e) {
@@ -2495,8 +2569,7 @@
         } else {
           clearRememberedUser();
         }
-        closeModal('loginModal');
-        document.getElementById('currentUserDisplayName').innerText = currentUser.name;
+        hideLoginPage();
         renderSidebar();
         navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
       }
@@ -3130,6 +3203,103 @@
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function openEditClockLogModal(id = null) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can add or edit attendance records.');
+          return;
+        }
+
+        const modal = document.getElementById('editClockLogModal');
+        const title = document.getElementById('editClockLogModalTitle');
+        const idInput = document.getElementById('editClockLogId');
+        const nameSelect = document.getElementById('editClockLogName');
+        const dateInput = document.getElementById('editClockLogDate');
+        const inInput = document.getElementById('editClockLogIn');
+        const outInput = document.getElementById('editClockLogOut');
+
+        const volunteers = (db.volunteers || []).filter(v => !v.disabled);
+        nameSelect.innerHTML =
+          '<option value="">-- Choose Name --</option>' +
+          volunteers.map(v => {
+            const name = getVolunteerName(v);
+            return `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+          }).join('');
+
+        const existing = id !== null && id !== undefined
+          ? (db.clockLogs || []).find(l => String(l.id) === String(id))
+          : null;
+
+        title.textContent = existing ? 'Edit Clock Log Shift Record' : 'Add Clock Log Shift Record';
+        idInput.value = existing ? existing.id : '';
+        nameSelect.value = existing ? existing.name : '';
+        dateInput.value = existing ? toISODate(existing.date) : getTodayString();
+        inInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockIn || '') ? existing.clockIn : '';
+        outInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockOut || '') ? existing.clockOut : '';
+
+        modal.style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveClockLogShiftEdit(e) {
+        e.preventDefault();
+
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only the System Admin can save attendance changes.');
+          return;
+        }
+
+        const idValue = document.getElementById('editClockLogId').value.trim();
+        const name = document.getElementById('editClockLogName').value;
+        const date = document.getElementById('editClockLogDate').value;
+        const clockIn = document.getElementById('editClockLogIn').value;
+        const clockOut = document.getElementById('editClockLogOut').value;
+
+        if (!name || !date || !clockIn || !clockOut) {
+          alert('Please complete the volunteer, date, clock-in and clock-out fields.');
+          return;
+        }
+
+        if (!db.clockLogs) db.clockLogs = [];
+
+        const oldLog = idValue
+          ? db.clockLogs.find(l => String(l.id) === String(idValue))
+          : null;
+        const oldDate = oldLog ? toISODate(oldLog.date) : null;
+
+        if (oldLog) {
+          oldLog.name = name;
+          oldLog.date = date;
+          oldLog.clockIn = clockIn;
+          oldLog.clockOut = clockOut;
+          oldLog.status = 'Completed';
+        } else {
+          db.clockLogs.push({
+            id: Date.now(),
+            name,
+            date,
+            clockIn,
+            clockOut,
+            status: 'Completed'
+          });
+        }
+
+        // Rebuild the historical archive for both dates if a record was moved.
+        if (oldDate && oldDate !== date) syncArchiveForDate(oldDate);
+        syncArchiveForDate(date);
+
+        dbUpdate({
+          clockLogs: db.clockLogs,
+          historicalArchive: db.historicalArchive
+        });
+
+        closeModal('editClockLogModal');
+        if (currentView === 'calendar') {
+          renderCalendarView();
+        } else if (currentView === 'clockLogs') {
+          renderClockLogsPage();
+        }
       }
 
       function deleteClockLog(id) {
