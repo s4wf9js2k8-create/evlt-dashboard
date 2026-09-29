@@ -4324,6 +4324,166 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
+      // Archive editor -------------------------------------------------------
+      function archiveTimeOptions(selected) {
+        let html = '<option value="-">-</option>';
+        for (let h = 0; h < 24; h++) {
+          for (let m = 0; m < 60; m += 5) {
+            const v = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+            html += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+          }
+        }
+        return html;
+      }
+
+      function archiveVolunteerOptions(selected) {
+        const names = (db.volunteers || []).map(v => getVolunteerName(v)).filter(Boolean);
+        const unique = [...new Set(names)];
+        if (selected && !unique.includes(selected)) unique.unshift(selected);
+        return unique.map(n => `<option value="${escapeHtml(n)}" ${n === selected ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
+      }
+
+      function archiveInspectorOptions(selected) {
+        return '<option value="">Not recorded</option>' + archiveVolunteerOptions(selected);
+      }
+
+      function archiveLocoOptions(selectedList) {
+        const selected = new Set(selectedList || []);
+        const locos = (db.fleetItems || []).map(x => x.name || x.number).filter(Boolean);
+        const euro = (db.eurotunnelTrains || []).map(x => x.name || x.number).filter(Boolean);
+        const names = [...new Set([...locos, ...euro])];
+        return names.map(n => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="editArch-loco" value="${escapeHtml(n)}" ${selected.has(n) ? 'checked' : ''}> ${escapeHtml(n)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
+      }
+
+      function addArchiveShiftRow(shift = {}) {
+        const c = document.getElementById('editArch_ShiftsContainer');
+        if (!c) return;
+        const row = document.createElement('div');
+        row.className = 'archive-edit-shift-row';
+        row.style.cssText = 'display:grid;grid-template-columns:1.3fr .9fr .9fr auto;gap:.4rem;align-items:end;padding:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);';
+        row.innerHTML = `
+          <div class="form-group" style="margin:0;"><label>Volunteer</label><select class="arch-shift-name">${archiveVolunteerOptions(shift.name || '')}</select></div>
+          <div class="form-group" style="margin:0;"><label>Clock In</label><select class="arch-shift-in">${archiveTimeOptions(shift.clockIn || '-')}</select></div>
+          <div class="form-group" style="margin:0;"><label>Clock Out</label><select class="arch-shift-out">${archiveTimeOptions(shift.clockOut || '-')}</select></div>
+          <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.archive-edit-shift-row').remove()"><i data-lucide="trash-2"></i></button>`;
+        c.appendChild(row);
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addArchiveIncidentRow(item = {}) {
+        const c = document.getElementById('editArch_IncidentsContainer');
+        if (!c) return;
+        const row = document.createElement('div');
+        row.className = 'archive-edit-incident-row';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 1.5fr .8fr .9fr auto;gap:.4rem;align-items:end;padding:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);';
+        row.innerHTML = `
+          <div class="form-group" style="margin:0;"><label>Asset / Location</label><input class="arch-inc-asset" value="${escapeHtml(item.asset || '')}"></div>
+          <div class="form-group" style="margin:0;"><label>Description</label><input class="arch-inc-desc" value="${escapeHtml(item.description || '')}"></div>
+          <div class="form-group" style="margin:0;"><label>Status</label><select class="arch-inc-status"><option ${item.status==='Open'?'selected':''}>Open</option><option ${item.status==='In Progress'?'selected':''}>In Progress</option><option ${item.status==='Resolved'?'selected':''}>Resolved</option></select></div>
+          <div class="form-group" style="margin:0;"><label>Red Tag</label><select class="arch-inc-red"><option ${item.redTagStatus==='Operational'?'selected':''}>Operational</option><option ${item.redTagStatus==='Out of Service'?'selected':''}>Out of Service</option></select></div>
+          <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.archive-edit-incident-row').remove()"><i data-lucide="trash-2"></i></button>`;
+        c.appendChild(row);
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function addArchiveMaintRow(item = {}) {
+        const c = document.getElementById('editArch_MaintContainer');
+        if (!c) return;
+        const row = document.createElement('div');
+        row.className = 'archive-edit-maint-row';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.4rem;align-items:end;padding:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);';
+        const assets = [...new Set((db.fleetItems || []).map(x => x.name).filter(Boolean))];
+        row.innerHTML = `
+          <div class="form-group" style="margin:0;"><label>Asset</label><select class="arch-maint-asset"><option value="">Select asset</option>${assets.map(a=>`<option value="${escapeHtml(a)}" ${a===item.asset?'selected':''}>${escapeHtml(a)}</option>`).join('')}</select></div>
+          <div class="form-group" style="margin:0;"><label>Work completed</label><input class="arch-maint-work" value="${escapeHtml(item.workDone || '')}"></div>
+          <div class="form-group" style="margin:0;"><label>Performed by</label><input class="arch-maint-by" value="${escapeHtml(Array.isArray(item.performedBy) ? item.performedBy.join(', ') : (item.performedBy || ''))}"></div>
+          <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.archive-edit-maint-row').remove()"><i data-lucide="trash-2"></i></button>`;
+        c.appendChild(row);
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function toggleEditArchTWNotes(value) {
+        const el = document.getElementById('editArch_TW_NotesGroup');
+        if (el) el.style.display = value === 'Fail' ? 'block' : 'block';
+      }
+
+      function openEditArchiveModal(dateIso) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can edit archive records.');
+          return;
+        }
+        const archives = db.historicalArchive || [];
+        const index = archives.findIndex(a => toISODate(a.date) === dateIso);
+        if (index < 0) { alert('Archive record not found.'); return; }
+        const a = archives[index];
+
+        document.getElementById('editArchiveIndex').value = index;
+        document.getElementById('editArchiveDateTxt').textContent = formatDisplayDate(a.date);
+        document.getElementById('editArch_TW_Result').value = a.trackWalk?.result || 'Not Completed';
+        document.getElementById('editArch_TW_Inspector').innerHTML = archiveInspectorOptions(a.trackWalk?.inspector || '');
+        document.getElementById('editArch_TW_Notes').value = a.trackWalk?.notes || '';
+        document.getElementById('editArch_TR_Result').value = a.testRun?.result || 'Not Completed';
+        document.getElementById('editArch_TR_Inspector').innerHTML = archiveInspectorOptions(a.testRun?.inspector || '');
+        document.getElementById('editArch_LocosContainer').innerHTML = archiveLocoOptions(a.testRun?.trains || a.runningTrains || []);
+
+        document.getElementById('editArch_ShiftsContainer').innerHTML = '';
+        (a.attendance || []).forEach(s => addArchiveShiftRow(s));
+        document.getElementById('editArch_IncidentsContainer').innerHTML = '';
+        (a.incidents || []).forEach(i => addArchiveIncidentRow(i));
+        document.getElementById('editArch_MaintContainer').innerHTML = '';
+        (a.maintenance || []).forEach(m => addArchiveMaintRow(m));
+
+        document.getElementById('editArchiveModal').style.display = 'flex';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveArchiveEdit(e) {
+        e.preventDefault();
+        if (!currentUser || !currentUser.isSystemAdmin) { alert('Only System Admin can edit archive records.'); return; }
+        const index = parseInt(document.getElementById('editArchiveIndex').value, 10);
+        const archive = db.historicalArchive?.[index];
+        if (!archive) { alert('Archive record no longer exists.'); return; }
+
+        archive.trackWalk = {
+          result: document.getElementById('editArch_TW_Result').value,
+          inspector: document.getElementById('editArch_TW_Inspector').value,
+          notes: document.getElementById('editArch_TW_Notes').value.trim()
+        };
+        const trains = Array.from(document.querySelectorAll('.editArch-loco:checked')).map(x => x.value);
+        archive.testRun = {
+          result: document.getElementById('editArch_TR_Result').value,
+          inspector: document.getElementById('editArch_TR_Inspector').value,
+          notes: archive.testRun?.notes || '',
+          trains
+        };
+        archive.runningTrains = trains;
+
+        archive.attendance = Array.from(document.querySelectorAll('.archive-edit-shift-row')).map(row => ({
+          name: row.querySelector('.arch-shift-name')?.value || '',
+          clockIn: row.querySelector('.arch-shift-in')?.value || '-',
+          clockOut: row.querySelector('.arch-shift-out')?.value || '-',
+          status: (row.querySelector('.arch-shift-out')?.value || '-') !== '-' ? 'Completed' : 'Clocked In'
+        })).filter(x => x.name);
+
+        archive.incidents = Array.from(document.querySelectorAll('.archive-edit-incident-row')).map(row => ({
+          asset: row.querySelector('.arch-inc-asset')?.value || 'General',
+          description: row.querySelector('.arch-inc-desc')?.value || '',
+          status: row.querySelector('.arch-inc-status')?.value || 'Open',
+          redTagStatus: row.querySelector('.arch-inc-red')?.value || 'Operational'
+        })).filter(x => x.asset || x.description);
+
+        archive.maintenance = Array.from(document.querySelectorAll('.archive-edit-maint-row')).map(row => ({
+          asset: row.querySelector('.arch-maint-asset')?.value || 'Fleet',
+          workDone: row.querySelector('.arch-maint-work')?.value || '',
+          performedBy: (row.querySelector('.arch-maint-by')?.value || '').split(',').map(x => x.trim()).filter(Boolean)
+        })).filter(x => x.asset || x.workDone);
+
+        db.historicalArchive.sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+        dbUpdate({ historicalArchive: db.historicalArchive });
+        closeModal('editArchiveModal');
+        renderArchives();
+      }
+
       function deleteArchiveDay(dateIso) {
         if (!currentUser || !currentUser.isSystemAdmin) {
           alert('Only System Admin can delete archive records.');
