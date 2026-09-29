@@ -654,7 +654,7 @@
     <!-- Edit Clock Log Modal -->
     <div class="modal-overlay" id="editClockLogModal">
       <div class="modal" style="max-width: 420px;">
-        <h3>Edit Clock Log Shift Record</h3>
+        <h3 id="editClockLogModalTitle">Edit Clock Log Shift Record</h3>
         <form onsubmit="saveClockLogShiftEdit(event)">
           <input type="hidden" id="editClockLogId" value="">
           <div class="form-group">
@@ -3226,6 +3226,17 @@
             const name = getVolunteerName(v);
             return `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
           }).join('');
+
+        // Populate the time selectors every time the editor opens.
+        const timeOptions = ['<option value="">-- Select --</option>'];
+        for (let h = 0; h < 24; h++) {
+          for (let m = 0; m < 60; m += 5) {
+            const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            timeOptions.push(`<option value="${value}">${value}</option>`);
+          }
+        }
+        inInput.innerHTML = timeOptions.join('');
+        outInput.innerHTML = timeOptions.join('');
 
         const existing = id !== null && id !== undefined
           ? (db.clockLogs || []).find(l => String(l.id) === String(id))
