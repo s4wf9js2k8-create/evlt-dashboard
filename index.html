@@ -15,6 +15,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -1480,7 +1481,7 @@
         const volunteers = db.volunteers || [];
         document.getElementById('editPermissionsUsers').innerHTML = volunteers.length ? volunteers.map(v => {
           const name = getVolunteerName(v);
-          return `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${name}" class="edit-perm-user-cb" ${perms.users.includes(name) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${name}</label>`;
+          return `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${escapeHtml(name)}" class="edit-perm-user-cb" ${perms.users.includes(name) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${escapeHtml(name)}</label>`;
         }).join('') : '<p style="font-size:.75rem;color:var(--text-muted);">No volunteers added yet.</p>';
         document.getElementById('editPermissionsModal').style.display = 'flex';
       }
@@ -1499,8 +1500,12 @@
       }
 
       function getTodayString() {
+        // Local date (not UTC) so records made just after midnight in summer time get the right day
         const today = new Date();
-        return today.toISOString().split('T')[0];
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       }
 
       function toISODate(dateStr) {
@@ -1874,6 +1879,34 @@
         auth = firebase.auth();
       } catch (e) {
         console.error("Firebase init error", e);
+      }
+
+      // Firebase Storage for photos (optional - the app falls back to inline photos if it is unavailable)
+      let storage = null;
+      try { storage = firebase.storage(); } catch (e) { console.warn('Firebase Storage not available', e); }
+
+      // Uploads a (compressed) data-URL photo and returns its download URL.
+      // If Storage is unavailable, blocked by rules, or slow, the original data-URL is returned so nothing is lost.
+      async function storePhoto(dataUrl, folder) {
+        if (!dataUrl || String(dataUrl).indexOf('data:') !== 0 || !storage) return dataUrl;
+        try {
+          const ref = storage.ref(`evlt/${folder}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`);
+          const upload = ref.putString(dataUrl, 'data_url');
+          await Promise.race([upload, new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out')), 20000))]);
+          return await ref.getDownloadURL();
+        } catch (err) {
+          console.warn('Photo upload failed, saving inline instead:', err);
+          return dataUrl;
+        }
+      }
+
+      // Disables the form's submit button while an async save runs; returns a function to re-enable it.
+      function lockSubmit(e) {
+        const btn = e && (e.submitter || (e.target && e.target.querySelector && e.target.querySelector('[type="submit"]')));
+        if (!btn) return () => {};
+        const oldText = btn.innerText;
+        btn.disabled = true; btn.innerText = 'Saving...';
+        return () => { btn.disabled = false; btn.innerText = oldText; };
       }
 
       function normaliseDb() {
@@ -2565,7 +2598,7 @@
         
         html += vols.map(v => {
           const name = getVolunteerName(v);
-          return `<option value="${name}">${name}</option>`;
+          return `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
         }).join('');
 
         const currentVal = select.value;
@@ -2594,31 +2627,148 @@
         showLoginPage();
       }
 
+      // ===== PIN security =====
+      // Pure-JS SHA-256 so hashing works on every browser/context (no dependency on crypto.subtle).
+      function sha256Hex(str) {
+        const ascii = unescape(encodeURIComponent(String(str)));
+        const rr = (v, a) => (v >>> a) | (v << (32 - a));
+        const maxWord = 4294967296;
+        if (!sha256Hex.k) {
+          const k = [], h = [], comp = {};
+          let pc = 0;
+          for (let c = 2; pc < 64; c++) {
+            if (!comp[c]) {
+              for (let i = c * c; i < 400; i += c) comp[i] = 1;
+              if (pc < 8) h[pc] = (Math.pow(c, 0.5) * maxWord) | 0;
+              k[pc++] = (Math.pow(c, 1 / 3) * maxWord) | 0;
+            }
+          }
+          sha256Hex.k = k; sha256Hex.h = h;
+        }
+        const K = sha256Hex.k;
+        const bytes = [];
+        for (let i = 0; i < ascii.length; i++) bytes.push(ascii.charCodeAt(i) & 255);
+        const bitLen = bytes.length * 8;
+        bytes.push(0x80);
+        while (bytes.length % 64 !== 56) bytes.push(0);
+        const hi = Math.floor(bitLen / maxWord), lo = bitLen >>> 0;
+        [hi, lo].forEach(n => bytes.push((n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255));
+        let H = sha256Hex.h.slice();
+        for (let off = 0; off < bytes.length; off += 64) {
+          const w = new Array(64);
+          for (let i = 0; i < 16; i++) {
+            w[i] = (bytes[off + 4 * i] << 24) | (bytes[off + 4 * i + 1] << 16) | (bytes[off + 4 * i + 2] << 8) | bytes[off + 4 * i + 3];
+          }
+          for (let i = 16; i < 64; i++) {
+            const s0 = rr(w[i - 15], 7) ^ rr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+            const s1 = rr(w[i - 2], 17) ^ rr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+          }
+          let [a, b, c, d, e, f, g, hh] = H;
+          for (let i = 0; i < 64; i++) {
+            const S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25);
+            const ch = (e & f) ^ (~e & g);
+            const t1 = (hh + S1 + ch + K[i] + w[i]) | 0;
+            const S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22);
+            const maj = (a & b) ^ (a & c) ^ (b & c);
+            const t2 = (S0 + maj) | 0;
+            hh = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+          }
+          H = [H[0] + a | 0, H[1] + b | 0, H[2] + c | 0, H[3] + d | 0, H[4] + e | 0, H[5] + f | 0, H[6] + g | 0, H[7] + hh | 0];
+        }
+        return H.map(x => ('00000000' + (x >>> 0).toString(16)).slice(-8)).join('');
+      }
+
+      // Stored format: "h2:<salt>:<sha256(salt + pin)>". Anything else is a legacy plain-text PIN.
+      function isHashedPin(stored) { return typeof stored === 'string' && stored.indexOf('h2:') === 0; }
+      function hashPin(pin, salt) {
+        salt = salt || Math.random().toString(16).slice(2, 10).padEnd(8, '0');
+        return 'h2:' + salt + ':' + sha256Hex(salt + ':' + String(pin));
+      }
+      function verifyPin(entered, stored) {
+        entered = String(entered == null ? '' : entered);
+        if (isHashedPin(stored)) {
+          const parts = stored.split(':');
+          return hashPin(entered, parts[1]) === stored;
+        }
+        return entered === String(stored == null ? '' : stored);
+      }
+
+      const ADMIN_PIN_HASH = 'h2:e7a1c3d5:d2cbb800f3e518b859b235b977fbbc3943ec95b64d15d056fa0124aa8f2e8888';
+      const KIOSK_PIN_HASH = 'h2:b94f20a6:60bed9a6bdecfbe29e4d4a07f734b596923f5eb747a90ef0aa33155ee1e624a6';
+      const LOGIN_MAX_FAILS = 5;
+      const LOGIN_LOCK_SECONDS = 60;
+
+      function loginLockSecondsLeft() {
+        let until = 0;
+        try { until = Number(localStorage.getItem('evlt_login_lock_until')) || 0; } catch (e) {}
+        return Date.now() < until ? Math.ceil((until - Date.now()) / 1000) : 0;
+      }
+      function registerFailedLogin() {
+        let fails = 0;
+        try { fails = (Number(localStorage.getItem('evlt_login_fails')) || 0) + 1; } catch (e) { fails = 1; }
+        if (fails >= LOGIN_MAX_FAILS) {
+          try {
+            localStorage.setItem('evlt_login_lock_until', String(Date.now() + LOGIN_LOCK_SECONDS * 1000));
+            localStorage.setItem('evlt_login_fails', '0');
+          } catch (e) {}
+        } else {
+          try { localStorage.setItem('evlt_login_fails', String(fails)); } catch (e) {}
+        }
+      }
+      function clearFailedLogins() {
+        try { localStorage.setItem('evlt_login_fails', '0'); localStorage.removeItem('evlt_login_lock_until'); } catch (e) {}
+      }
+
+      // Upgrade any plain-text PINs to hashed ones (one-off, safe to run repeatedly).
+      function secureAllPins(silent) {
+        const vols = db.volunteers || [];
+        let changed = 0;
+        vols.forEach(v => {
+          const cur = v.Pin || v.pin;
+          if (cur && !isHashedPin(cur)) { v.Pin = hashPin(cur); delete v.pin; changed++; }
+        });
+        if (changed && database) database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        if (!silent) {
+          alert(changed ? `${changed} PIN(s) secured. Volunteers keep the same PIN, but it can no longer be read back here. Use Edit to set a new one if someone forgets.` : 'All PINs are already secured.');
+          renderVolunteers();
+        }
+      }
+
       function handleUserLogin(e) {
         e.preventDefault();
         const accountVal = document.getElementById('loginUserSelect').value;
         const pinVal = document.getElementById('loginUserPin').value.trim();
         const errDiv = document.getElementById('loginErrorMsg');
+        const showErr = (msg) => {
+          if (msg) errDiv.innerText = msg;
+          errDiv.style.display = 'block';
+        };
+        const defaultErr = errDiv.getAttribute('data-default') || errDiv.innerText;
+        errDiv.setAttribute('data-default', defaultErr);
 
         if (!accountVal) return;
 
+        const locked = loginLockSecondsLeft();
+        if (locked > 0) { showErr(`Too many incorrect attempts. Try again in ${locked} seconds.`); return; }
+
+        const fail = () => { registerFailedLogin(); showErr(defaultErr); };
+
         if (accountVal === 'SYSTEM_ADMIN') {
-          if (pinVal === '2026') {
+          if (verifyPin(pinVal, ADMIN_PIN_HASH)) {
+            clearFailedLogins();
             currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
             finishLogin();
-          } else {
-            errDiv.style.display = 'block';
-          }
+          } else { fail(); }
           return;
         }
 
         if (accountVal === 'SHOP_IPAD') {
-          if (pinVal === '2026' || pinVal === '5678') {
+          if (verifyPin(pinVal, ADMIN_PIN_HASH) || verifyPin(pinVal, KIOSK_PIN_HASH)) {
+            clearFailedLogins();
             currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
             finishLogin();
-          } else {
-            errDiv.style.display = 'block';
-          }
+          } else { fail(); }
           return;
         }
 
@@ -2626,14 +2776,19 @@
         const vol = vols.find(v => getVolunteerName(v) === accountVal);
         if (vol) {
           const userPin = vol.Pin || vol.pin || '1234';
-          if (pinVal === userPin || pinVal === '2026') {
+          if (verifyPin(pinVal, userPin) || verifyPin(pinVal, ADMIN_PIN_HASH)) {
+            clearFailedLogins();
+            // quietly upgrade this volunteer's stored PIN if it is still plain text
+            if (!isHashedPin(userPin)) {
+              vol.Pin = hashPin(userPin);
+              delete vol.pin;
+              if (database) database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+            }
             currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
             finishLogin();
-          } else {
-            errDiv.style.display = 'block';
-          }
+          } else { fail(); }
         } else {
-          errDiv.style.display = 'block';
+          fail();
         }
       }
 
@@ -2865,8 +3020,10 @@
           </div>
         ` : '';
 
+        setTimeout(autoCloseStaleShifts, 0);
         content.innerHTML = `
           ${overdueBannerHtml}
+          ${volDocAlertBannerHtml()}
           ${eventBannerHtml}
           ${getDriverStatusHtml()}
           <div class="page-header">
@@ -3053,7 +3210,7 @@
         inspectorSelect.innerHTML = '<option value="">-- Select Qualified Volunteer --</option>' + 
           volunteers.map(v => {
             const name = getVolunteerName(v);
-            return `<option value="${name}" ${checkData.inspector === name ? 'selected' : ''}>${name}</option>`;
+            return `<option value="${escapeHtml(name)}" ${checkData.inspector === name ? 'selected' : ''}>${escapeHtml(name)}</option>`;
           }).join('');
 
         document.getElementById('opCheckResult').value = checkData.result || 'Pass';
@@ -3092,6 +3249,18 @@
           const chosenLoco = document.getElementById('opCheckLocoSelect').value;
           if (chosenLoco === COACHES_VALUE) getCoachNames().forEach(n => selectedTrains.push(n));
           else if (chosenLoco) selectedTrains.push(chosenLoco);
+        }
+
+        // Warn (but allow) if the person recording the run isn't certified on the loco they selected.
+        // Only active once at least one loco certification has been recorded, so it doesn't nag during roll-out.
+        if (checkKey === 'testRun' && inspector && selectedTrains.length > 0 &&
+            (db.volunteerDocs || []).some(d => d.type === 'Loco Certification')) {
+          const uncertified = selectedTrains.filter(t => !isVolunteerCertified(inspector, t));
+          const shown = uncertified.length === selectedTrains.length && selectedTrains.every(t => isCoachName(t)) ? ['Coaches'] : uncertified;
+          if (uncertified.length > 0 &&
+              !confirm(`${inspector} has no valid certification on file for: ${shown.join(', ')}.\n\nSave this test run anyway?`)) {
+            return;
+          }
         }
 
         if (!db.dailyChecks) db.dailyChecks = {};
@@ -3144,19 +3313,20 @@
       function previewIncidentPhoto(e) {
         const file = e.target.files[0];
         if (file) {
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            tempPhotoBase64 = evt.target.result;
+          compressImageFile(file, 1000, 0.75, data => {
+            tempPhotoBase64 = data;
             const img = document.getElementById('incidentPhotoPreview');
             img.src = tempPhotoBase64;
             img.style.display = 'block';
-          };
-          reader.readAsDataURL(file);
+          });
         }
       }
 
-      function saveIncident(e) {
+      async function saveIncident(e) {
         e.preventDefault();
+        const unlock = lockSubmit(e);
+        tempPhotoBase64 = await storePhoto(tempPhotoBase64, 'incidents');
+        unlock();
         const asset = document.getElementById('incidentAsset').value;
         const desc = document.getElementById('incidentDesc').value;
         const redTag = document.getElementById('incidentRedTag').value;
@@ -3192,6 +3362,36 @@
         navigate(currentView);
       }
 
+      // ---- Clock in/out: changes run as a transaction on the live list so two devices can't overwrite each other ----
+      const CLOSING_TIME = '17:00'; // shifts left open past midnight are closed at this time (change if needed)
+
+      function normaliseClockArray(cur) {
+        if (Array.isArray(cur)) return cur.filter(Boolean);
+        if (cur && typeof cur === 'object') {
+          return Object.keys(cur).sort((a, b) => Number(a) - Number(b)).map(k => cur[k]).filter(Boolean);
+        }
+        return [];
+      }
+
+      // Applies one clock action to a list of logs. Returns a message if nothing was changed.
+      function applyClockAction(logs, name, action, timeStr, dateStr, nowIso) {
+        const active = logs.slice().reverse().find(l => l.name === name && l.status === 'Clocked In');
+        if (action === 'In') {
+          if (active) return `${name} is already clocked in (since ${active.clockIn}).`;
+          logs.push({ id: Date.now(), name: name, date: dateStr, clockIn: timeStr, clockInAt: nowIso, clockOut: '-', status: 'Clocked In' });
+          return '';
+        }
+        if (active) {
+          const target = logs.find(l => l.id === active.id) || active;
+          target.clockOut = timeStr;
+          target.clockOutAt = nowIso;
+          target.status = 'Completed';
+        } else {
+          logs.push({ id: Date.now(), name: name, date: dateStr, clockIn: '-', clockOut: timeStr, clockOutAt: nowIso, status: 'Completed' });
+        }
+        return '';
+      }
+
       function handleClockAction(e) {
         e.preventDefault();
         if (currentUser && !currentUser.isSystemAdmin && !currentUser.isShopKiosk) {
@@ -3203,33 +3403,72 @@
         const action = document.getElementById('clockActionType').value;
         if (!name) return;
 
-        const timeStr = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         const dateStr = getTodayString();
+        const nowIso = now.toISOString();
 
-        if (!db.clockLogs) db.clockLogs = [];
-        let updatedLogs = [...db.clockLogs];
+        const finish = (logs, notice) => {
+          db.clockLogs = logs;
+          if (notice) alert(notice);
+          syncArchiveForDate(dateStr);
+          dbUpdate({ historicalArchive: db.historicalArchive });
+          renderClock();
+        };
 
-        if (action === 'In') {
-          updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: timeStr, clockOut: '-', status: 'Clocked In' });
-        } else {
-          const activeLog = updatedLogs.slice().reverse().find(l => l.name === name && l.status === 'Clocked In');
-          if (activeLog) {
-            const target = updatedLogs.find(l => l.id === activeLog.id);
-            target.clockOut = timeStr;
-            target.status = 'Completed';
-          } else {
-            updatedLogs.push({ id: Date.now(), name: name, date: dateStr, clockIn: '-', clockOut: timeStr, status: 'Completed' });
-          }
+        if (!database) {
+          const logs = normaliseClockArray(db.clockLogs);
+          finish(logs, applyClockAction(logs, name, action, timeStr, dateStr, nowIso));
+          return;
         }
 
-        db.clockLogs = updatedLogs;
-        syncArchiveForDate(dateStr);
-        dbUpdate({ clockLogs: db.clockLogs, historicalArchive: db.historicalArchive });
+        let notice = '';
+        database.ref('EVLT_ADMIN_DB/clockLogs').transaction(
+          (cur) => {
+            const logs = normaliseClockArray(cur);
+            notice = applyClockAction(logs, name, action, timeStr, dateStr, nowIso);
+            return logs;
+          },
+          (err, committed, snap) => {
+            if (err) { alert('Could not record attendance. Please check the connection and try again.'); return; }
+            finish(normaliseClockArray(snap && snap.val()), notice);
+          },
+          false
+        );
+      }
 
-        renderClock();
+      // Closes shifts that were left open on a previous day (run only from admin / shop iPad sessions).
+      let autoCloseRunning = false;
+      function autoCloseStaleShifts() {
+        if (autoCloseRunning || !database || !currentUser || !(currentUser.isSystemAdmin || currentUser.isShopKiosk)) return;
+        const today = getTodayString();
+        const isStale = l => l && l.status === 'Clocked In' && (toISODate(l.date) || today) < today;
+        if (!(db.clockLogs || []).some(isStale)) return;
+        autoCloseRunning = true;
+        database.ref('EVLT_ADMIN_DB/clockLogs').transaction(
+          (cur) => {
+            const logs = normaliseClockArray(cur);
+            logs.forEach(l => {
+              if (!isStale(l)) return;
+              const inTime = l.clockIn && l.clockIn !== '-' ? l.clockIn : CLOSING_TIME;
+              l.clockOut = inTime >= CLOSING_TIME ? inTime : CLOSING_TIME;
+              l.status = 'Completed';
+              l.autoClosed = true;
+            });
+            return logs;
+          },
+          (err, committed, snap) => {
+            autoCloseRunning = false;
+            if (err || !snap) return;
+            db.clockLogs = normaliseClockArray(snap.val());
+            if (currentView === 'clock') renderClock();
+          },
+          false
+        );
       }
 
       function renderClock() {
+        setTimeout(autoCloseStaleShifts, 0);
         const content = document.getElementById('content');
         const activeLogs = (db.clockLogs || []).filter(l => l.status === 'Clocked In');
         const volunteers = db.volunteers || [];
@@ -3243,7 +3482,7 @@
                 <label>Select Volunteer</label>
                 <select id="clockVolunteer" required>
                   <option value="">-- Choose Name --</option>
-                  ${volunteers.filter(v => !v.disabled).map(v => `<option value="${getVolunteerName(v)}">${getVolunteerName(v)} (${v.Roles || v.roles || 'Standard'})</option>`).join('')}
+                  ${volunteers.filter(v => !v.disabled).map(v => `<option value="${escapeHtml(getVolunteerName(v))}">${escapeHtml(getVolunteerName(v))} (${escapeHtml(v.Roles || v.roles || 'Standard')})</option>`).join('')}
                 </select>
               </div>
               <div class="form-group">
@@ -3283,7 +3522,7 @@
                   activeLogs.map(l => `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.6rem 0.75rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.825rem;">
                       <div>
-                        <div style="font-weight: 600;">${l.name}</div>
+                        <div style="font-weight: 600;">${escapeHtml(l.name)}</div>
                         <div style="font-size: 0.7rem; color: var(--text-muted);">Clocked In at ${l.clockIn}</div>
                       </div>
                       <span style="background: #dcfce7; color: #166534; font-weight: 700; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">Active</span>
@@ -3580,7 +3819,7 @@
                   ${Object.keys(volunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded for this date.</div>' :
                     Object.entries(volunteerHours).map(([name, hrs]) => `
                       <div style="display: flex; justify-content: space-between; font-size: 0.825rem;">
-                        <span style="font-weight: 600;">${name}</span>
+                        <span style="font-weight: 600;">${escapeHtml(name)}</span>
                         <span style="background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 4px; font-weight: 700;">${hrs.toFixed(1)} hrs</span>
                       </div>
                     `).join('')}
@@ -3593,7 +3832,7 @@
                       dayLogs.map(l => `
                         <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.4rem 0.6rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.775rem;">
                           <div>
-                            <div style="font-weight: 600;">${l.name}</div>
+                            <div style="font-weight: 600;">${escapeHtml(l.name)}</div>
                             <div style="color: var(--text-muted);">${l.clockIn} → ${l.clockOut}</div>
                           </div>
                           ${isAdmin ? `
@@ -3633,7 +3872,7 @@
                   ${Object.keys(monthlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded this month.</div>' :
                     Object.entries(monthlyVolunteerHours).sort((a,b) => b[1]-a[1]).map(([name, hrs]) => `
                       <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                        <span>${name}</span>
+                        <span>${escapeHtml(name)}</span>
                         <strong style="color: var(--primary);">${hrs.toFixed(1)} hrs</strong>
                       </div>
                     `).join('')}
@@ -3646,7 +3885,7 @@
                   ${Object.keys(yearlyVolunteerHours).length === 0 ? '<div style="font-size: 0.8rem; color: var(--text-muted);">No hours recorded this year.</div>' :
                     Object.entries(yearlyVolunteerHours).sort((a,b) => b[1]-a[1]).map(([name, hrs]) => `
                       <div style="display: flex; justify-content: space-between; font-size: 0.8rem; padding: 3px 0; border-bottom: 1px solid var(--border-subtle);">
-                        <span style="font-weight:500;">${name}</span>
+                        <span style="font-weight:500;">${escapeHtml(name)}</span>
                         <strong style="color: var(--accent);">${hrs.toFixed(1)} hrs</strong>
                       </div>
                     `).join('')}
@@ -3710,7 +3949,7 @@
                       return `
                       <tr>
                         <td><strong>${formatDisplayDate(l.date)}</strong></td>
-                        <td>${l.name}</td>
+                        <td>${escapeHtml(l.name)}</td>
                         <td>${l.clockIn}</td>
                         <td>${l.clockOut}</td>
                         <td>${hrs !== null ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.75rem;">${hrs.toFixed(1)}h</span>` : '<span style="color:var(--text-muted); font-size:0.75rem;">Active</span>'}</td>
@@ -3768,9 +4007,12 @@
               <p>Manage volunteer profiles, PIN codes, DBS statuses, and qualifications.</p>
             </div>
             ${isAdmin ? `
-              <button class="btn btn-primary btn-sm" onclick="openVolunteerModal(null)">
-                <i data-lucide="user-plus"></i> Add New Volunteer
-              </button>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                ${(db.volunteers || []).some(v => (v.Pin || v.pin) && !isHashedPin(v.Pin || v.pin)) ? `<button class="btn btn-secondary btn-sm" onclick="secureAllPins()"><i data-lucide="lock"></i> Secure All PINs</button>` : ''}
+                <button class="btn btn-primary btn-sm" onclick="openVolunteerModal(null)">
+                  <i data-lucide="user-plus"></i> Add New Volunteer
+                </button>
+              </div>
             ` : ''}
           </div>
 
@@ -3796,12 +4038,12 @@
                       const name = getVolunteerName(v);
                       const ytd = getVolYtdHours(name);
                       return `
-                        <tr data-volname="${name.toLowerCase()}" data-volroles="${(v.Roles||v.roles||'').toLowerCase()}">
+                        <tr data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml((v.Roles||v.roles||'').toLowerCase())}">
                           <td>
-                            <strong>${name}</strong>
-                            <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">PIN: ${v.Pin || v.pin || '1234'}</div>
+                            <strong>${escapeHtml(name)}</strong>
+                            <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">${isHashedPin(v.Pin || v.pin) ? 'PIN: set &#128274;' : 'PIN: ' + escapeHtml(v.Pin || v.pin || '1234') + ' (not yet secured)'}</div>
                           </td>
-                          <td style="font-size:0.78rem;">${v.Roles || v.roles || 'Standard'}</td>
+                          <td style="font-size:0.78rem;">${escapeHtml(v.Roles || v.roles || 'Standard')}</td>
                           <td>
                             ${ytd > 0
                               ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 7px; border-radius:4px; font-weight:700; font-size:0.75rem;">${ytd.toFixed(1)} hrs</span>`
@@ -3842,7 +4084,10 @@
         document.getElementById('volunteerModalTitle').innerText = existing ? 'Edit Volunteer' : 'Add New Volunteer';
         document.getElementById('volEditIndex').value = index !== null ? index : '';
         document.getElementById('volName').value = existing ? getVolunteerName(existing) : '';
-        document.getElementById('volPin').value = existing ? (existing.Pin || existing.pin || '1234') : '1234';
+        const volPinInput = document.getElementById('volPin');
+        volPinInput.value = '';
+        volPinInput.required = !existing;
+        volPinInput.placeholder = existing ? 'Leave blank to keep current PIN' : 'Choose a PIN (4-6 digits)';
         document.getElementById('volDbs').value = existing ? (existing['DBS Status'] || 'Cleared') : 'Cleared';
 
         const rolesListContainer = document.getElementById('volRolesCheckboxes');
@@ -3873,15 +4118,19 @@
 
         if (!db.volunteers) db.volunteers = [];
 
-        if (indexVal !== '' && db.volunteers[indexVal]) {
+        const isEdit = indexVal !== '' && db.volunteers[indexVal];
+        if (!isEdit && pin.length < 4) { alert('Please choose a PIN of at least 4 characters.'); return; }
+        if (pin && pin.length < 4) { alert('A PIN must be at least 4 characters.'); return; }
+
+        if (isEdit) {
           db.volunteers[indexVal].Name = name;
-          db.volunteers[indexVal].Pin = pin;
+          if (pin) { db.volunteers[indexVal].Pin = hashPin(pin); delete db.volunteers[indexVal].pin; }
           db.volunteers[indexVal].Roles = rolesStr;
           db.volunteers[indexVal]['DBS Status'] = dbs;
         } else {
           db.volunteers.push({
             Name: name,
-            Pin: pin,
+            Pin: hashPin(pin),
             Roles: rolesStr,
             'DBS Status': dbs
           });
@@ -4147,7 +4396,7 @@
           const checked = existingPerfBy.includes(vName);
           return `
             <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer; line-height:1.3; padding:2px 0;">
-              <input type="checkbox" value="${vName}" class="maint-vol-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${vName}
+              <input type="checkbox" value="${escapeHtml(vName)}" class="maint-vol-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${escapeHtml(vName)}
             </label>
           `;
         }).join('');
@@ -4158,19 +4407,20 @@
       function previewMaintPhoto(e) {
         const file = e.target.files[0];
         if (file) {
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            tempMaintPhotoBase64 = evt.target.result;
+          compressImageFile(file, 1000, 0.75, data => {
+            tempMaintPhotoBase64 = data;
             const img = document.getElementById('maintPhotoPreview');
             img.src = tempMaintPhotoBase64;
             img.style.display = 'block';
-          };
-          reader.readAsDataURL(file);
+          });
         }
       }
 
-      function saveMaintenanceLogEntry(e) {
+      async function saveMaintenanceLogEntry(e) {
         e.preventDefault();
+        const unlock = lockSubmit(e);
+        tempMaintPhotoBase64 = await storePhoto(tempMaintPhotoBase64, 'maintenance');
+        unlock();
         const editIdxVal = document.getElementById('maintLogEditIndex').value;
         const assetName = document.getElementById('maintAssetSelect').value;
         const workDone = document.getElementById('maintWorkDone').value;
@@ -4777,7 +5027,7 @@
                     const vRoles = String(v.Roles || v.roles || '').toLowerCase();
                     return `
                       <tr>
-                        <td><strong>${name}</strong></td>
+                        <td><strong>${escapeHtml(name)}</strong></td>
                         ${roles.map(r => {
                           const hasRole = vRoles.includes(r.toLowerCase());
                           return `<td style="text-align:center;">${hasRole ? '<i data-lucide="check" style="color:#16a34a; width:16px; height:16px; margin:auto;"></i>' : '<span style="color:#cbd5e1;">·</span>'}</td>`;
@@ -6230,15 +6480,13 @@
       function eurotunnelHandleLocoPhoto(event) {
         const file = event.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          tempEuroLocoPhoto = evt.target.result;
+        compressImageFile(file, 1000, 0.75, data => {
+          tempEuroLocoPhoto = data;
           const img = document.getElementById('euroLocoPhotoPreview');
           const btn = document.getElementById('euroLocoPhotoRemoveBtn');
           if (img) { img.src = tempEuroLocoPhoto; img.style.display = 'block'; }
           if (btn) btn.style.display = 'inline-flex';
-        };
-        reader.readAsDataURL(file);
+        });
       }
 
       function eurotunnelRemoveLocoPhoto() {
@@ -6368,16 +6616,14 @@
         if (files.length === 0) return;
         let remaining = files.length;
         files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            tempEuroStepImages.push(evt.target.result);
+          compressImageFile(file, 1000, 0.75, data => {
+            tempEuroStepImages.push(data);
             remaining -= 1;
             if (remaining === 0) {
               eurotunnelRenderStepImageList();
               event.target.value = '';
             }
-          };
-          reader.readAsDataURL(file);
+          });
         });
       }
 
@@ -6611,7 +6857,6 @@
         { key: 'Other', icon: 'file-badge', custom: true }
       ];
       let docsSubView = 'general';
-      let volDocFilter = '';
       let tempVolDocPhoto = '';
 
       function canManageVolDocs() {
@@ -6670,86 +6915,132 @@
         return match ? match.photo : '';
       }
 
-      function volDocCardHtml(d, canManage) {
+      // One row inside a volunteer's licence (a loco certification or another qualification)
+      function volDocRowHtml(d, canManage) {
         const typeDef = VOL_DOC_TYPES.find(t => t.key === d.type) || { icon: 'file-badge' };
         const isLoco = d.type === 'Loco Certification';
         const status = volDocStatus(d);
-        const title = isLoco ? 'Locomotive Certification' : (d.type === 'Other' && d.title ? d.title : d.type);
+        const title = isLoco ? (d.loco || 'Locomotive') : (d.type === 'Other' && d.title ? d.title : d.type);
         const photo = d.photo || (isLoco ? findLocoPhoto(d.loco) : '');
-        const row = (label, value) => value ? `<div style="display:flex; justify-content:space-between; gap:0.5rem; font-size:0.72rem; padding:2px 0; border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">${label}</span><strong style="text-align:right;">${escapeHtml(value)}</strong></div>` : '';
+        const bits = [
+          `${isLoco ? 'Licensed' : 'Issued'} ${formatVolDocDate(d.issued)}`,
+          d.expires ? `Expires ${formatVolDocDate(d.expires)}` : '',
+          d.issuer ? `Signed off by ${escapeHtml(d.issuer)}` : '',
+          d.ref ? `No. ${escapeHtml(d.ref)}` : ''
+        ].filter(Boolean).join(' &middot; ');
         return `
-          <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card-bg, #fff); box-shadow:0 2px 8px rgba(0,0,0,0.07);">
-            <div style="background:linear-gradient(135deg, var(--primary), #0f172a); color:#fff; padding:0.5rem 0.85rem; display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <div style="font-size:0.6rem; letter-spacing:0.12em; opacity:0.8;">EVLT VOLUNTEER LICENCE</div>
-                <div style="font-weight:700; font-size:0.9rem;">${escapeHtml(title)}</div>
-              </div>
-              <span style="background:${status.bg}; color:${status.fg}; font-size:0.62rem; font-weight:700; padding:2px 8px; border-radius:999px;">${status.label}</span>
+          <div style="display:flex; gap:0.75rem; align-items:center; padding:0.65rem 0; border-bottom:1px dashed var(--border);">
+            ${photo
+              ? `<img src="${photo}" alt="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in; flex-shrink:0;" onclick="viewVolDocPhoto(${d.id})">`
+              : `<div style="width:64px; height:64px; border-radius:8px; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i data-lucide="${typeDef.icon}" style="width:26px; height:26px;"></i></div>`}
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700; font-size:0.9rem;">${isLoco ? '🚂 ' : ''}${escapeHtml(title)}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted); line-height:1.5;">${bits}</div>
+              ${d.notes ? `<div style="font-size:0.72rem; color:var(--text-muted); font-style:italic;">${escapeHtml(d.notes)}</div>` : ''}
             </div>
-            <div style="display:flex; gap:0.75rem; padding:0.75rem;">
-              <div style="width:96px; flex-shrink:0;">
-                ${photo
-                  ? `<img src="${photo}" alt="" style="width:96px; height:96px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in;" onclick="viewVolDocPhoto(${d.id})">`
-                  : `<div style="width:96px; height:96px; border-radius:8px; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center;"><i data-lucide="${typeDef.icon}" style="width:38px; height:38px;"></i></div>`}
-              </div>
-              <div style="flex:1; min-width:0;">
-                <div style="font-weight:700; font-size:0.95rem; margin-bottom:0.15rem;">${escapeHtml(d.volunteer)}</div>
-                ${isLoco ? `<div style="font-size:0.8rem; font-weight:600; color:var(--primary); margin-bottom:0.25rem;">🚂 ${escapeHtml(d.loco || '')}</div>` : ''}
-                ${row(isLoco ? 'Date Licensed' : 'Date Issued', formatVolDocDate(d.issued))}
-                ${row('Expires', d.expires ? formatVolDocDate(d.expires) : '')}
-                ${row('Certified By', d.issuer)}
-                ${row('Licence No.', d.ref)}
-              </div>
-            </div>
-            ${d.notes ? `<div style="padding:0 0.75rem 0.6rem; font-size:0.72rem; color:var(--text-muted);">${escapeHtml(d.notes)}</div>` : ''}
-            ${canManage ? `<div style="display:flex; justify-content:flex-end; gap:0.4rem; padding:0.4rem 0.75rem; background:var(--bg); border-top:1px solid var(--border);">
-              <button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(${d.id})"><i data-lucide="pencil"></i> Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteVolunteerDoc(${d.id})"><i data-lucide="trash-2"></i></button>
+            <span style="background:${status.bg}; color:${status.fg}; font-size:0.62rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">${status.label}</span>
+            ${canManage ? `<div style="display:flex; gap:0.3rem; flex-shrink:0;">
+              <button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(${d.id})" title="Edit"><i data-lucide="pencil"></i></button>
+              <button class="btn btn-danger btn-sm" onclick="deleteVolunteerDoc(${d.id})" title="Delete"><i data-lucide="trash-2"></i></button>
             </div>` : ''}
           </div>`;
       }
 
+      // Overall status of a set of documents: worst one wins
+      function volDocsOverall(docs) {
+        if (!docs.length) return { label: 'No records', bg: '#f1f5f9', fg: '#64748b' };
+        const statuses = docs.map(volDocStatus);
+        return statuses.find(x => x.label === 'Expired') || statuses.find(x => x.label === 'Expiring Soon') || statuses[0];
+      }
+
+      let volDocSelected = '';
+      let volDocPickList = [];
+
+      function selectVolDocVolunteer(i) { volDocSelected = i === null ? '' : (volDocPickList[i] || ''); renderVolunteerDocs(); }
+
       function renderVolunteerDocs() {
         const content = document.getElementById('content');
         const canManage = canManageVolDocs();
-        const volunteers = (db.volunteers || []).filter(v => !v.disabled);
         const ownName = currentUser ? currentUser.name : '';
-        let docs = db.volunteerDocs || [];
-        if (!canManage) docs = docs.filter(d => d.volunteer === ownName);
-        else if (volDocFilter) docs = docs.filter(d => d.volunteer === volDocFilter);
-
-        // group by volunteer
-        const groups = {};
-        docs.forEach(d => { (groups[d.volunteer] = groups[d.volunteer] || []).push(d); });
-        const names = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-
-        content.innerHTML = `
+        const allDocs = db.volunteerDocs || [];
+        const header = (title, sub, actions) => `
           ${docsTabsHtml()}
           <div class="page-header">
-            <div class="page-title">
-              <h2>Volunteer Documents</h2>
-              <p>Locomotive certifications and qualifications, shown as licences.</p>
-            </div>
-            ${canManage ? `<button class="btn btn-primary btn-sm" onclick="openVolunteerDocModal()"><i data-lucide="plus"></i> Add Document</button>` : ''}
-          </div>
-          ${canManage ? `
+            <div class="page-title"><h2>${title}</h2><p>${sub}</p></div>
+            ${actions || ''}
+          </div>`;
+
+        // Volunteers (non-managers) go straight to their own licence; managers pick a volunteer first.
+        const viewing = canManage ? volDocSelected : ownName;
+
+        if (!viewing) {
+          const vols = (db.volunteers || []).filter(v => !v.disabled);
+          volDocPickList = vols.map(v => getVolunteerName(v));
+          content.innerHTML = header('Volunteer Licences', 'Choose a volunteer to view or update their licence.') + `
             <div class="form-group" style="max-width:320px;">
-              <label>Volunteer</label>
-              <select onchange="volDocFilter=this.value; renderVolunteerDocs();">
-                <option value="">All volunteers</option>
-                ${volunteers.map(v => { const n = getVolunteerName(v); return `<option value="${escapeHtml(n)}" ${volDocFilter === n ? 'selected' : ''}>${escapeHtml(n)}</option>`; }).join('')}
-              </select>
-            </div>` : ''}
-          ${names.length === 0 ? `<div class="card" style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">${canManage ? 'No volunteer documents yet. Use "Add Document" to record a certification.' : 'You have no documents recorded yet.'}</div>` :
-            names.map(n => `
-              <div class="section-group">
-                <div class="section-header">${escapeHtml(n)}</div>
-                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1rem;">
-                  ${groups[n].slice().sort((a, b) => (b.issued || '').localeCompare(a.issued || '')).map(d => volDocCardHtml(d, canManage)).join('')}
-                </div>
-              </div>`).join('')}
-        `;
+              <input type="text" id="volDocSearch" placeholder="Search volunteers..." oninput="filterVolDocPicker()">
+            </div>
+            <div id="volDocPicker" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:0.75rem;">
+              ${vols.map((v, i) => {
+                const n = getVolunteerName(v);
+                const docs = allDocs.filter(d => d.volunteer === n);
+                const st = volDocsOverall(docs);
+                return `
+                  <div data-name="${escapeHtml(n.toLowerCase())}" onclick="selectVolDocVolunteer(${i})" style="cursor:pointer; border:1px solid var(--border); border-radius:12px; padding:0.85rem; background:var(--card-bg, #fff); display:flex; align-items:center; gap:0.75rem;">
+                    <div style="width:42px; height:42px; border-radius:50%; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;">${escapeHtml(n.trim().charAt(0).toUpperCase())}</div>
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-weight:700; font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(n)}</div>
+                      <div style="font-size:0.7rem; color:var(--text-muted);">${docs.length} record${docs.length === 1 ? '' : 's'}</div>
+                    </div>
+                    <span style="background:${st.bg}; color:${st.fg}; font-size:0.6rem; font-weight:700; padding:2px 7px; border-radius:999px; white-space:nowrap;">${st.label}</span>
+                  </div>`;
+              }).join('') || '<div class="card" style="padding:2rem; text-align:center; color:var(--text-muted);">No volunteers registered.</div>'}
+            </div>`;
+          if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+          return;
+        }
+
+        const docs = allDocs.filter(d => d.volunteer === viewing);
+        const locoDocs = docs.filter(d => d.type === 'Loco Certification').sort((a, b) => (a.loco || '').localeCompare(b.loco || ''));
+        const otherDocs = docs.filter(d => d.type !== 'Loco Certification').sort((a, b) => (a.type || '').localeCompare(b.type || ''));
+        const overall = volDocsOverall(docs);
+        const vol = (db.volunteers || []).find(v => getVolunteerName(v) === viewing) || {};
+        const section = (title, rows) => `
+          <div style="margin-top:1rem;">
+            <div style="font-size:0.68rem; font-weight:700; letter-spacing:0.08em; color:var(--text-muted); text-transform:uppercase; border-bottom:2px solid var(--border); padding-bottom:0.25rem;">${title}</div>
+            ${rows.length ? rows.map(d => volDocRowHtml(d, canManage)).join('') : '<div style="font-size:0.78rem; color:var(--text-muted); padding:0.75rem 0;">None recorded.</div>'}
+          </div>`;
+
+        content.innerHTML = header(
+          canManage ? 'Volunteer Licence' : 'My Licence',
+          canManage ? 'One licence per volunteer. Add certifications and qualifications to it.' : 'Your certifications and qualifications.',
+          canManage ? `<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="selectVolDocVolunteer(null)"><i data-lucide="arrow-left"></i> All Volunteers</button>
+              <button class="btn btn-primary btn-sm" onclick="openVolunteerDocModal()"><i data-lucide="plus"></i> Add Certification</button>
+            </div>` : '') + `
+          <div style="max-width:760px; border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--card-bg, #fff); box-shadow:0 2px 10px rgba(0,0,0,0.08);">
+            <div style="background:linear-gradient(135deg, var(--primary), #0f172a); color:#fff; padding:1rem 1.25rem; display:flex; align-items:center; gap:1rem;">
+              <div style="width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.18); display:flex; align-items:center; justify-content:center; font-size:1.4rem; font-weight:700; flex-shrink:0;">${escapeHtml(viewing.trim().charAt(0).toUpperCase())}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-size:0.6rem; letter-spacing:0.14em; opacity:0.8;">EVLT VOLUNTEER LICENCE</div>
+                <div style="font-size:1.15rem; font-weight:700;">${escapeHtml(viewing)}</div>
+                <div style="font-size:0.72rem; opacity:0.85;">${escapeHtml(vol.Roles || vol.roles || '')}</div>
+              </div>
+              <span style="background:${overall.bg}; color:${overall.fg}; font-size:0.68rem; font-weight:700; padding:3px 10px; border-radius:999px;">${overall.label}</span>
+            </div>
+            <div style="padding:0.25rem 1.25rem 1rem;">
+              ${section('Locomotive Certifications', locoDocs)}
+              ${section('Other Qualifications', otherDocs)}
+            </div>
+          </div>`;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function filterVolDocPicker() {
+        const q = (document.getElementById('volDocSearch')?.value || '').toLowerCase();
+        document.querySelectorAll('#volDocPicker [data-name]').forEach(el => {
+          el.style.display = !q || el.getAttribute('data-name').includes(q) ? '' : 'none';
+        });
       }
 
       function viewVolDocPhoto(id) {
@@ -6788,7 +7079,10 @@
         const vols = (db.volunteers || []).filter(v => !v.disabled);
         document.getElementById('volDocVolunteer').innerHTML = '<option value="">-- Select Volunteer --</option>' +
           vols.map(v => { const n = getVolunteerName(v); return `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`; }).join('');
-        document.getElementById('volDocVolunteer').value = existing ? existing.volunteer : (volDocFilter || '');
+        document.getElementById('volDocVolunteer').value = existing ? existing.volunteer : (volDocSelected || '');
+        // the licence is already open for one volunteer, so lock the field to them
+        document.getElementById('volDocVolunteer').disabled = !!(existing || volDocSelected);
+        document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Certification' : (volDocSelected ? `Add to ${volDocSelected}'s Licence` : 'Add Certification');
 
         document.getElementById('volDocType').innerHTML = VOL_DOC_TYPES.map(t => `<option value="${t.key}">${t.key}</option>`).join('');
         document.getElementById('volDocType').value = existing ? existing.type : 'Loco Certification';
@@ -6815,9 +7109,12 @@
         document.getElementById('volDocModal').style.display = 'flex';
       }
 
-      function saveVolunteerDoc(e) {
+      async function saveVolunteerDoc(e) {
         e.preventDefault();
         if (!canManageVolDocs()) return;
+        const unlock = lockSubmit(e);
+        tempVolDocPhoto = await storePhoto(tempVolDocPhoto, 'volunteer-docs');
+        unlock();
         const idVal = document.getElementById('volDocId').value;
         const type = document.getElementById('volDocType').value;
         const def = VOL_DOC_TYPES.find(t => t.key === type) || {};
@@ -6851,6 +7148,42 @@
         db.volunteerDocs = (db.volunteerDocs || []).filter(d => d.id !== id);
         dbUpdate({ volunteerDocs: db.volunteerDocs });
         renderVolunteerDocs();
+      }
+
+      // Documents that are expired or expire within 60 days (managers see everyone, volunteers see their own)
+      function getVolDocAlerts() {
+        if (!currentUser || currentUser.isShopKiosk) return [];
+        const mine = canManageVolDocs() ? null : currentUser.name;
+        return (db.volunteerDocs || [])
+          .filter(d => d.expires && (!mine || d.volunteer === mine))
+          .map(d => ({ d, status: volDocStatus(d).label }))
+          .filter(x => x.status === 'Expired' || x.status === 'Expiring Soon')
+          .sort((a, b) => (a.d.expires || '').localeCompare(b.d.expires || ''));
+      }
+
+      function volDocAlertBannerHtml() {
+        if (!userHasAccess('documents') && !(currentUser && !currentUser.isShopKiosk)) return '';
+        const alerts = getVolDocAlerts();
+        if (alerts.length === 0) return '';
+        const expired = alerts.filter(a => a.status === 'Expired');
+        const label = a => `${escapeHtml(a.d.volunteer)} - ${escapeHtml(a.d.type === 'Loco Certification' ? 'Loco: ' + a.d.loco : (a.d.title || a.d.type))} (${a.status === 'Expired' ? 'expired' : 'expires'} ${formatVolDocDate(a.d.expires)})`;
+        const colours = expired.length ? 'background:#fef2f2; color:#991b1b; border:1px solid #fecaca;' : 'background:#fffbeb; color:#92400e; border:1px solid #fde68a;';
+        const canOpen = userHasAccess('documents');
+        return `
+          <div style="${colours} padding:0.75rem 1rem; border-radius:var(--radius-lg); font-weight:600; font-size:0.85rem; display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem; ${canOpen ? 'cursor:pointer;' : ''}" ${canOpen ? `onclick="docsSubView='volunteer'; navigate('documents')"` : ''}>
+            <i data-lucide="badge-alert" style="width:18px; height:18px; flex-shrink:0; margin-top:2px;"></i>
+            <div><strong>${expired.length ? expired.length + ' expired' : ''}${expired.length && alerts.length > expired.length ? ' and ' : ''}${alerts.length > expired.length ? (alerts.length - expired.length) + ' expiring soon' : ''} licence${alerts.length > 1 ? 's' : ''} / certificate${alerts.length > 1 ? 's' : ''}:</strong>
+              ${alerts.slice(0, 5).map(label).join('; ')}${alerts.length > 5 ? ` and ${alerts.length - 5} more` : ''}${canOpen ? ' - <u>View Documents</u>' : ''}</div>
+          </div>`;
+      }
+
+      // Is this volunteer currently certified (not expired) on this loco? "Coaches" certifies for any coach.
+      function isVolunteerCertified(volunteerName, locoName) {
+        return (db.volunteerDocs || []).some(d =>
+          d.type === 'Loco Certification' &&
+          d.volunteer === volunteerName &&
+          (d.loco === locoName || (d.loco === 'Coaches' && isCoachName(locoName))) &&
+          volDocStatus(d).label !== 'Expired');
       }
 
       function renderGenericModule(moduleKey) {
@@ -7073,7 +7406,7 @@
         const vol = currentUser.volData;
         const actualPin = vol.Pin || vol.pin || '1234';
 
-        if (currentPin !== actualPin) {
+        if (!verifyPin(currentPin, actualPin)) {
           errDiv.innerText = 'Current PIN is incorrect.';
           errDiv.style.display = 'block';
           return;
@@ -7097,7 +7430,7 @@
           return;
         }
 
-        vols[idx].Pin = newPin;
+        vols[idx].Pin = hashPin(newPin);
         delete vols[idx].pin;
         currentUser.volData = vols[idx];
 
@@ -7157,17 +7490,16 @@
       function handleGalleryPhotoFile(event) {
         const file = event.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          tempGalleryPhoto = evt.target.result;
+        compressImageFile(file, 1400, 0.78, data => {
+          tempGalleryPhoto = data;
           const img = document.getElementById('galleryPhotoPreview');
           if (img) { img.src = tempGalleryPhoto; img.style.display = 'block'; }
-        };
-        reader.readAsDataURL(file);
+        });
       }
 
-      function saveGalleryPhoto() {
+      async function saveGalleryPhoto() {
         if (!tempGalleryPhoto) { alert('Please choose a photo.'); return; }
+        tempGalleryPhoto = await storePhoto(tempGalleryPhoto, 'gallery');
         const caption = document.getElementById('galleryPhotoCaption').value.trim();
         if (!db.galleryPhotos) db.galleryPhotos = [];
         db.galleryPhotos.push({ id: Date.now(), photo: tempGalleryPhoto, caption, date: getTodayString(), addedBy: currentUser?.name || 'User' });
