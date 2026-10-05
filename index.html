@@ -909,6 +909,66 @@
       </div>
     </div>
 
+    <!-- Volunteer Document / Licence Modal -->
+    <div class="modal-overlay" id="volDocModal">
+      <div class="modal" style="max-height:90vh; overflow-y:auto;">
+        <h3 id="volDocModalTitle">Add Volunteer Document</h3>
+        <form onsubmit="saveVolunteerDoc(event)">
+          <input type="hidden" id="volDocId" value="">
+          <div class="form-group">
+            <label>Volunteer</label>
+            <select id="volDocVolunteer" required></select>
+          </div>
+          <div class="form-group">
+            <label>Document Type</label>
+            <select id="volDocType" onchange="toggleVolDocTypeFields()" required></select>
+          </div>
+          <div class="form-group" id="volDocLocoGroup">
+            <label>Certified Locomotive</label>
+            <select id="volDocLoco"></select>
+          </div>
+          <div class="form-group" id="volDocTitleGroup" style="display:none;">
+            <label>Document Title</label>
+            <input type="text" id="volDocTitle" placeholder="e.g. Signalling Competence">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label id="volDocIssuedLabel">Date Licensed / Issued</label>
+              <input type="date" id="volDocIssued" required>
+            </div>
+            <div class="form-group">
+              <label>Expiry / Renewal Date (optional)</label>
+              <input type="date" id="volDocExpiry">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label>Certified / Signed Off By</label>
+              <input type="text" id="volDocIssuer" placeholder="Examiner or provider">
+            </div>
+            <div class="form-group">
+              <label>Licence / Certificate No. (optional)</label>
+              <input type="text" id="volDocRef">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Notes (optional)</label>
+            <textarea id="volDocNotes" placeholder="Restrictions, conditions, supervised hours, etc."></textarea>
+          </div>
+          <div class="form-group">
+            <label id="volDocPhotoLabel">Photo (loco image or certificate scan)</label>
+            <input type="file" accept="image/*" onchange="previewVolDocPhoto(event)">
+            <img id="volDocPhotoPreview" style="display:none; max-width:100%; max-height:160px; margin-top:0.5rem; border-radius:8px; object-fit:cover;">
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">If left blank for a loco certification, the last photo used for that loco is reused.</div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('volDocModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Document</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Dedicated Action Modal -->
     <div class="modal-overlay" id="actionModal">
       <div class="modal">
@@ -1246,6 +1306,21 @@
       let eurotunnelCurrentSubView = 'sequences';
 
       const AVAILABLE_TRAINS = ["Canadian Pacific", "DB", "Santa Fe", "George", "Edward", "Dylan", "June", "Daphne"];
+      const COACHES_VALUE = '__COACHES__';
+
+      // Anything in the fleet with type "Coach" counts as a coach (falls back to June & Daphne).
+      function getCoachNames() {
+        const fromFleet = (db.fleetItems || []).filter(f => f && f.type === 'Coach' && f.name).map(f => f.name);
+        return fromFleet.length ? fromFleet : ['June', 'Daphne'];
+      }
+      function isCoachName(name) {
+        const n = String(name || '').trim().toLowerCase();
+        return getCoachNames().some(c => c.toLowerCase() === n);
+      }
+      // Locos only (coaches removed) - used with a single "Coaches" option in menus
+      function getLocoOnlyTrains() {
+        return AVAILABLE_TRAINS.filter(t => !isCoachName(t));
+      }
       // Including "Management" role for page access controls
       const DEFAULT_ROLES = ["Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom", "Eurotunnel"];
 
@@ -1804,7 +1879,7 @@
       function normaliseDb() {
         if (!db || typeof db !== 'object') db = {};
         
-        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads']
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs']
           .forEach(key => {
             const val = db[key];
             if (Array.isArray(val)) return;
@@ -2721,7 +2796,7 @@
           case 'eurotunnel': renderEurotunnelPage(); break;
           case 'suppliers': renderGenericModule('suppliers'); break;
           case 'enquiries': renderGenericModule('enquiries'); break;
-          case 'documents': renderGenericModule('documents'); break;
+          case 'documents': renderDocuments(); break;
           case 'notes': renderGenericModule('notes'); break;
           case 'archives': renderArchives(); break;
           case 'notifications': renderNotificationsPage(); break;
@@ -2809,17 +2884,24 @@
             <div class="card" style="padding: 1rem;">
               <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem;">
                 ${runningTrains.length === 0 ? '<span style="color: var(--text-muted); font-size: 0.8rem;">No trains added for running today.</span>' :
-                  runningTrains.map(train => `
+                  (() => {
+                    const coachNames = getCoachNames();
+                    const hasCoaches = runningTrains.some(t => isCoachName(t));
+                    const chips = runningTrains.filter(t => !isCoachName(t)).map(t => ({ label: t, remove: t }));
+                    if (hasCoaches) chips.push({ label: 'Coaches (' + coachNames.join(' & ') + ')', remove: COACHES_VALUE });
+                    return chips.map(c => `
                     <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: var(--radius); font-weight: 600; font-size: 0.8rem;">
-                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${train}
-                      <button type="button" onclick="removeRunningTrain('${train}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
+                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${c.label}
+                      <button type="button" onclick="removeRunningTrain('${c.remove}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
                     </div>
-                  `).join('')}
+                  `).join('');
+                  })()}
               </div>
               <div style="display: flex; gap: 0.5rem; max-width: 350px;">
                 <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
                   <option value="">-- Add Loco to Today's Run --</option>
-                  ${AVAILABLE_TRAINS.map(t => `<option value="${t}">${t}</option>`).join('')}
+                  ${getLocoOnlyTrains().map(t => `<option value="${t}">${t}</option>`).join('')}
+                  <option value="${COACHES_VALUE}">Coaches (all)</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
               </div>
@@ -2934,8 +3016,12 @@
         const trainName = select.value;
         if (!trainName) return;
         if (!db.dailyChecks.runningTrains) db.dailyChecks.runningTrains = [];
-        if (!db.dailyChecks.runningTrains.includes(trainName)) {
-          db.dailyChecks.runningTrains.push(trainName);
+        const toAdd = trainName === COACHES_VALUE ? getCoachNames() : [trainName];
+        let changed = false;
+        toAdd.forEach(n => {
+          if (!db.dailyChecks.runningTrains.includes(n)) { db.dailyChecks.runningTrains.push(n); changed = true; }
+        });
+        if (changed) {
           database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
           renderDashboard();
         }
@@ -2943,7 +3029,9 @@
 
       function removeRunningTrain(trainName) {
         if (!db.dailyChecks.runningTrains) return;
-        db.dailyChecks.runningTrains = db.dailyChecks.runningTrains.filter(t => t !== trainName);
+        db.dailyChecks.runningTrains = trainName === COACHES_VALUE
+          ? db.dailyChecks.runningTrains.filter(t => !isCoachName(t))
+          : db.dailyChecks.runningTrains.filter(t => t !== trainName);
         database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
         renderDashboard();
       }
@@ -2977,12 +3065,14 @@
           trainGroup.style.display = 'block';
           const redTagged = getRedTaggedAssets();
           const locoSelect = document.getElementById('opCheckLocoSelect');
-          const activeLoco = (checkData.trains && checkData.trains.length > 0) ? checkData.trains[0] : '';
-          locoSelect.innerHTML = '<option value="">-- Select Running Locomotive --</option>' + 
-            AVAILABLE_TRAINS.map(train => {
+          const savedTrains = checkData.trains || [];
+          const activeLoco = savedTrains.length > 0 ? (savedTrains.every(t => isCoachName(t)) ? COACHES_VALUE : savedTrains[0]) : '';
+          locoSelect.innerHTML = '<option value="">-- Select Running Locomotive --</option>' +
+            getLocoOnlyTrains().map(train => {
               if (redTagged.some(rt => rt.includes(train.toLowerCase()))) return '';
               return `<option value="${train}" ${activeLoco === train ? 'selected' : ''}>${train}</option>`;
-            }).join('');
+            }).join('') +
+            `<option value="${COACHES_VALUE}" ${activeLoco === COACHES_VALUE ? 'selected' : ''}>Coaches (all)</option>`;
         } else {
           trainGroup.style.display = 'none';
         }
@@ -3000,7 +3090,8 @@
         const selectedTrains = [];
         if (checkKey === 'testRun') {
           const chosenLoco = document.getElementById('opCheckLocoSelect').value;
-          if (chosenLoco) selectedTrains.push(chosenLoco);
+          if (chosenLoco === COACHES_VALUE) getCoachNames().forEach(n => selectedTrains.push(n));
+          else if (chosenLoco) selectedTrains.push(chosenLoco);
         }
 
         if (!db.dailyChecks) db.dailyChecks = {};
@@ -4019,8 +4110,12 @@
 
         const assetSelect = document.getElementById('maintAssetSelect');
         const fleet = db.fleetItems || [];
+        const editingAsset = logIndex !== null && existingLog ? (existingLog.assetName || existingLog.asset) : '';
         assetSelect.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
-          fleet.map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+          fleet.filter(f => f.type !== 'Coach' || (logIndex !== null && f.name === editingAsset))
+               .map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+          (logIndex === null && fleet.some(f => f.type === 'Coach')
+            ? `<option value="${COACHES_VALUE}">Coaches (all: ${getCoachNames().join(' & ')})</option>` : '') +
           '<option value="General Trackwork">General Trackwork</option>' +
           '<option value="Carriage Fleet">Carriage Fleet</option>' +
           '<option value="Infrastructure / Buildings">Infrastructure / Buildings</option>';
@@ -4088,9 +4183,9 @@
 
         if (!db.maintenanceLogs) db.maintenanceLogs = [];
 
-        const logData = {
-          id: editIdxVal !== '' ? db.maintenanceLogs[editIdxVal].id : Date.now(),
-          assetName: assetName,
+        const buildLog = (asset, idOffset) => ({
+          id: Date.now() + idOffset,
+          assetName: asset,
           workDone: workDone,
           startDate: startDate,
           endDate: endDate,
@@ -4099,21 +4194,27 @@
           photo: tempMaintPhotoBase64,
           notes: notes,
           recordedBy: currentUser ? currentUser.name : 'User'
-        };
+        });
+
+        // "Coaches" = log the same work against every coach in the fleet
+        const targetAssets = assetName === COACHES_VALUE ? getCoachNames() : [assetName];
 
         if (editIdxVal !== '' && db.maintenanceLogs[editIdxVal]) {
+          const logData = buildLog(assetName, 0);
+          logData.id = db.maintenanceLogs[editIdxVal].id;
           db.maintenanceLogs[editIdxVal] = logData;
         } else {
-          db.maintenanceLogs.push(logData);
+          targetAssets.forEach((a, i) => db.maintenanceLogs.push(buildLog(a, i)));
         }
 
         const maintUpdates = {};
         if (updateState && db.fleetItems) {
-          const fleetItem = db.fleetItems.find(f => f.name === assetName);
-          if (fleetItem) {
-            fleetItem.state = updateState;
-            maintUpdates.fleetItems = db.fleetItems;
-          }
+          let stateChanged = false;
+          targetAssets.forEach(a => {
+            const fleetItem = db.fleetItems.find(f => f.name === a);
+            if (fleetItem) { fleetItem.state = updateState; stateChanged = true; }
+          });
+          if (stateChanged) maintUpdates.fleetItems = db.fleetItems;
         }
 
         syncArchiveForDate(startDate);
@@ -6497,6 +6598,261 @@
         }
       };
 
+      // ===== Volunteer Documents (licence-style records) =====
+      const VOL_DOC_TYPES = [
+        { key: 'Loco Certification', icon: 'train', locoBased: true },
+        { key: 'First Aid', icon: 'heart-pulse' },
+        { key: 'DBS Check', icon: 'shield-check' },
+        { key: 'Safety Briefing / Rules Exam', icon: 'book-open-check' },
+        { key: 'Medical / Fitness Declaration', icon: 'stethoscope' },
+        { key: 'Guard / Signaller Certificate', icon: 'flag' },
+        { key: 'Fire Marshal', icon: 'flame' },
+        { key: 'Manual Handling', icon: 'package' },
+        { key: 'Other', icon: 'file-badge', custom: true }
+      ];
+      let docsSubView = 'general';
+      let volDocFilter = '';
+      let tempVolDocPhoto = '';
+
+      function canManageVolDocs() {
+        if (!currentUser) return false;
+        if (currentUser.isSystemAdmin) return true;
+        const roles = String((currentUser.volData && (currentUser.volData.Roles || currentUser.volData.roles)) || '');
+        return /Admin|Management/i.test(roles);
+      }
+
+      function compressImageFile(file, maxDim, quality, cb) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            cb(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = () => cb(e.target.result);
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function setDocsSubView(view) { docsSubView = view; renderDocuments(); }
+
+      function docsTabsHtml() {
+        return `
+          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn ${docsSubView === 'general' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('general')">General Documents</button>
+            <button class="btn ${docsSubView === 'volunteer' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('volunteer')">Volunteer Documents</button>
+          </div>`;
+      }
+
+      function renderDocuments() {
+        if (docsSubView === 'volunteer') return renderVolunteerDocs();
+        renderGenericModule('documents');
+      }
+
+      function volDocStatus(d) {
+        return trainingStatus({ completed: d.issued, expires: d.expires });
+      }
+
+      function formatVolDocDate(iso) {
+        if (!iso) return '-';
+        const p = String(iso).split('-');
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+      }
+
+      function findLocoPhoto(loco) {
+        if (!loco) return '';
+        const match = (db.volunteerDocs || []).slice().reverse().find(d => d.type === 'Loco Certification' && d.loco === loco && d.photo);
+        return match ? match.photo : '';
+      }
+
+      function volDocCardHtml(d, canManage) {
+        const typeDef = VOL_DOC_TYPES.find(t => t.key === d.type) || { icon: 'file-badge' };
+        const isLoco = d.type === 'Loco Certification';
+        const status = volDocStatus(d);
+        const title = isLoco ? 'Locomotive Certification' : (d.type === 'Other' && d.title ? d.title : d.type);
+        const photo = d.photo || (isLoco ? findLocoPhoto(d.loco) : '');
+        const row = (label, value) => value ? `<div style="display:flex; justify-content:space-between; gap:0.5rem; font-size:0.72rem; padding:2px 0; border-bottom:1px dashed var(--border);"><span style="color:var(--text-muted);">${label}</span><strong style="text-align:right;">${escapeHtml(value)}</strong></div>` : '';
+        return `
+          <div style="border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card-bg, #fff); box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+            <div style="background:linear-gradient(135deg, var(--primary), #0f172a); color:#fff; padding:0.5rem 0.85rem; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:0.6rem; letter-spacing:0.12em; opacity:0.8;">EVLT VOLUNTEER LICENCE</div>
+                <div style="font-weight:700; font-size:0.9rem;">${escapeHtml(title)}</div>
+              </div>
+              <span style="background:${status.bg}; color:${status.fg}; font-size:0.62rem; font-weight:700; padding:2px 8px; border-radius:999px;">${status.label}</span>
+            </div>
+            <div style="display:flex; gap:0.75rem; padding:0.75rem;">
+              <div style="width:96px; flex-shrink:0;">
+                ${photo
+                  ? `<img src="${photo}" alt="" style="width:96px; height:96px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in;" onclick="viewVolDocPhoto(${d.id})">`
+                  : `<div style="width:96px; height:96px; border-radius:8px; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center;"><i data-lucide="${typeDef.icon}" style="width:38px; height:38px;"></i></div>`}
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:700; font-size:0.95rem; margin-bottom:0.15rem;">${escapeHtml(d.volunteer)}</div>
+                ${isLoco ? `<div style="font-size:0.8rem; font-weight:600; color:var(--primary); margin-bottom:0.25rem;">🚂 ${escapeHtml(d.loco || '')}</div>` : ''}
+                ${row(isLoco ? 'Date Licensed' : 'Date Issued', formatVolDocDate(d.issued))}
+                ${row('Expires', d.expires ? formatVolDocDate(d.expires) : '')}
+                ${row('Certified By', d.issuer)}
+                ${row('Licence No.', d.ref)}
+              </div>
+            </div>
+            ${d.notes ? `<div style="padding:0 0.75rem 0.6rem; font-size:0.72rem; color:var(--text-muted);">${escapeHtml(d.notes)}</div>` : ''}
+            ${canManage ? `<div style="display:flex; justify-content:flex-end; gap:0.4rem; padding:0.4rem 0.75rem; background:var(--bg); border-top:1px solid var(--border);">
+              <button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(${d.id})"><i data-lucide="pencil"></i> Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteVolunteerDoc(${d.id})"><i data-lucide="trash-2"></i></button>
+            </div>` : ''}
+          </div>`;
+      }
+
+      function renderVolunteerDocs() {
+        const content = document.getElementById('content');
+        const canManage = canManageVolDocs();
+        const volunteers = (db.volunteers || []).filter(v => !v.disabled);
+        const ownName = currentUser ? currentUser.name : '';
+        let docs = db.volunteerDocs || [];
+        if (!canManage) docs = docs.filter(d => d.volunteer === ownName);
+        else if (volDocFilter) docs = docs.filter(d => d.volunteer === volDocFilter);
+
+        // group by volunteer
+        const groups = {};
+        docs.forEach(d => { (groups[d.volunteer] = groups[d.volunteer] || []).push(d); });
+        const names = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+        content.innerHTML = `
+          ${docsTabsHtml()}
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Volunteer Documents</h2>
+              <p>Locomotive certifications and qualifications, shown as licences.</p>
+            </div>
+            ${canManage ? `<button class="btn btn-primary btn-sm" onclick="openVolunteerDocModal()"><i data-lucide="plus"></i> Add Document</button>` : ''}
+          </div>
+          ${canManage ? `
+            <div class="form-group" style="max-width:320px;">
+              <label>Volunteer</label>
+              <select onchange="volDocFilter=this.value; renderVolunteerDocs();">
+                <option value="">All volunteers</option>
+                ${volunteers.map(v => { const n = getVolunteerName(v); return `<option value="${escapeHtml(n)}" ${volDocFilter === n ? 'selected' : ''}>${escapeHtml(n)}</option>`; }).join('')}
+              </select>
+            </div>` : ''}
+          ${names.length === 0 ? `<div class="card" style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">${canManage ? 'No volunteer documents yet. Use "Add Document" to record a certification.' : 'You have no documents recorded yet.'}</div>` :
+            names.map(n => `
+              <div class="section-group">
+                <div class="section-header">${escapeHtml(n)}</div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1rem;">
+                  ${groups[n].slice().sort((a, b) => (b.issued || '').localeCompare(a.issued || '')).map(d => volDocCardHtml(d, canManage)).join('')}
+                </div>
+              </div>`).join('')}
+        `;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function viewVolDocPhoto(id) {
+        const d = (db.volunteerDocs || []).find(x => x.id === id);
+        if (!d) return;
+        showImageLightbox(d.photo || findLocoPhoto(d.loco));
+      }
+
+      function previewVolDocPhoto(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        compressImageFile(file, 900, 0.75, data => {
+          tempVolDocPhoto = data;
+          const img = document.getElementById('volDocPhotoPreview');
+          img.src = data; img.style.display = 'block';
+        });
+      }
+
+      function toggleVolDocTypeFields() {
+        const type = document.getElementById('volDocType').value;
+        const def = VOL_DOC_TYPES.find(t => t.key === type) || {};
+        document.getElementById('volDocLocoGroup').style.display = def.locoBased ? 'block' : 'none';
+        document.getElementById('volDocLoco').required = !!def.locoBased;
+        document.getElementById('volDocTitleGroup').style.display = def.custom ? 'block' : 'none';
+        document.getElementById('volDocTitle').required = !!def.custom;
+        document.getElementById('volDocIssuedLabel').innerText = def.locoBased ? 'Date Licensed' : 'Date Issued';
+        document.getElementById('volDocPhotoLabel').innerText = def.locoBased ? 'Photo of the Locomotive' : 'Certificate Scan / Photo (optional)';
+      }
+
+      function openVolunteerDocModal(id = null) {
+        if (!canManageVolDocs()) { alert('Only System Admin or Management can add or edit volunteer documents.'); return; }
+        const existing = id !== null ? (db.volunteerDocs || []).find(d => d.id === id) : null;
+        document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Volunteer Document' : 'Add Volunteer Document';
+        document.getElementById('volDocId').value = existing ? existing.id : '';
+
+        const vols = (db.volunteers || []).filter(v => !v.disabled);
+        document.getElementById('volDocVolunteer').innerHTML = '<option value="">-- Select Volunteer --</option>' +
+          vols.map(v => { const n = getVolunteerName(v); return `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`; }).join('');
+        document.getElementById('volDocVolunteer').value = existing ? existing.volunteer : (volDocFilter || '');
+
+        document.getElementById('volDocType').innerHTML = VOL_DOC_TYPES.map(t => `<option value="${t.key}">${t.key}</option>`).join('');
+        document.getElementById('volDocType').value = existing ? existing.type : 'Loco Certification';
+
+        const locos = (db.fleetItems || []).filter(f => f.type !== 'Coach').map(f => f.name);
+        const hasCoaches = (db.fleetItems || []).some(f => f.type === 'Coach');
+        document.getElementById('volDocLoco').innerHTML = '<option value="">-- Select Locomotive --</option>' +
+          locos.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('') +
+          (hasCoaches ? '<option value="Coaches">Coaches (all)</option>' : '');
+        document.getElementById('volDocLoco').value = existing ? (existing.loco || '') : '';
+
+        document.getElementById('volDocTitle').value = existing ? (existing.title || '') : '';
+        document.getElementById('volDocIssued').value = existing ? (existing.issued || '') : getTodayString();
+        document.getElementById('volDocExpiry').value = existing ? (existing.expires || '') : '';
+        document.getElementById('volDocIssuer').value = existing ? (existing.issuer || '') : '';
+        document.getElementById('volDocRef').value = existing ? (existing.ref || '') : '';
+        document.getElementById('volDocNotes').value = existing ? (existing.notes || '') : '';
+
+        tempVolDocPhoto = existing ? (existing.photo || '') : '';
+        const prev = document.getElementById('volDocPhotoPreview');
+        prev.src = tempVolDocPhoto; prev.style.display = tempVolDocPhoto ? 'block' : 'none';
+
+        toggleVolDocTypeFields();
+        document.getElementById('volDocModal').style.display = 'flex';
+      }
+
+      function saveVolunteerDoc(e) {
+        e.preventDefault();
+        if (!canManageVolDocs()) return;
+        const idVal = document.getElementById('volDocId').value;
+        const type = document.getElementById('volDocType').value;
+        const def = VOL_DOC_TYPES.find(t => t.key === type) || {};
+        const record = {
+          id: idVal ? Number(idVal) : Date.now(),
+          volunteer: document.getElementById('volDocVolunteer').value,
+          type: type,
+          loco: def.locoBased ? document.getElementById('volDocLoco').value : '',
+          title: def.custom ? document.getElementById('volDocTitle').value.trim() : '',
+          issued: document.getElementById('volDocIssued').value,
+          expires: document.getElementById('volDocExpiry').value,
+          issuer: document.getElementById('volDocIssuer').value.trim(),
+          ref: document.getElementById('volDocRef').value.trim(),
+          notes: document.getElementById('volDocNotes').value.trim(),
+          photo: tempVolDocPhoto || '',
+          recordedBy: currentUser ? currentUser.name : 'User'
+        };
+        if (!record.volunteer) { alert('Please choose a volunteer.'); return; }
+
+        if (!db.volunteerDocs) db.volunteerDocs = [];
+        const idx = db.volunteerDocs.findIndex(d => d.id === record.id);
+        if (idx >= 0) db.volunteerDocs[idx] = record; else db.volunteerDocs.push(record);
+        dbUpdate({ volunteerDocs: db.volunteerDocs });
+        closeModal('volDocModal');
+        renderVolunteerDocs();
+      }
+
+      function deleteVolunteerDoc(id) {
+        if (!canManageVolDocs()) return;
+        if (!confirm('Delete this volunteer document?')) return;
+        db.volunteerDocs = (db.volunteerDocs || []).filter(d => d.id !== id);
+        dbUpdate({ volunteerDocs: db.volunteerDocs });
+        renderVolunteerDocs();
+      }
+
       function renderGenericModule(moduleKey) {
         const content = document.getElementById('content');
         const schema = MODULE_SCHEMAS[moduleKey];
@@ -6528,6 +6884,7 @@
               </table>
             </div>
           </div>`;
+        if (moduleKey === 'documents') content.insertAdjacentHTML('afterbegin', docsTabsHtml());
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
