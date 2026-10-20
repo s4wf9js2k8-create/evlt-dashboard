@@ -252,11 +252,56 @@ window.mergeEVLTDefaultHelpGuides = function(existing) {
   const merged = source.filter(item => item && typeof item === 'object');
   let changed = !Array.isArray(existing) || merged.length !== source.length;
   const legacyDefaults = {
-    '1000': { title: 'Signing in', firstStep: 'On the sign-in screen, choose your name from "Select Account".' },
-    '1001': { title: 'Clocking in and out', firstStep: 'Open "Clock In/Out" from the menu.' },
-    '1002': { title: 'My Account — changing your PIN', firstStep: 'Open "My Account" from the Session section of the menu.' },
-    '1008': { title: 'Managing volunteers & PINs (Admin)', firstStep: 'Open "Volunteers" from the menu.' }
+    '1000': {
+      category: 'Getting Started',
+      title: 'Signing in',
+      steps: [
+        'On the sign-in screen, choose your name from "Select Account".',
+        'Enter your PIN Code / Password.',
+        'Sign in with your account whenever you open the dashboard.',
+        'Tap "Sign In".'
+      ],
+      videoUrl: ''
+    },
+    '1001': {
+      category: 'Getting Started',
+      title: 'Clocking in and out',
+      steps: [
+        'Open "Clock In/Out" from the menu.',
+        'Find your name and tap Clock In when you arrive.',
+        'Tap Clock Out when you finish for the day.',
+        'Your hours are recorded automatically and can be reviewed under "Attendance & Hours" or "Clock Log Records".'
+      ],
+      videoUrl: ''
+    },
+    '1002': {
+      category: 'Getting Started',
+      title: 'My Account — changing your PIN',
+      steps: [
+        'Open "My Account" from the Session section of the menu.',
+        'Under "Change PIN / Password", enter your current PIN.',
+        'Enter and confirm your new PIN.',
+        'Tap "Update PIN". You\'ll use the new PIN next time you sign in.'
+      ],
+      videoUrl: ''
+    },
+    '1008': {
+      category: 'Admin',
+      title: 'Managing volunteers & PINs (Admin)',
+      steps: [
+        'Open "Volunteers" from the menu.',
+        'Tap "Add" to create a new volunteer, or the pencil icon to edit an existing one.',
+        'Set their PIN and tick which roles/qualifications apply to them — this controls what they can access, like the Eurotunnel suite.',
+        'Volunteers can change their own PIN later from "My Account".'
+      ],
+      videoUrl: ''
+    }
   };
+  const isUntouchedLegacy = (current, legacy) =>
+    current.category === legacy.category &&
+    current.title === legacy.title &&
+    JSON.stringify(current.steps || []) === JSON.stringify(legacy.steps) &&
+    (current.videoUrl || '') === legacy.videoUrl;;
   const defaults = window.EVLT_DEFAULT_HELP_GUIDES.map((guide, index) => ({ id: 1000 + index, ...guide }));
   for (const guide of defaults) {
     const existingIndex = merged.findIndex(item => String(item.id) === String(guide.id));
@@ -267,7 +312,7 @@ window.mergeEVLTDefaultHelpGuides = function(existing) {
     }
     const current = merged[existingIndex];
     const legacy = legacyDefaults[String(guide.id)];
-    if (legacy && current.title === legacy.title && Array.isArray(current.steps) && current.steps[0] === legacy.firstStep) {
+    if (legacy && isUntouchedLegacy(current, legacy)) {
       merged[existingIndex] = guide;
       changed = true;
     }
