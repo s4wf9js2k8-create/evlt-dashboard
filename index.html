@@ -1521,18 +1521,36 @@
       function formatDisplayDate(dateStr) {
         if (!dateStr) return '';
         const iso = toISODate(dateStr);
-        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return dateStr;
+        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
         const [y, m, d] = iso.split('-');
         return `${d}/${m}/${y}`;
       }
 
+      function showDatabaseWriteError(err) {
+        console.error('Database write failed:', err);
+        alert('A change could not be saved. Check your connection and try again.');
+      }
+
+      function dbSet(path, value) {
+        if (!database) {
+          showDatabaseWriteError(new Error('Database connection is unavailable'));
+          return Promise.resolve(false);
+        }
+        return database.ref(path).set(value).catch(err => {
+          showDatabaseWriteError(err);
+          return false;
+        });
+      }
+
       function dbUpdate(updates) {
-        if (!database) return;
+        if (!database) {
+          showDatabaseWriteError(new Error('Database connection is unavailable'));
+          return Promise.resolve(false);
+        }
         const payload = {};
         Object.keys(updates).forEach(k => { payload['EVLT_ADMIN_DB/' + k] = updates[k]; });
         return database.ref().update(payload).catch(err => {
-          console.error('Database update failed:', err);
-          alert('A change could not be saved. Check your connection and try again.');
+          showDatabaseWriteError(err);
           return false;
         });
       }
@@ -2024,11 +2042,32 @@
         return false;
       }
 
+      const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      let lastActivityAt = 0;
+
+      function expireSessionIfIdle() {
+        if (!currentUser || currentUser.isShopKiosk || !lastActivityAt) return false;
+        if (Date.now() - lastActivityAt < SESSION_IDLE_TIMEOUT_MS) return false;
+        logoutDevice();
+        showLoginError('You were signed out after 30 minutes without activity.');
+        return true;
+      }
+
       function logoutDevice() {
         clearRememberedUser();
         currentUser = null;
+        lastActivityAt = 0;
         showLoginPage();
       }
+
+      ['pointerdown', 'keydown', 'touchstart'].forEach(eventName => {
+        window.addEventListener(eventName, () => {
+          if (!currentUser || expireSessionIfIdle()) return;
+          lastActivityAt = Date.now();
+        }, { passive: true });
+      });
+
+      window.setInterval(expireSessionIfIdle, 60 * 1000);
 
       function renderInitialApp() {
         updateLoginUserDropdown();
@@ -2473,7 +2512,7 @@
                         <td>${escapeHtml(n.body)}</td>
                         <td>${escapeHtml(n.sentBy)}</td>
                         <td>${n.sentAt ? new Date(n.sentAt).toLocaleString() : '-'}</td>
-                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteBroadcastNotification('${n.id}')"><i data-lucide="trash-2"></i></button></td>` : ''}
+                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteBroadcastNotification(${inlineJsArg(n.id)})"><i data-lucide="trash-2"></i></button></td>` : ''}
                       </tr>`).join('')}
                 </tbody>
               </table>
@@ -2503,7 +2542,7 @@
         if (!db.notifications) db.notifications = [];
         db.notifications.push(entry);
         seenNotificationIds.add(entry.id);
-        if (database) database.ref('EVLT_ADMIN_DB/notifications').set(db.notifications);
+        dbSet('EVLT_ADMIN_DB/notifications', db.notifications);
 
         showLocalNotification('🚂 ' + entry.title, entry.body);
         triggerBackgroundPush(entry);
@@ -2541,12 +2580,11 @@
         }
         if (!confirm('Delete this notification for everyone?')) return;
         db.notifications = (db.notifications || []).filter(n => n.id !== id);
-        if (database) database.ref('EVLT_ADMIN_DB/notifications').set(db.notifications);
+        dbSet('EVLT_ADMIN_DB/notifications', db.notifications);
         renderNotificationsPage();
       }
 
       document.addEventListener("DOMContentLoaded", () => {
-        renderDashboard();
         initFirebaseMessaging();
 
         if (!auth) {
@@ -2712,7 +2750,7 @@
           const cur = v.Pin || v.pin;
           if (cur && !isHashedPin(cur)) { v.Pin = hashPin(cur); delete v.pin; changed++; }
         });
-        if (changed && database) database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        if (changed) dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
         if (!silent) {
           alert(changed ? `${changed} PIN(s) secured. Volunteers keep the same PIN, but it can no longer be read back here. Use Edit to set a new one if someone forgets.` : 'All PINs are already secured.');
           renderVolunteers();
@@ -2759,14 +2797,14 @@
         const vols = db.volunteers || [];
         const vol = vols.find(v => getVolunteerName(v) === accountVal);
         if (vol) {
-          const userPin = vol.Pin || vol.pin || '1234';
-          if (verifyPin(pinVal, userPin)) {
+          const userPin = vol.Pin || vol.pin || '';
+          if (userPin && verifyPin(pinVal, userPin)) {
             clearFailedLogins();
             // quietly upgrade this volunteer's stored PIN if it is still plain text
             if (!isHashedPin(userPin)) {
               vol.Pin = hashPin(userPin);
               delete vol.pin;
-              if (database) database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+              dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
             }
             currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
             finishLogin();
@@ -2777,6 +2815,7 @@
       }
 
       function finishLogin() {
+        lastActivityAt = Date.now();
         // Remember-device cannot be implemented safely with a client-side, editable record.
         clearRememberedUser();
         hideLoginPage();
@@ -3062,18 +3101,18 @@
                   <tbody>
                     <tr class="checks-row" onclick="openOpCheckModal('trackWalk')">
                       <td><strong>Track Walk</strong></td>
-                      <td>${daily.trackWalk?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td>${daily.trackWalk?.inspector ? escapeHtml(daily.trackWalk.inspector) : '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
                       <td style="text-align:center;">${renderResultIcon(daily.trackWalk?.result)}</td>
-                      <td>${daily.trackWalk?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.trackWalk?.notes}</span>` : (daily.trackWalk?.notes || '-') }</td>
+                      <td>${daily.trackWalk?.result === 'Fail' ? `<span class="fail-reason">Reason: ${escapeHtml(daily.trackWalk?.notes)}</span>` : escapeHtml(daily.trackWalk?.notes || '-')}</td>
                       <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('trackWalk')">Edit Check</button></td>
                     </tr>
                     <tr class="checks-row" onclick="openOpCheckModal('testRun')">
                       <td><strong>Test Run</strong></td>
-                      <td>${daily.testRun?.inspector || '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
+                      <td>${daily.testRun?.inspector ? escapeHtml(daily.testRun.inspector) : '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
                       <td style="text-align:center;">${renderResultIcon(daily.testRun?.result)}</td>
                       <td>
-                        ${daily.testRun?.result === 'Fail' ? `<span class="fail-reason">Reason: ${daily.testRun?.notes}</span>` : 
-                          (daily.testRun?.trains || []).map(t => `<span class="train-tag">${t}</span>`).join('') || daily.testRun?.notes || '-'}
+                        ${daily.testRun?.result === 'Fail' ? `<span class="fail-reason">Reason: ${escapeHtml(daily.testRun?.notes)}</span>` : 
+                          (daily.testRun?.trains || []).map(t => `<span class="train-tag">${escapeHtml(t)}</span>`).join('') || escapeHtml(daily.testRun?.notes || '-')}
                       </td>
                       <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openOpCheckModal('testRun')" ${!trackWalkPassed ? 'disabled title="Requires passed Track Walk first"' : ''}>Edit Check</button></td>
                     </tr>
@@ -3159,7 +3198,7 @@
           if (!db.dailyChecks.runningTrains.includes(n)) { db.dailyChecks.runningTrains.push(n); changed = true; }
         });
         if (changed) {
-          database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+          dbSet('EVLT_ADMIN_DB/dailyChecks', db.dailyChecks);
           renderDashboard();
         }
       }
@@ -3169,7 +3208,7 @@
         db.dailyChecks.runningTrains = trainName === COACHES_VALUE
           ? db.dailyChecks.runningTrains.filter(t => !isCoachName(t))
           : db.dailyChecks.runningTrains.filter(t => t !== trainName);
-        database.ref('EVLT_ADMIN_DB/dailyChecks').set(db.dailyChecks);
+        dbSet('EVLT_ADMIN_DB/dailyChecks', db.dailyChecks);
         renderDashboard();
       }
 
@@ -3746,10 +3785,10 @@
           const rotaCountForDay = (db.rotaSignups || []).filter(r => r.date === dateStr).length;
 
           daysHtml += `
-            <div class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" onclick="selectCalendarDate('${dateStr}')">
+            <div class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" onclick="selectCalendarDate(${inlineJsArg(dateStr)})">
               <div style="font-weight:700;">${d}</div>
               <div>
-                ${dayEvents.map(e => `<div class="cal-event-dot" title="${e.Title || e.title}">${e.Title || e.title}</div>`).join('')}
+                ${dayEvents.map(e => `<div class="cal-event-dot" title="${escapeHtml(e.Title || e.title)}">${escapeHtml(e.Title || e.title)}</div>`).join('')}
                 ${countForDay > 0 ? `<div class="cal-badge">${countForDay} log(s)</div>` : ''}
                 ${rotaCountForDay > 0 ? `<div class="cal-badge" style="background:var(--accent);">${rotaCountForDay} coming</div>` : ''}
               </div>
@@ -3813,7 +3852,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg); padding: 0.4rem 0.6rem; border-radius: var(--radius); border: 1px solid var(--border); font-size: 0.775rem;">
                           <div>
                             <div style="font-weight: 600;">${escapeHtml(l.name)}</div>
-                            <div style="color: var(--text-muted);">${l.clockIn} → ${l.clockOut}</div>
+                            <div style="color: var(--text-muted);">${escapeHtml(l.clockIn)} → ${escapeHtml(l.clockOut)}</div>
                           </div>
                           ${isAdmin ? `
                             <div style="display:flex; gap:0.2rem;">
@@ -3836,7 +3875,7 @@
                     return signups.map(r => `
                       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .55rem;">
                         <span style="font-weight:600;">${escapeHtml(r.name)}</span>
-                        ${isAdmin ? `<button class="btn-subtle btn-sm" onclick="removeRotaSignup('${selectedCalendarDateStr}', '${escapeHtml(r.name).replace(/'/g, "\\'")}')"><i data-lucide="x"></i></button>` : ''}
+                        ${isAdmin ? `<button class="btn-subtle btn-sm" onclick="removeRotaSignup(${inlineJsArg(selectedCalendarDateStr)}, ${inlineJsArg(r.name)})"><i data-lucide="x"></i></button>` : ''}
                       </div>`).join('');
                   })()}
                 </div>
@@ -3930,10 +3969,10 @@
                       <tr>
                         <td><strong>${formatDisplayDate(l.date)}</strong></td>
                         <td>${escapeHtml(l.name)}</td>
-                        <td>${l.clockIn}</td>
-                        <td>${l.clockOut}</td>
+                        <td>${escapeHtml(l.clockIn)}</td>
+                        <td>${escapeHtml(l.clockOut)}</td>
                         <td>${hrs !== null ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.75rem;">${hrs.toFixed(1)}h</span>` : '<span style="color:var(--text-muted); font-size:0.75rem;">Active</span>'}</td>
-                        <td><span style="font-weight:600; font-size:0.75rem; color:${l.status === 'Clocked In' ? '#166534' : '#475569'};">${l.status}</span></td>
+                        <td><span style="font-weight:600; font-size:0.75rem; color:${l.status === 'Clocked In' ? '#166534' : '#475569'};">${escapeHtml(l.status)}</span></td>
                         ${isAdmin ? `
                           <td style="text-align:right;">
                             <button class="btn btn-secondary btn-sm" onclick="openEditClockLogModal(${l.id})"><i data-lucide="edit"></i> Edit</button>
@@ -4116,7 +4155,7 @@
           });
         }
 
-        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
         closeModal('volunteerModal');
         renderVolunteers();
       }
@@ -4188,18 +4227,18 @@
                       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
                           <div style="font-size:1.4rem; margin-bottom:0.2rem;">${icon}</div>
-                          <h3 style="font-size:0.95rem; font-weight:700; color:var(--text); margin:0;">${item.name}</h3>
-                          <div style="font-size:0.75rem; color:var(--text-muted);">${item.type} · ${item.gauge}</div>
+                          <h3 style="font-size:0.95rem; font-weight:700; color:var(--text); margin:0;">${escapeHtml(item.name)}</h3>
+                          <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(item.type)} · ${escapeHtml(item.gauge)}</div>
                         </div>
-                        <span style="background:${stateColor}; color:${stateText}; padding:3px 8px; border-radius:4px; font-weight:700; font-size:0.7rem; white-space:nowrap;">${item.state}</span>
+                        <span style="background:${stateColor}; color:${stateText}; padding:3px 8px; border-radius:4px; font-weight:700; font-size:0.7rem; white-space:nowrap;">${escapeHtml(item.state)}</span>
                       </div>
                       <div style="display:flex; flex-wrap:wrap; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem;">
                         ${canMaint ? `
                           <button class="btn btn-secondary btn-sm" onclick="openFleetModal(${idx})" style="flex:1; min-width:80px;"><i data-lucide="edit"></i> Edit</button>
-                          <button class="btn btn-primary btn-sm" onclick="openMaintLogModal('${item.name}', null)" style="flex:1; min-width:80px;"><i data-lucide="wrench"></i> Log Work</button>
-                          <button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal('${item.name}')" style="flex:1; min-width:80px;"><i data-lucide="history"></i> History</button>
+                          <button class="btn btn-primary btn-sm" onclick="openMaintLogModal(${inlineJsArg(item.name)}, null)" style="flex:1; min-width:80px;"><i data-lucide="wrench"></i> Log Work</button>
+                          <button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal(${inlineJsArg(item.name)})" style="flex:1; min-width:80px;"><i data-lucide="history"></i> History</button>
                           ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteFleetItem(${idx})" style="flex:0;"><i data-lucide="trash-2"></i></button>` : ''}
-                        ` : `<button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal('${item.name}')" style="flex:1;"><i data-lucide="history"></i> View History</button>`}
+                        ` : `<button class="btn btn-secondary btn-sm" onclick="openAssetHistoryModal(${inlineJsArg(item.name)})" style="flex:1;"><i data-lucide="history"></i> View History</button>`}
                       </div>
                     </div>
                   `;
@@ -4213,7 +4252,7 @@
               <span>Maintenance Log Records</span>
               <select id="maintAssetFilter" onchange="renderMaintenancePage()" style="font-size:0.78rem; padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-weight:500;">
                 <option value="">All Assets</option>
-                ${fleet.map(f => `<option value="${f.name}" ${maintAssetFilterValue === f.name ? 'selected' : ''}>${f.name}</option>`).join('')}
+                ${fleet.map(f => `<option value="${escapeHtml(f.name)}" ${maintAssetFilterValue === f.name ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('')}
               </select>
             </div>
             <div class="card">
@@ -4237,12 +4276,12 @@
                         const perfBy = Array.isArray(m.performedBy) ? m.performedBy.join(', ') : (m.performedBy || 'Unknown');
                         return `
                           <tr>
-                            <td><strong>${formatDisplayDate(m.startDate || m.date)}</strong> → ${formatDisplayDate(m.endDate || m.startDate || m.date)}</td>
-                            <td><strong>${m.assetName || m.asset}</strong></td>
-                            <td>${m.workDone || m.description || '-'}</td>
-                            <td>${perfBy}</td>
-                            <td>${m.updateState || m.updatedState || 'Unchanged'}</td>
-                            <td>${m.photo ? `<a href="${m.photo}" target="_blank" style="color:var(--primary); font-weight:bold;">View Photo</a>` : '-'}</td>
+                            <td><strong>${escapeHtml(formatDisplayDate(m.startDate || m.date))}</strong> → ${escapeHtml(formatDisplayDate(m.endDate || m.startDate || m.date))}</td>
+                            <td><strong>${escapeHtml(m.assetName || m.asset || '-')}</strong></td>
+                            <td>${escapeHtml(m.workDone || m.description || '-')}</td>
+                            <td>${escapeHtml(perfBy)}</td>
+                            <td>${escapeHtml(m.updateState || m.updatedState || 'Unchanged')}</td>
+                            <td>${safeHttpUrl(m.photo) ? `<a href="${escapeHtml(safeHttpUrl(m.photo))}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); font-weight:bold;">View Photo</a>` : '-'}</td>
                             ${canMaint ? `
                               <td style="text-align:right;">
                                 <button class="btn btn-secondary btn-sm" onclick="openMaintLogModal('', ${actualIndex})"><i data-lucide="edit"></i> Edit</button>
@@ -4292,7 +4331,7 @@
           db.fleetItems.push({ name, type, gauge, state });
         }
 
-        database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+        dbSet('EVLT_ADMIN_DB/fleetItems', db.fleetItems);
         closeModal('fleetModal');
         renderMaintenancePage();
       }
@@ -4306,7 +4345,7 @@
         if (!item) return;
         if (!confirm(`Are you sure you want to delete "${item.name}" from the fleet? This cannot be undone.`)) return;
         db.fleetItems.splice(index, 1);
-        database.ref('EVLT_ADMIN_DB/fleetItems').set(db.fleetItems);
+        dbSet('EVLT_ADMIN_DB/fleetItems', db.fleetItems);
         renderMaintenancePage();
       }
 
@@ -4342,7 +4381,7 @@
         const editingAsset = logIndex !== null && existingLog ? (existingLog.assetName || existingLog.asset) : '';
         assetSelect.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
           fleet.filter(f => f.type !== 'Coach' || (logIndex !== null && f.name === editingAsset))
-               .map(f => `<option value="${f.name}">${f.name} (${f.type})</option>`).join('') +
+               .map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)} (${escapeHtml(f.type)})</option>`).join('') +
           (logIndex === null && fleet.some(f => f.type === 'Coach')
             ? `<option value="${COACHES_VALUE}">Coaches (all: ${getCoachNames().join(' & ')})</option>` : '') +
           '<option value="General Trackwork">General Trackwork</option>' +
@@ -4506,8 +4545,8 @@
                   <div style="background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius); padding:0.7rem 0.85rem;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
                       <div>
-                        <strong style="font-size:0.85rem;">${formatDisplayDate(m.startDate || m.date)}${m.endDate && m.endDate !== m.startDate ? ' → ' + formatDisplayDate(m.endDate) : ''}</strong>
-                        ${m.updateState ? `<span style="margin-left:6px; background:var(--primary-light); color:var(--primary); padding:1px 6px; border-radius:4px; font-size:0.65rem; font-weight:700;">${m.updateState}</span>` : ''}
+                        <strong style="font-size:0.85rem;">${escapeHtml(formatDisplayDate(m.startDate || m.date))}${m.endDate && m.endDate !== m.startDate ? ' → ' + escapeHtml(formatDisplayDate(m.endDate)) : ''}</strong>
+                        ${m.updateState ? `<span style="margin-left:6px; background:var(--primary-light); color:var(--primary); padding:1px 6px; border-radius:4px; font-size:0.65rem; font-weight:700;">${escapeHtml(m.updateState)}</span>` : ''}
                       </div>
                       ${canMaint ? `
                         <div style="display:flex; gap:0.3rem; flex-shrink:0;">
@@ -4516,9 +4555,9 @@
                         </div>
                       ` : ''}
                     </div>
-                    <p style="font-size:0.8rem; margin:0.35rem 0;">${m.workDone || m.description || '-'}</p>
-                    <div style="font-size:0.7rem; color:var(--text-muted);">Performed by: ${perfBy}${m.notes ? ` • ${m.notes}` : ''}</div>
-                    ${m.photo ? `<a href="${m.photo}" target="_blank" style="font-size:0.72rem; color:var(--primary); font-weight:600;">View attached photo/document →</a>` : ''}
+                    <p style="font-size:0.8rem; margin:0.35rem 0;">${escapeHtml(m.workDone || m.description || '-')}</p>
+                    <div style="font-size:0.7rem; color:var(--text-muted);">Performed by: ${escapeHtml(perfBy)}${m.notes ? ` • ${escapeHtml(m.notes)}` : ''}</div>
+                    ${safeHttpUrl(m.photo) ? `<a href="${escapeHtml(safeHttpUrl(m.photo))}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; color:var(--primary); font-weight:600;">View attached photo/document →</a>` : ''}
                   </div>
                 `;
               }).join('')}
@@ -4547,7 +4586,7 @@
                     <div class="card" style="padding:1.25rem;">
                       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.6rem; margin-bottom:0.85rem;">
                         <div>
-                          <h3 style="font-size:1.05rem; font-weight:700; color:var(--primary);">${formatDisplayDate(a.date)}</h3>
+                          <h3 style="font-size:1.05rem; font-weight:700; color:var(--primary);">${escapeHtml(formatDisplayDate(a.date))}</h3>
                           <span style="font-size:0.75rem; color:var(--text-muted);">Recorded Operational Shift</span>
                         </div>
                         <div style="display:flex; gap:0.4rem;">
@@ -4563,13 +4602,13 @@
                           <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">Daily Checks</strong>
                           <div style="display:flex; align-items:center; gap:0.3rem; margin-bottom:0.2rem;">
                             <span style="width:8px;height:8px;border-radius:50%;background:${a.trackWalk?.result==='Pass'?'#16a34a':'#dc2626'};flex-shrink:0;"></span>
-                            <span>Track Walk: <strong>${a.trackWalk?.result || 'N/A'}</strong></span>
-                            ${a.trackWalk?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${a.trackWalk.inspector})</span>` : ''}
+                            <span>Track Walk: <strong>${escapeHtml(a.trackWalk?.result || 'N/A')}</strong></span>
+                            ${a.trackWalk?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${escapeHtml(a.trackWalk.inspector)})</span>` : ''}
                           </div>
                           <div style="display:flex; align-items:center; gap:0.3rem;">
                             <span style="width:8px;height:8px;border-radius:50%;background:${a.testRun?.result==='Pass'?'#16a34a':'#dc2626'};flex-shrink:0;"></span>
-                            <span>Test Run: <strong>${a.testRun?.result || 'N/A'}</strong></span>
-                            ${a.testRun?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${a.testRun.inspector})</span>` : ''}
+                            <span>Test Run: <strong>${escapeHtml(a.testRun?.result || 'N/A')}</strong></span>
+                            ${a.testRun?.inspector ? `<span style="color:var(--text-muted); font-size:0.7rem;">(${escapeHtml(a.testRun.inspector)})</span>` : ''}
                           </div>
                         </div>
 
@@ -4578,7 +4617,7 @@
                           <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
                             ${(a.testRun?.trains || a.runningTrains || []).length === 0
                               ? '<span style="color:var(--text-muted); font-size:0.75rem;">None recorded</span>'
-                              : (a.testRun?.trains || a.runningTrains || []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${t}</span>`).join('')}
+                              : (a.testRun?.trains || a.runningTrains || []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${escapeHtml(t)}</span>`).join('')}
                           </div>
                         </div>
 
@@ -4588,7 +4627,7 @@
                             ${(a.attendance || []).length === 0 ? '<span style="color:var(--text-muted);">None recorded</span>' :
                               (a.attendance || []).map(att => {
                                 const hrs = calcShiftHours(att.clockIn, att.clockOut);
-                                return `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding:1px 0;">${att.name} <span style="color:var(--text-muted);">${att.clockIn}–${att.clockOut}${hrs?' ('+hrs.toFixed(1)+'h)':''}</span></div>`;
+                                return `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding:1px 0;">${escapeHtml(att.name)} <span style="color:var(--text-muted);">${escapeHtml(att.clockIn)}–${escapeHtml(att.clockOut)}${hrs?' ('+hrs.toFixed(1)+'h)':''}</span></div>`;
                               }).join('')}
                           </div>
                         </div>
@@ -4599,8 +4638,8 @@
                             ${(a.maintenance || []).length === 0 && (a.incidents || []).length === 0
                               ? '<span style="color:var(--text-muted);">None recorded</span>'
                               : `
-                                ${(a.incidents || []).map(i => `<div style="color:#991b1b;">⚠ ${i.asset}: ${i.description}</div>`).join('')}
-                                ${(a.maintenance || []).map(m => `<div>🔧 ${m.asset}: ${m.workDone}</div>`).join('')}
+                                ${(a.incidents || []).map(i => `<div style="color:#991b1b;">⚠ ${escapeHtml(i.asset)}: ${escapeHtml(i.description)}</div>`).join('')}
+                                ${(a.maintenance || []).map(m => `<div>🔧 ${escapeHtml(m.asset)}: ${escapeHtml(m.workDone)}</div>`).join('')}
                               `}
                           </div>
                         </div>
@@ -4624,10 +4663,10 @@
                 uploads.map(u => `
                   <div class="card" style="padding:0.85rem; display:flex; flex-direction:column; justify-content:space-between;">
                     <div style="cursor:pointer;" onclick="openArchiveDocument(${u.id})" title="Click to open">
-                      ${u.category === 'Photo' ? `<img src="${u.fileData}" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius); margin-bottom:0.5rem;" />` :
+                      ${u.category === 'Photo' ? `<img src="${escapeHtml(safeImageUrl(u.fileData))}" style="width:100%; height:120px; object-fit:cover; border-radius:var(--radius); margin-bottom:0.5rem;" />` :
                         `<div style="height:120px; background:#f1f5f9; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; margin-bottom:0.5rem;"><i data-lucide="file-text" style="width:36px;height:36px;color:var(--text-muted);"></i></div>`}
-                      <strong style="font-size:0.85rem; display:block;">${u.title}</strong>
-                      <span style="font-size:0.7rem; color:var(--text-muted);">${u.category} • Uploaded ${formatDisplayDate(u.uploadDate)}${u.linkedAsset ? ` • <span style="color:var(--primary); font-weight:600;">${u.linkedAsset}</span>` : ''}</span>
+                      <strong style="font-size:0.85rem; display:block;">${escapeHtml(u.title)}</strong>
+                      <span style="font-size:0.7rem; color:var(--text-muted);">${escapeHtml(u.category)} • Uploaded ${formatDisplayDate(u.uploadDate)}${u.linkedAsset ? ` • <span style="color:var(--primary); font-weight:600;">${escapeHtml(u.linkedAsset)}</span>` : ''}</span>
                     </div>
                     <div style="display:flex; gap:0.4rem; margin-top:0.6rem; border-top:1px solid var(--border); padding-top:0.5rem;">
                       <button class="btn btn-secondary btn-sm" onclick="openArchiveDocument(${u.id})" style="flex:1;"><i data-lucide="external-link"></i> Open</button>
@@ -4823,7 +4862,7 @@
         if (!confirm(`Are you sure you want to permanently delete the archive record for ${formatDisplayDate(dateIso)}?`)) return;
 
         db.historicalArchive = (db.historicalArchive || []).filter(a => toISODate(a.date) !== dateIso);
-        database.ref('EVLT_ADMIN_DB/historicalArchive').set(db.historicalArchive);
+        dbSet('EVLT_ADMIN_DB/historicalArchive', db.historicalArchive);
         renderArchives();
       }
 
@@ -4903,10 +4942,10 @@
                       const sc = statusColors[status] || statusColors['Open'];
                       return `
                       <tr>
-                        <td><strong>${formatDisplayDate(i.Date || i.date)}</strong></td>
-                        <td><strong>${i.asset || i['Asset / Location']}</strong></td>
-                        <td>${i.Description || i.desc}</td>
-                        <td><span style="background:${i['Red Tag Status'] === 'Out of Service' ? '#fee2e2' : '#dcfce7'}; color:${i['Red Tag Status'] === 'Out of Service' ? '#991b1b' : '#166534'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${i['Red Tag Status'] || 'Operational'}</span></td>
+                        <td><strong>${escapeHtml(formatDisplayDate(i.Date || i.date))}</strong></td>
+                        <td><strong>${escapeHtml(i.asset || i['Asset / Location'] || '-')}</strong></td>
+                        <td>${escapeHtml(i.Description || i.desc || '-')}</td>
+                        <td><span style="background:${i['Red Tag Status'] === 'Out of Service' ? '#fee2e2' : '#dcfce7'}; color:${i['Red Tag Status'] === 'Out of Service' ? '#991b1b' : '#166534'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${escapeHtml(i['Red Tag Status'] || 'Operational')}</span></td>
                         <td style="font-size:.78rem;">${i.assignedTo ? escapeHtml(i.assignedTo) : '<span style="color:var(--text-muted);">Unassigned</span>'}</td>
                         <td>
                           <select onchange="updateIncidentStatus(${idx}, this.value)" style="font-size:.72rem;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:${sc.bg};color:${sc.fg};">
@@ -5043,7 +5082,7 @@
                               const record = (v.training || {})[t];
                               const status = trainingStatus(record);
                               return `<td style="text-align:center;">
-                                <span ${isAdmin ? `onclick="openTrainingCellModal(${vIdx}, '${escapeHtml(t).replace(/'/g, "\\'")}')"` : ''} style="display:inline-block;font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:999px;background:${status.bg};color:${status.fg};${isAdmin ? 'cursor:pointer;' : ''}">${status.label}</span>
+                                <span ${isAdmin ? `onclick="openTrainingCellModal(${vIdx}, ${inlineJsArg(t)})"` : ''} style="display:inline-block;font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:999px;background:${status.bg};color:${status.fg};${isAdmin ? 'cursor:pointer;' : ''}">${escapeHtml(status.label)}</span>
                               </td>`;
                             }).join('')}
                           </tr>`;
@@ -5155,7 +5194,7 @@
           rolePageAccess[role].push(pageKey);
         });
         db.rolePageAccess = rolePageAccess;
-        database.ref('EVLT_ADMIN_DB/rolePageAccess').set(rolePageAccess);
+        dbSet('EVLT_ADMIN_DB/rolePageAccess', rolePageAccess);
         closeModal('roleAccessModal');
         renderCompetencyMatrix();
       }
@@ -5172,7 +5211,7 @@
         if (!db.customRoles) db.customRoles = [];
         if (!db.customRoles.includes(newRole)) db.customRoles.push(newRole);
 
-        database.ref('EVLT_ADMIN_DB/customRoles').set(db.customRoles);
+        dbSet('EVLT_ADMIN_DB/customRoles', db.customRoles);
         closeModal('addRoleModal');
         renderCompetencyMatrix();
       }
@@ -5237,16 +5276,16 @@
                       return `
                       <tr style="${isOverdue ? 'background:#fff5f5;' : ''}">
                         <td>
-                          <strong>${a.Title || a.title}</strong>
+                          <strong>${escapeHtml(a.Title || a.title || '-')}</strong>
                           ${isOverdue ? '<span style="color:#dc2626; font-size:0.65rem; font-weight:700; margin-left:5px;">OVERDUE</span>' : ''}
-                          ${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${(a.Description || a.desc).substring(0,60)}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}
+                          ${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${escapeHtml((a.Description || a.desc).substring(0,60))}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}
                         </td>
-                        <td>${a.Asset || a.asset || '-'}</td>
-                        <td>${a.AssignedTo || a.assignedTo || 'Unassigned'}</td>
+                        <td>${escapeHtml(a.Asset || a.asset || '-')}</td>
+                        <td>${escapeHtml(a.AssignedTo || a.assignedTo || 'Unassigned')}</td>
                         <td style="color:${isOverdue?'#dc2626':'inherit'}; font-weight:${isOverdue?'700':'400'};">${formatDisplayDate(a.DueDate || a.dueDate)}</td>
-                        <td><span style="font-weight:700; font-size:0.7rem; color:${a.Priority === 'High' ? '#dc2626' : a.Priority === 'Medium' ? '#ca8a04' : '#475569'};">${a.Priority || 'Normal'}</span></td>
+                        <td><span style="font-weight:700; font-size:0.7rem; color:${a.Priority === 'High' ? '#dc2626' : a.Priority === 'Medium' ? '#ca8a04' : '#475569'};">${escapeHtml(a.Priority || 'Normal')}</span></td>
                         <td>
-                          <button onclick="toggleActionStatus(${idx})" style="background:${(a.Status||'Pending')==='Completed'?'#dcfce7':'#f1f5f9'}; color:${(a.Status||'Pending')==='Completed'?'#166534':'#475569'}; border:1px solid ${(a.Status||'Pending')==='Completed'?'#bbf7d0':'#e2e8f0'}; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:700; cursor:pointer;">${a.Status || 'Pending'}</button>
+                          <button onclick="toggleActionStatus(${idx})" style="background:${(a.Status||'Pending')==='Completed'?'#dcfce7':'#f1f5f9'}; color:${(a.Status||'Pending')==='Completed'?'#166534':'#475569'}; border:1px solid ${(a.Status||'Pending')==='Completed'?'#bbf7d0':'#e2e8f0'}; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:700; cursor:pointer;">${escapeHtml(a.Status || 'Pending')}</button>
                         </td>
                         <td style="text-align:right;">
                           <button class="btn btn-secondary btn-sm" onclick="openActionModal(${idx})"><i data-lucide="edit"></i> Edit</button>
@@ -5276,7 +5315,7 @@
         const assetSel = document.getElementById('act_asset');
         const fleet = db.fleetItems || [];
         assetSel.innerHTML = '<option value="">-- None / General Site --</option>' +
-          fleet.map(f => `<option value="${f.name}" ${(existing && (existing.Asset||existing.asset)===f.name)?'selected':''}>${f.name} (${f.type})</option>`).join('');
+          fleet.map(f => `<option value="${escapeHtml(f.name)}" ${(existing && (existing.Asset||existing.asset)===f.name)?'selected':''}>${escapeHtml(f.name)} (${escapeHtml(f.type)})</option>`).join('');
         if (existing && (existing.Asset || existing.asset)) assetSel.value = existing.Asset || existing.asset;
 
         document.getElementById('actionModal').style.display = 'flex';
@@ -5585,7 +5624,7 @@
         const byId = id => sections.find(section => section.id === id) || { health: 'Good', name: id, notes: '' };
         const segment = id => {
           const section = byId(id);
-          return `<path class="track-bed" d="${trackPaths[id]}" /><path class="track-segment" data-track-id="${id}" d="${trackPaths[id]}" stroke="${trackHealthColor(section.health)}" onclick="openTrackSectionModal('${id}')" onkeydown="if(event.key === 'Enter' || event.key === ' ') openTrackSectionModal('${id}')" tabindex="0" role="button" aria-label="${section.name}: ${section.health}" /><path class="track-rail" d="${trackPaths[id]}" />`;
+          return `<path class="track-bed" d="${trackPaths[id]}" /><path class="track-segment" data-track-id="${id}" d="${trackPaths[id]}" stroke="${trackHealthColor(section.health)}" onclick="openTrackSectionModal('${id}')" onkeydown="if(event.key === 'Enter' || event.key === ' ') openTrackSectionModal('${id}')" tabindex="0" role="button" aria-label="${escapeHtml(section.name)}: ${escapeHtml(section.health)}" /><path class="track-rail" d="${trackPaths[id]}" />`;
         };
         return `<div class="track-diagram-wrap">
           <svg class="track-diagram" viewBox="0 0 720 620" role="img" aria-label="Simplified 7 and a quarter inch railway diagram showing one running loop, two platforms, a crossover, a merged northbound line, and a short siding">
@@ -5674,7 +5713,27 @@
       }
 
       function escapeHtml(text) {
-        return String(text || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        const value = text === null || text === undefined ? '' : String(text);
+        return value.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+      }
+
+      function inlineJsArg(value) {
+        return escapeHtml(JSON.stringify(value === null || value === undefined ? '' : String(value)));
+      }
+
+      function safeHttpUrl(value) {
+        if (typeof value !== 'string' || !value.trim()) return '';
+        try {
+          const url = new URL(value, window.location.href);
+          if (url.protocol === 'https:' || (url.protocol === 'http:' && url.origin === window.location.origin)) return url.href;
+        } catch (e) {}
+        return '';
+      }
+
+      function safeImageUrl(value) {
+        const raw = typeof value === 'string' ? value.trim() : '';
+        if (/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i.test(raw)) return raw;
+        return safeHttpUrl(raw);
       }
 
       function renderRailwayFlaggedList(track, trackIndex) {
@@ -5704,7 +5763,7 @@
           return `<div class="railway-layout-card" style="margin-bottom:.85rem;">
             <div class="railway-layout-toolbar">
               <div>
-                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><strong>${track.name}</strong><span class="railway-track-status" style="background:${color}1a;color:${color};">${worst}</span></div>
+                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><strong>${escapeHtml(track.name)}</strong><span class="railway-track-status" style="background:${color}1a;color:${color};">${worst}</span></div>
                 <div style="font-size:.7rem;color:var(--text-muted);">${track.pieces.length} physical piece${track.pieces.length === 1 ? '' : 's'} · saved ${formatDisplayDate(track.updatedAt) || 'today'}</div>
               </div>
               ${admin ? `<button class="btn btn-danger btn-sm" onclick="deleteRailwayLayout(event, ${index})"><i data-lucide="trash-2"></i></button>` : ''}
@@ -6214,7 +6273,7 @@
                           </div>
                           ${isAdmin ? `
                             <div style="display:flex;gap:.35rem;flex-shrink:0;">
-                              <button class="btn btn-secondary btn-sm" onclick="eurotunnelOpenSequenceModal(${seq._idx}, '${loop}')"><i data-lucide="pencil"></i></button>
+                              <button class="btn btn-secondary btn-sm" onclick="eurotunnelOpenSequenceModal(${seq._idx}, ${inlineJsArg(loop)})"><i data-lucide="pencil"></i></button>
                               <button class="btn btn-danger btn-sm" onclick="eurotunnelDeleteSequence(${seq._idx})"><i data-lucide="trash-2"></i></button>
                             </div>` : ''}
                         </div>
@@ -6391,7 +6450,7 @@
                 const service = eurotunnelServiceStatus(loco);
                 return `
               <div class="card" style="padding:1rem;display:flex;flex-direction:column;gap:.5rem;">
-                ${loco.photo ? `<img src="${loco.photo}" style="width:100%;height:110px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="showImageLightbox('${loco.photo}')">` : `<div style="width:100%;height:110px;border-radius:var(--radius);background:var(--primary-light);display:flex;align-items:center;justify-content:center;"><i data-lucide="train-front" style="width:32px;height:32px;color:var(--primary);"></i></div>`}
+                ${loco.photo ? `<img src="${escapeHtml(safeImageUrl(loco.photo))}" style="width:100%;height:110px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(loco.photo))})">` : `<div style="width:100%;height:110px;border-radius:var(--radius);background:var(--primary-light);display:flex;align-items:center;justify-content:center;"><i data-lucide="train-front" style="width:32px;height:32px;color:var(--primary);"></i></div>`}
                 <div>
                   <strong style="font-size:.9rem;">${escapeHtml(loco.name)}</strong>
                   ${loco.number ? `<div style="font-size:.75rem;color:var(--text-muted);">${escapeHtml(loco.number)}</div>` : ''}
@@ -6449,7 +6508,7 @@
             <label>Photo</label>
             <input type="file" accept="image/*" id="euroLocoPhotoInput" onchange="eurotunnelHandleLocoPhoto(event)">
             <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem;">
-              <img id="euroLocoPhotoPreview" src="${tempEuroLocoPhoto}" style="max-width:140px;border-radius:var(--radius);display:${tempEuroLocoPhoto ? 'block' : 'none'};">
+              <img id="euroLocoPhotoPreview" src="${escapeHtml(safeImageUrl(tempEuroLocoPhoto))}" style="max-width:140px;border-radius:var(--radius);display:${tempEuroLocoPhoto ? 'block' : 'none'};">
               <button type="button" id="euroLocoPhotoRemoveBtn" class="btn btn-danger btn-sm" style="display:${tempEuroLocoPhoto ? 'inline-flex' : 'none'};" onclick="eurotunnelRemoveLocoPhoto()"><i data-lucide="trash-2"></i> Remove Photo</button>
             </div>
           </div>`;
@@ -6556,7 +6615,7 @@
                   </div>
                   ${(step.images || []).length > 0 ? `
                     <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border-subtle);">
-                      ${step.images.map(img => `<img src="${img}" style="width:90px;height:90px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="eurotunnelShowLightbox('${img}')">`).join('')}
+                      ${step.images.map(img => `<img src="${escapeHtml(safeImageUrl(img))}" style="width:90px;height:90px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="eurotunnelShowLightbox(${inlineJsArg(safeImageUrl(img))})">`).join('')}
                     </div>` : ''}
                 </div>`).join('')}
             </div>`}`;
@@ -6614,7 +6673,7 @@
           ? '<span style="font-size:.75rem;color:var(--text-muted);">No images added yet.</span>'
           : tempEuroStepImages.map((img, i) => `
             <div style="position:relative;">
-              <img src="${img}" style="width:70px;height:70px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);">
+              <img src="${escapeHtml(safeImageUrl(img))}" style="width:70px;height:70px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);">
               <button type="button" onclick="eurotunnelRemoveStepImage(${i})" style="position:absolute;top:-6px;right:-6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.65rem;line-height:1;cursor:pointer;">&times;</button>
               <div style="display:flex;gap:2px;justify-content:center;margin-top:2px;">
                 <button type="button" onclick="eurotunnelMoveStepImage(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="font-size:.6rem;border:none;background:none;cursor:pointer;color:var(--text-muted);">◀</button>
@@ -6911,7 +6970,7 @@
         return `
           <div style="display:flex; gap:0.75rem; align-items:center; padding:0.65rem 0; border-bottom:1px dashed var(--border);">
             ${photo
-              ? `<img src="${photo}" alt="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in; flex-shrink:0;" onclick="viewVolDocPhoto(${d.id})">`
+              ? `<img src="${escapeHtml(safeImageUrl(photo))}" alt="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in; flex-shrink:0;" onclick="viewVolDocPhoto(${d.id})">`
               : `<div style="width:64px; height:64px; border-radius:8px; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i data-lucide="${typeDef.icon}" style="width:26px; height:26px;"></i></div>`}
             <div style="flex:1; min-width:0;">
               <div style="font-weight:700; font-size:0.9rem;">${isLoco ? '🚂 ' : ''}${escapeHtml(title)}</div>
@@ -7176,8 +7235,8 @@
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
-              <h2>${schema.title}</h2>
-              <p>${schema.description || 'Operational data and records management.'}</p>
+              <h2>${escapeHtml(schema.title)}</h2>
+              <p>${escapeHtml(schema.description || 'Operational data and records management.')}</p>
             </div>
             <button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')"><i data-lucide="plus"></i> Add Entry</button>
           </div>
@@ -7189,8 +7248,8 @@
                   ${records.length === 0 ? `<tr><td colspan="${schema.fields.length + 1}" style="text-align:center;padding:2rem;">No entries found.</td></tr>` :
                     records.map((r, idx) => `
                       <tr>
-                        ${schema.fields.map(f => `<td>${r[f.name] || '-'}</td>`).join('')}
-                        ${moduleKey === 'documents' ? `<td>${r.photo ? `<img src="${r.photo}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in;" onclick="showImageLightbox('${r.photo}')">` : '-'}</td>` : ''}
+                        ${schema.fields.map(f => `<td>${escapeHtml(r[f.name] || '-')}</td>`).join('')}
+                        ${moduleKey === 'documents' ? `<td>${r.photo ? `<img src="${escapeHtml(safeImageUrl(r.photo))}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(r.photo))})">` : '-'}</td>` : ''}
                         ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteGenericItem('${moduleKey}', ${idx})"><i data-lucide="trash-2"></i></button></td>` : ''}
                       </tr>`).join('')}
                 </tbody>
@@ -7234,7 +7293,7 @@
         });
         if (!db[editingModuleKey]) db[editingModuleKey] = [];
         db[editingModuleKey].push(newItem);
-        database.ref(`EVLT_ADMIN_DB/${editingModuleKey}`).set(db[editingModuleKey]);
+        dbSet(`EVLT_ADMIN_DB/${editingModuleKey}`, db[editingModuleKey]);
         closeModal('genericModal');
         renderGenericModule(editingModuleKey);
       }
@@ -7246,7 +7305,7 @@
         }
         if (!confirm('Are you sure you want to delete this record?')) return;
         db[moduleKey].splice(index, 1);
-        database.ref(`EVLT_ADMIN_DB/${moduleKey}`).set(db[moduleKey]);
+        dbSet(`EVLT_ADMIN_DB/${moduleKey}`, db[moduleKey]);
         renderGenericModule(moduleKey);
       }
 
@@ -7279,7 +7338,7 @@
         if (!db.userPermissions) db.userPermissions = {};
         db.userPermissions[userName] = selected;
 
-        database.ref('EVLT_ADMIN_DB/userPermissions').set(db.userPermissions);
+        dbSet('EVLT_ADMIN_DB/userPermissions', db.userPermissions);
         closeModal('accessControlModal');
         renderVolunteers();
       }
@@ -7414,7 +7473,7 @@
         delete vols[idx].pin;
         currentUser.volData = vols[idx];
 
-        database.ref('EVLT_ADMIN_DB/volunteers').set(db.volunteers);
+        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
 
         document.getElementById('myAccountCurrentPin').value = '';
         document.getElementById('myAccountNewPin').value = '';
@@ -7441,7 +7500,7 @@
                 const realIndex = (db.galleryPhotos || []).indexOf(p);
                 return `
                 <div class="card" style="padding:.6rem;">
-                  <img src="${p.photo}" style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="showImageLightbox('${p.photo}')">
+                  <img src="${escapeHtml(safeImageUrl(p.photo))}" style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius);cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(p.photo))})">
                   <div style="margin-top:.5rem;font-size:.78rem;color:var(--text);min-height:1.2em;">${escapeHtml(p.caption || '')}</div>
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem;">
                     <span style="font-size:.65rem;color:var(--text-muted);">${formatDisplayDate(p.date)}</span>
@@ -7541,7 +7600,7 @@
                             </ol>` : '<p style="font-size:.8rem;color:var(--text-muted);margin-top:.75rem;">No steps added for this guide yet.</p>'}
                           ${g.videoUrl ? `
                             <div style="margin-top:.85rem;">
-                              <video id="helpVideo_${g.id}" controls playsinline src="${escapeHtml(g.videoUrl)}" style="width:100%;max-height:280px;border-radius:var(--radius);background:#000;"></video>
+                              <video id="helpVideo_${g.id}" controls playsinline src="${escapeHtml(safeHttpUrl(g.videoUrl))}" style="width:100%;max-height:280px;border-radius:var(--radius);background:#000;"></video>
                               <button type="button" class="btn btn-secondary btn-sm" style="margin-top:.5rem;" onclick="helpTryPiP('helpVideo_${g.id}')"><i data-lucide="picture-in-picture-2"></i> Watch in Picture-in-Picture</button>
                             </div>` : ''}
                         </div>` : ''}
