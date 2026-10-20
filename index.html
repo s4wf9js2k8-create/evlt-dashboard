@@ -330,9 +330,6 @@
           <h1>EVLT Operations</h1>
           <p>Sign in to access the operations platform</p>
         </div>
-        <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;margin:0 0 .7rem;" onclick="startSystemAdminLogin()">
-          <i data-lucide="shield-check"></i> Louie Hull: Admin sign-in with Google
-        </button>
         <form onsubmit="handleUserLogin(event)">
           <div id="signupNameGroup" class="form-group" style="display:none;">
             <label for="signupVolunteerName">Your full name</label>
@@ -352,8 +349,8 @@
           <button id="loginSubmitButton" type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
             <i data-lucide="log-in"></i> Sign In
           </button>
-          <button id="signupToggleButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;" onclick="toggleVolunteerSignup()">First time? Create an account</button>
-          <button id="resetPasswordButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;" onclick="resetVolunteerPassword()">Forgot password?</button>
+          <button id="signupToggleButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">First time? Create an account</button>
+          <button id="resetPasswordButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">Forgot password?</button>
         </form>
       </div>
     </section>
@@ -2612,6 +2609,8 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('signupToggleButton')?.addEventListener('click', toggleVolunteerSignup);
+        document.getElementById('resetPasswordButton')?.addEventListener('click', resetVolunteerPassword);
         initFirebaseMessaging();
         if (!auth || !database) {
           console.error('Firebase Authentication or Realtime Database is unavailable.');
@@ -2832,15 +2831,6 @@
         setLoginNotice('');
       }
 
-      function startSystemAdminLogin() {
-        if (!auth) { setLoginNotice('Secure sign-in is unavailable. Please reload and try again.'); return; }
-        setLoginNotice('');
-        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => {
-          console.error('System administrator sign-in failed:', err);
-          setLoginNotice(err && err.code === 'auth/popup-blocked' ? 'Allow pop-ups for this site, then try Google sign-in again.' : 'Google sign-in failed. Please try again.');
-        });
-      }
-
       async function handleUserLogin(e) {
         e.preventDefault();
         const email = String(document.getElementById('loginEmail')?.value || '').trim();
@@ -2891,13 +2881,26 @@
 
       async function resetVolunteerPassword() {
         const email = String(document.getElementById('loginEmail')?.value || '').trim();
-        if (!email) { setLoginNotice('Enter your email address first, then choose “Forgot password?”.'); return; }
+        if (!email) {
+          setLoginNotice('Enter your email address first, then choose “Forgot password?”.');
+          document.getElementById('loginEmail')?.focus();
+          return;
+        }
+        if (!auth) {
+          setLoginNotice('Secure sign-in is unavailable. Please reload and try again.');
+          return;
+        }
+        const button = document.getElementById('resetPasswordButton');
+        if (button) button.disabled = true;
+        setLoginNotice('Sending password reset link…', false);
         try {
           await auth.sendPasswordResetEmail(email);
           setLoginNotice('If an account exists for that email, Firebase will send a password reset link.', false);
         } catch (err) {
           console.error('Password reset request failed:', err);
           setLoginNotice('Password reset could not be sent. Check the email address and try again.');
+        } finally {
+          if (button) button.disabled = false;
         }
       }
 
@@ -2949,8 +2952,9 @@
             setLoginNotice('Verify your email using the link Firebase sent, then return here and sign in.');
             return;
           }
-          const providers = (user.providerData || []).map(p => p.providerId);
-          const isAdmin = String(user.email).toLowerCase() === SYSTEM_ADMIN_EMAIL && providers.includes('google.com');
+          // A verified match to this exact email is the sole administrator identity.
+          // Admins use the same email/password form as every volunteer.
+          const isAdmin = String(user.email || '').trim().toLowerCase() === SYSTEM_ADMIN_EMAIL.toLowerCase();
           if (isAdmin) {
             launchApprovedAccount(user, null, true);
             return;
@@ -3662,7 +3666,7 @@
       function handleClockAction(e) {
         e.preventDefault();
         if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only Louie's System Admin account can record attendance until a separate kiosk sign-in is set up.');
+          alert("Only Louie's System Admin account can record attendance until a separate kiosk sign-in is set up.");
           return;
         }
 
