@@ -1,19 +1,23 @@
 # Elham Valley Line Trust (EVLT) Operations Dashboard
 
-🚂 **Operational Management & Safety System for Peene Yard 7¼″ Railway**
+Operational management and safety system for the Elham Valley Line Trust.
 
----
+## Files
 
-## 📁 Repository Structure & Consolidation
+- `index.html` — page structure and app entry point.
+- `styles.css` — application styles.
+- `app.js` — Firebase connection, sign-in, page navigation, and application features.
+- `help-guides.js` — built-in Help & Tutorials content and safe one-time guide migration.
+- `firebase-messaging-sw.js` — Firebase background notification service worker.
+- `database.rules.json` — Realtime Database security rules.
+- `apple-touch-icon.png` — app icon.
 
-All features and code have been consolidated into **a single main file** for simplicity and ease of maintenance:
+The site is served from the repository root by GitHub Pages. Keep local asset paths relative so the app works under the repository's `/evlt-dashboard/` URL.
 
-- **`index.html`** — **The entire application!** Contains all UI screens, CSS styles, JavaScript logic, operational check forms, volunteer attendance, fleet roster, interactive track diagrams, and real-time Firebase database synchronization. If you want to customize or edit anything, **this is the only file you need to edit**.
-- **`firebase-messaging-sw.js`** — Background service worker handling Web Push & FCM device alert notifications.
-- **`apple-touch-icon.png`** — App icon for iOS "Add to Home Screen" and notification badges.
+## External libraries
 
----
+The Firebase web SDK is pinned to 9.22.2, Lucide to 1.60.0, and Tesseract.js to 5.1.1 in `index.html`. Update these versions deliberately and verify the app after changing them.
 
-## 🌐 Hosted on GitHub Pages
+## Help guides
 
-The platform is served directly from `index.html` with full offline support, PWA installability, and real-time database sync with Firebase.
+Built-in guides live in `help-guides.js`. When the System Admin signs in, the app adds missing built-in guides and updates only untouched legacy built-in guides in Realtime Database. Custom guides and guides edited by an admin are preserved.
