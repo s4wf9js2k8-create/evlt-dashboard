@@ -3303,6 +3303,7 @@
 
         html += `
           <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
+          ${currentUser.isSystemAdmin ? `<a href="#" class="${currentView === 'settings' ? 'active' : ''}" onclick="navigate('settings'); return false;"><i data-lucide="settings"></i> System Settings & Permissions</a>` : ''}
           ${userHasAccess('help') ? `<a href="#" class="${currentView === 'help' ? 'active' : ''}" onclick="navigate('help'); return false;"><i data-lucide="life-buoy"></i> Help & Tutorials</a>` : ''}
           ${currentUser.volData && userHasAccess('myAccount') ? `
             <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
@@ -3378,6 +3379,7 @@
           case 'myAccount': renderMyAccount(); break;
           case 'help': renderHelpPage(); break;
           case 'gallery': renderGalleryPage(); break;
+          case 'settings': renderSettings(); break;
           default: renderDashboard();
         }
       }
