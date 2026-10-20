@@ -303,7 +303,7 @@
     </style>
   </head>
   <body>
-    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-16-FLEET-MAINT-MGMT</div>
+    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-17-GOOGLE-ADMIN-LOGIN</div>
     <div id="print-area"></div>
 
     <!-- Dedicated Login Page -->
@@ -330,6 +330,9 @@
           <h1>EVLT Operations</h1>
           <p>Sign in to access the operations platform</p>
         </div>
+        <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;margin:0 0 .7rem;" onclick="startSystemAdminLogin()">
+          <i data-lucide="shield-check"></i> Louie Hull: Admin sign-in with Google
+        </button>
         <form onsubmit="handleUserLogin(event)">
           <div class="form-group">
             <label for="loginUserSelect">Account</label>
@@ -2785,6 +2788,16 @@
           alert(changed ? `${changed} PIN(s) secured. Volunteers keep the same PIN, but it can no longer be read back here. Use Edit to set a new one if someone forgets.` : 'All PINs are already secured.');
           renderVolunteers();
         }
+      }
+
+      function startSystemAdminLogin() {
+        const select = document.getElementById('loginUserSelect');
+        if (!select) return;
+        select.value = 'SYSTEM_ADMIN';
+        updateLoginCredentialPrompt();
+        const err = document.getElementById('loginErrorMsg');
+        if (err) err.style.display = 'none';
+        return handleUserLogin({ preventDefault() {} });
       }
 
       async function handleUserLogin(e) {
