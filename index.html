@@ -782,21 +782,6 @@
       </div>
     </div>
 
-    <!-- Role Page Access Modal (Admin) -->
-    <div class="modal-overlay" id="roleAccessModal">
-      <div class="modal" style="max-width: 640px; max-height: 90vh;">
-        <h3>Qualification-Based Page Access</h3>
-        <form onsubmit="saveRolePageAccess(event)">
-          <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">For each qualification/role, check which pages volunteers with that qualification can access. Changes apply to all volunteers with that role.</p>
-          <div id="roleAccessContainer" style="max-height:55vh; overflow-y:auto;"></div>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeModal('roleAccessModal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Access Rules</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <!-- Per-feature Edit/Delete Permissions Modal (Admin) -->
     <div class="modal-overlay" id="editPermissionsModal">
       <div class="modal" style="max-width: 560px; max-height: 90vh;">
@@ -1346,7 +1331,7 @@
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
         incidents: ['incidents','assets','volunteers'],
-        competency: ['volunteers','trainingTypes','rolePageAccess'],
+        competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles'],
         actions: ['actions','volunteers'],
         maintenance: ['fleetItems','maintenanceLogs','assets'],
@@ -1982,10 +1967,6 @@
         if (!db.userPermissions || typeof db.userPermissions !== 'object' || Array.isArray(db.userPermissions)) {
           db.userPermissions = {};
         }
-        if (!db.rolePageAccess || typeof db.rolePageAccess !== 'object' || Array.isArray(db.rolePageAccess)) {
-          db.rolePageAccess = {};
-        }
-
         if (!db.eurotunnelTrains || !Array.isArray(db.eurotunnelTrains)) db.eurotunnelTrains = [];
         if (!db.eurotunnelSequences || !Array.isArray(db.eurotunnelSequences)) db.eurotunnelSequences = [];
         if (!db.eurotunnelTasks || !Array.isArray(db.eurotunnelTasks)) db.eurotunnelTasks = [];
@@ -2503,7 +2484,7 @@
       // ============================================================
       // NOTIFICATION CENTRE — broadcast messages, visible to anyone
       // granted access to the 'notifications' page (via Manage Page
-      // Permissions or Qualification-Based Page Access, same as any
+      // Permissions, same as any
       // other page). Messages sync to everyone via the normal
       // EVLT_ADMIN_DB realtime listener, and trigger a device
       // notification for anyone with the app open at the time.
@@ -5408,32 +5389,18 @@
         const volunteers = db.volunteers || [];
         const roles = getAvailableRoles();
         const isAdmin = currentUser && currentUser.isSystemAdmin;
-        const rolePageAccess = db.rolePageAccess || {};
         const trainingTypes = db.trainingTypes || [];
 
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
               <h2>Qualifications & Competency Matrix</h2>
-              <p>Audit volunteer skills, certifications, and qualification-based page access.</p>
+              <p>Review volunteer roles, qualifications, training, and renewals.</p>
             </div>
             <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
               ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add Custom Role</button>` : ''}
-              ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openRoleAccessModal()"><i data-lucide="shield"></i> Manage Role Page Access</button>` : ''}
             </div>
           </div>
-
-          ${isAdmin ? `
-            <div class="card" style="padding:1rem; margin-bottom:1rem; background:#f0f4f0; border-color:var(--primary);">
-              <div style="font-size:0.8rem; font-weight:700; color:var(--primary); margin-bottom:0.5rem;"><i data-lucide="info" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Role-Based Page Access</div>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.5rem;">Pages are automatically granted based on a volunteer's qualifications. Click "Manage Role Page Access" to configure which qualifications unlock which pages.</p>
-              <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                ${Object.entries(rolePageAccess).map(([role, pages]) =>
-                  pages.length > 0 ? `<span style="background:var(--primary); color:white; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:600;">${role}: ${pages.length} page(s)</span>` : ''
-                ).join('')}
-              </div>
-            </div>
-          ` : ''}
 
           <div class="card">
             <div class="table-container">
@@ -5560,46 +5527,6 @@
         }
         dbUpdate({ volunteers: db.volunteers });
         closeModal('genericModal');
-        renderCompetencyMatrix();
-      }
-
-      function openRoleAccessModal() {
-        const roles = getAvailableRoles();
-        const rolePageAccess = db.rolePageAccess || {};
-
-        const container = document.getElementById('roleAccessContainer');
-        container.innerHTML = roles.map(role => {
-          const grantedPages = rolePageAccess[role] || [];
-          return `
-            <div style="margin-bottom:0.85rem; padding:0.75rem; background:#f8fafc; border-radius:var(--radius); border:1px solid var(--border);">
-              <div style="font-weight:700; font-size:0.8rem; color:var(--primary); margin-bottom:0.4rem;">${role}</div>
-              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:0.25rem;">
-                ${ALL_PAGES.map(p => {
-                  const checked = grantedPages.includes(p.key);
-                  return `<label style="display:flex; align-items:center; gap:0.35rem; font-size:0.75rem; cursor:pointer; padding:2px 0;">
-                    <input type="checkbox" value="${role}|||${p.key}" class="role-page-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:13px; height:13px; margin:0; accent-color:var(--primary);">${p.label}
-                  </label>`;
-                }).join('')}
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        document.getElementById('roleAccessModal').style.display = 'flex';
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-      }
-
-      function saveRolePageAccess(e) {
-        e.preventDefault();
-        const rolePageAccess = {};
-        document.querySelectorAll('.role-page-cb:checked').forEach(cb => {
-          const [role, pageKey] = cb.value.split('|||');
-          if (!rolePageAccess[role]) rolePageAccess[role] = [];
-          rolePageAccess[role].push(pageKey);
-        });
-        db.rolePageAccess = rolePageAccess;
-        dbSet('EVLT_ADMIN_DB/rolePageAccess', rolePageAccess);
-        closeModal('roleAccessModal');
         renderCompetencyMatrix();
       }
 
