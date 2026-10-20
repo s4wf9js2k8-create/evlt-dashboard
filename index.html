@@ -1338,6 +1338,39 @@
         { key: 'notifications', label: 'Notification Centre', icon: 'bell-ring', section: 'Communication' }
       ];
 
+      const ACCOUNT_ACCESS_PAGES = ALL_PAGES.concat([{ key: 'myAccount', label: 'My Account', icon: 'user-cog', section: 'Session' },
+        { key: 'help', label: 'Help & Tutorials', icon: 'life-buoy', section: 'Session' }]);
+      const PAGE_DATA_KEYS = {
+        dashboard: ['clockLogs','incidents','maintenanceLogs','dailyChecks','actions','events','fleetItems','volunteers'],
+        clock: ['clockLogs','volunteers'],
+        calendar: ['clockLogs','events','rotaSignups','volunteers'],
+        clockLogs: ['clockLogs','volunteers'],
+        incidents: ['incidents','assets','volunteers'],
+        competency: ['volunteers','trainingTypes','rolePageAccess'],
+        volunteers: ['volunteers','customRoles'],
+        actions: ['actions','volunteers'],
+        maintenance: ['fleetItems','maintenanceLogs','assets'],
+        events: ['events','volunteers','clockLogs'],
+        eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
+        suppliers: ['suppliers'],
+        enquiries: ['enquiries'],
+        documents: ['documents','volunteerDocs','archiveUploads'],
+        notes: ['notes'],
+        archives: ['historicalArchive','archiveUploads','clockLogs','incidents','maintenanceLogs'],
+        notifications: ['notifications'],
+        gallery: ['galleryPhotos'],
+        help: ['helpGuides'],
+        myAccount: ['volunteers','nameChangeRequests']
+      };
+      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','maintenanceLogs','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      function grantedPageKeys(grants) {
+        if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
+        return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
+      }
+      function makeGrantedPages(keys) {
+        return Object.fromEntries(keys.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key)).map(key => [key, true]));
+      }
+
       const DEFAULT_HELP_GUIDES = [
         {
           category: 'Getting Started',
@@ -1997,32 +2030,76 @@
         syncAllArchives();
       }
 
+      function normaliseLoadedDbValue(key, value) {
+        if (value === null || value === undefined) return PAGE_LIST_DATA_KEYS.has(key) ? [] : {};
+        if (PAGE_LIST_DATA_KEYS.has(key) && !Array.isArray(value) && typeof value === 'object') {
+          return Object.keys(value).sort((a, b) => Number(a) - Number(b)).map(k => value[k]).filter(v => v !== null && v !== undefined);
+        }
+        return value;
+      }
+
       function attachDatabaseListener() {
         if (!database || !currentUser) {
           showLoginPage();
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        if (databaseListener) return;
-        databaseListener = snapshot => {
-          const val = snapshot.val();
-          if (val) {
-            db = val;
-            normaliseDb();
-            if (currentUser && !currentUser.isSystemAdmin) {
-              currentUser.volData = (db.volunteers || []).find(v => getVolunteerName(v).toLowerCase() === String(currentUser.name || '').toLowerCase()) || null;
+        if (databaseListener || Object.keys(pageDatabaseListeners).length) return;
+        if (currentUser.isSystemAdmin) {
+          databaseListener = snapshot => {
+            const val = snapshot.val();
+            if (val) {
+              db = val;
+              normaliseDb();
             }
-          }
-          processIncomingNotifications();
-          archiveAndResetIfNewDay();
-          renderInitialApp();
-        };
-        database.ref('EVLT_ADMIN_DB').on('value', databaseListener, err => {
-          console.error("Database connection error:", err);
+            processIncomingNotifications();
+            archiveAndResetIfNewDay();
+            renderInitialApp();
+          };
+          database.ref('EVLT_ADMIN_DB').on('value', databaseListener, err => {
+            console.error('Database connection error:', err);
+            currentUser = null;
+            detachDatabaseListener();
+            showLoginPage();
+            showLoginError('Could not load approved account data. Check your connection or ask Louie for help.');
+          });
+          return;
+        }
+
+        const pageKeys = grantedPageKeys(currentUser.grantedPages);
+        const dataKeys = [...new Set(pageKeys.flatMap(page => PAGE_DATA_KEYS[page] || []))];
+        if (!dataKeys.length) {
           currentUser = null;
-          detachDatabaseListener();
           showLoginPage();
-          showLoginError('Could not load approved account data. Check your connection or ask Louie for help.');
+          setLoginNotice('No pages are assigned to this account yet. Ask Louie to choose your access.');
+          return;
+        }
+        db = {};
+        const loaded = new Set();
+        dataKeys.forEach(key => {
+          const listener = snapshot => {
+            if (!currentUser) return;
+            db[key] = normaliseLoadedDbValue(key, snapshot.val());
+            loaded.add(key);
+            if (key === 'volunteers') {
+              currentUser.volData = (db.volunteers || []).find(v =>
+                getVolunteerName(v).toLowerCase() === String(currentUser.name || '').toLowerCase()
+              ) || null;
+            }
+            if (loaded.size === dataKeys.length) {
+              if (currentUser && !userHasAccess(currentView)) currentView = pageKeys[0];
+              if (db.notifications) processIncomingNotifications();
+              renderInitialApp();
+            }
+          };
+          pageDatabaseListeners[key] = listener;
+          database.ref('EVLT_ADMIN_DB/' + key).on('value', listener, err => {
+            console.error('Page data access failed:', key, err);
+            currentUser = null;
+            detachDatabaseListener();
+            showLoginPage();
+            showLoginError('Could not load the pages assigned to this account. Ask Louie to review its access.');
+          });
         });
       }
 
@@ -2044,14 +2121,14 @@
         return false;
       }
 
-      const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      const SESSION_IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
       let lastActivityAt = 0;
 
       function expireSessionIfIdle() {
         if (!currentUser || !lastActivityAt) return false;
         if (Date.now() - lastActivityAt < SESSION_IDLE_TIMEOUT_MS) return false;
         logoutDevice();
-        showLoginError('You were signed out after 30 minutes without activity.');
+        showLoginError('You were signed out after 7 days without activity.');
         return true;
       }
 
@@ -2082,6 +2159,10 @@
         if (!currentUser) {
           showLoginPage();
         } else {
+          if (!userHasAccess(currentView)) {
+            const firstPage = grantedPageKeys(currentUser.grantedPages)[0];
+            if (firstPage) currentView = firstPage;
+          }
           hideLoginPage();
           renderSidebar();
           navigate(currentView);
@@ -2618,7 +2699,7 @@
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).then(() => {
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(() => {
           auth.onAuthStateChanged(user => { routeAuthenticatedUser(user); }, err => {
             console.error('Firebase authentication state error:', err);
             currentUser = null;
@@ -2805,6 +2886,7 @@
       let volunteerSignupMode = false;
       let databaseListener = null;
       let pendingBindingRef = null;
+      let activeBindingRef = null;
 
       function setLoginNotice(message, isError = true) {
         const notice = document.getElementById('loginErrorMsg');
@@ -2904,24 +2986,63 @@
         }
       }
 
+      let pageDatabaseListeners = {};
       function detachDatabaseListener() {
         if (database && databaseListener) database.ref('EVLT_ADMIN_DB').off('value', databaseListener);
         databaseListener = null;
+        if (database) Object.keys(pageDatabaseListeners).forEach(key => database.ref('EVLT_ADMIN_DB/' + key).off('value', pageDatabaseListeners[key]));
+        pageDatabaseListeners = {};
       }
 
       function launchApprovedAccount(user, binding, isSystemAdmin = false) {
-        if (pendingBindingRef) pendingBindingRef.off();
-        pendingBindingRef = null;
         const email = String(user.email || '');
-        if (!isSystemAdmin && (!binding || binding.approved !== true || binding.email !== email || !binding.volunteerName)) {
+        const grants = isSystemAdmin ? {} : (binding && binding.grantedPages || {});
+        if (!isSystemAdmin && grantedPageKeys(grants).length === 0) {
+          if (activeBindingRef) activeBindingRef.off();
+          activeBindingRef = null;
           currentUser = null;
+          detachDatabaseListener();
+          if (pendingBindingRef) pendingBindingRef.off();
+          pendingBindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + user.uid);
+          pendingBindingRef.on('value', snapshot => {
+            const updated = snapshot.val();
+            if (updated && updated.approved === true && updated.email === user.email && grantedPageKeys(updated.grantedPages).length > 0) {
+              launchApprovedAccount(user, updated, false);
+            }
+          }, err => {
+            console.error('Page permission status check failed:', err);
+            setLoginNotice('Could not check your page access. Refresh the page and try again.');
+          });
           showLoginPage();
-          setLoginNotice('This account is not approved yet. Louie will link it to your volunteer record after reviewing the sign-up.');
+          setLoginNotice('Your account is approved, but Louie has not assigned any pages yet. Ask Louie to choose your access.');
           return;
         }
+        if (pendingBindingRef) pendingBindingRef.off();
+        pendingBindingRef = null;
+        if (activeBindingRef) activeBindingRef.off();
+        activeBindingRef = null;
+        detachDatabaseListener();
         currentUser = isSystemAdmin
-          ? { name: 'System Admin', email: email, isSystemAdmin: true, isShopKiosk: false }
-          : { name: String(binding.volunteerName), email: email, isSystemAdmin: false, isShopKiosk: false, volunteerUid: user.uid };
+          ? { name: 'System Admin', email, isSystemAdmin: true, isShopKiosk: false }
+          : { name: String(binding.volunteerName), email, isSystemAdmin: false, isShopKiosk: false, volunteerUid: user.uid, grantedPages: grants };
+        if (!isSystemAdmin) {
+          activeBindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + user.uid);
+          activeBindingRef.on('value', snapshot => {
+            const updated = snapshot.val();
+            if (!updated || updated.approved !== true || updated.email !== user.email || !updated.volunteerName) {
+              auth.signOut().catch(() => {});
+              return;
+            }
+            const nextGrants = makeGrantedPages(grantedPageKeys(updated.grantedPages));
+            const currentGrants = makeGrantedPages(grantedPageKeys(currentUser && currentUser.grantedPages));
+            if (JSON.stringify(nextGrants) !== JSON.stringify(currentGrants)) {
+              launchApprovedAccount(user, updated, false);
+            }
+          }, err => {
+            console.error('Page access update check failed:', err);
+            setLoginNotice('Could not confirm page access. Refresh the page and sign in again.');
+          });
+        }
         lastActivityAt = Date.now();
         setLoginNotice('');
         attachDatabaseListener();
@@ -3006,6 +3127,17 @@
         }
       }
 
+      function renderPagePermissionCheckboxes(container, grants, className = 'perm-cb') {
+        if (!container) return;
+        const active = new Set(grantedPageKeys(grants));
+        container.innerHTML = ACCOUNT_ACCESS_PAGES.map(page => {
+          const checked = active.has(page.key);
+          return '<label style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;cursor:pointer;">' +
+            '<input type="checkbox" class="' + className + '" value="' + escapeHtml(page.key) + '"' + (checked ? ' checked' : '') + '>' +
+            '<strong>' + escapeHtml(page.label) + '</strong> <span style="font-size:.68rem;color:var(--text-muted);">(' + escapeHtml(page.section) + ')</span></label>';
+        }).join('');
+      }
+
       function loadPendingAccountRequests() {
         const panel = document.getElementById('accountRequestsPanel');
         if (!panel || !currentUser || !currentUser.isSystemAdmin) return;
@@ -3016,7 +3148,8 @@
           if (!document.getElementById('accountRequestsPanel')) return;
           const requests = requestsSnapshot.val() || {};
           const bindings = bindingsSnapshot.val() || {};
-          const entries = Object.keys(requests).map(uid => ({ uid: uid, request: requests[uid] })).filter(x => x.request && x.request.email && x.request.name);
+          const entries = Object.keys(requests).map(uid => ({ uid, request: requests[uid] }))
+            .filter(x => x.request && x.request.email && x.request.name);
           if (!entries.length) {
             panel.innerHTML = '<p style="font-size:.82rem;color:var(--text-muted);">No sign-ups are waiting for approval.</p>';
             return;
@@ -3029,16 +3162,48 @@
               return '<option value="' + escapeHtml(name) + '"' + (used ? ' disabled' : '') + '>' + escapeHtml(name) + (used ? ' (already linked)' : '') + '</option>';
             })).join('');
             const safeUid = inlineJsArg(entry.uid);
+            const grantsId = 'requestPermissions_' + entry.uid;
             return '<article class="card" style="padding:1rem;margin:.65rem 0;">' +
               '<strong>' + escapeHtml(entry.request.name) + '</strong><div style="font-size:.82rem;">' + escapeHtml(entry.request.email) + '</div>' +
               '<label for="accountVolunteer_' + escapeHtml(entry.uid) + '" style="display:block;margin-top:.65rem;">Link to volunteer record</label>' +
               '<select id="accountVolunteer_' + escapeHtml(entry.uid) + '" style="width:100%;margin:.35rem 0;">' + options + '</select>' +
+              '<details style="margin:.4rem 0;"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;">Choose the pages this account can open</summary>' +
+              '<div id="' + escapeHtml(grantsId) + '" style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem;border:1px solid var(--border);padding:.6rem;margin-top:.4rem;max-height:220px;overflow:auto;">' +
+              ACCOUNT_ACCESS_PAGES.map(page => '<label style="display:flex;align-items:center;gap:.45rem;font-size:.76rem;">' +
+                '<input type="checkbox" class="request-perm-cb" value="' + escapeHtml(page.key) + '">' + escapeHtml(page.label) + '</label>').join('') +
+              '</div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">No pages selected means the account stays blocked until you assign access.</p></details>' +
               '<div style="display:flex;gap:.5rem;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="approveVolunteerAccount(' + safeUid + ')">Approve and link</button>' +
               '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button></div></article>';
           }).join('');
         }).catch(err => {
           console.error('Could not load sign-up requests:', err);
-          panel.textContent = 'Could not load sign-up requests. Refresh the page and try again.';
+          panel.textContent = 'Could not load sign-up requests. Check your connection and try again.';
+        });
+      }
+
+      function loadApprovedAccountAccess() {
+        const panel = document.getElementById('approvedAccountAccessPanel');
+        if (!panel || !currentUser || !currentUser.isSystemAdmin || !database) return;
+        database.ref('EVLT_ACCOUNT_BINDINGS').once('value').then(snapshot => {
+          if (!document.getElementById('approvedAccountAccessPanel')) return;
+          const bindings = snapshot.val() || {};
+          const accounts = Object.keys(bindings).map(uid => ({ uid, binding: bindings[uid] }))
+            .filter(entry => entry.binding && entry.binding.approved === true && entry.binding.email);
+          if (!accounts.length) {
+            panel.innerHTML = '<p style="font-size:.82rem;color:var(--text-muted);">No approved volunteer accounts yet.</p>';
+            return;
+          }
+          panel.innerHTML = accounts.map(({uid, binding}) => {
+            const pages = grantedPageKeys(binding.grantedPages);
+            const safeUid = inlineJsArg(uid);
+            return '<article class="card" style="padding:.85rem;margin:.55rem 0;display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
+              '<div><strong>' + escapeHtml(binding.volunteerName || 'Volunteer') + '</strong><div style="font-size:.78rem;color:var(--text-muted);">' + escapeHtml(binding.email) + '</div>' +
+              '<div style="font-size:.72rem;margin-top:.2rem;">' + (pages.length ? escapeHtml(pages.map(key => ACCOUNT_ACCESS_PAGES.find(p => p.key === key)?.label || key).join(', ')) : '<span style="color:#b91c1c;">No pages assigned</span>') + '</div></div>' +
+              '<button class="btn btn-secondary btn-sm" onclick="openAccessControlModal(' + safeUid + ')">Set page access</button></article>';
+          }).join('');
+        }).catch(err => {
+          console.error('Could not load approved account access:', err);
+          panel.textContent = 'Could not load approved accounts. Check your connection and try again.';
         });
       }
 
@@ -3052,12 +3217,20 @@
         const bindings = bindingsSnapshot.val() || {};
         const alreadyLinked = Object.keys(bindings).some(otherUid => otherUid !== uid && bindings[otherUid] && bindings[otherUid].approved === true && String(bindings[otherUid].volunteerName || '').toLowerCase() === volunteerName.toLowerCase());
         if (alreadyLinked) { alert('That volunteer record is already linked to another account.'); loadPendingAccountRequests(); return; }
-        const binding = { approved: true, email: request.email, volunteerName: volunteerName, approvedBy: SYSTEM_ADMIN_EMAIL, approvedAt: firebase.database.ServerValue.TIMESTAMP };
+        const grantContainer = document.getElementById('requestPermissions_' + uid);
+        const selected = Array.from(grantContainer?.querySelectorAll('.request-perm-cb:checked') || []).map(box => box.value);
+        const binding = { approved: true, email: request.email, volunteerName, approvedBy: SYSTEM_ADMIN_EMAIL, approvedAt: firebase.database.ServerValue.TIMESTAMP, grantedPages: makeGrantedPages(selected) };
         const updates = {};
         updates['EVLT_ACCOUNT_BINDINGS/' + uid] = binding;
         updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null;
-        await database.ref().update(updates);
-        loadPendingAccountRequests();
+        try {
+          await database.ref().update(updates);
+          loadPendingAccountRequests();
+          loadApprovedAccountAccess();
+        } catch (err) {
+          console.error('Could not approve volunteer account:', err);
+          alert('Could not save approval. Check your connection and try again.');
+        }
       }
 
       async function rejectVolunteerAccount(uid) {
@@ -3092,37 +3265,10 @@
       }
 
       function userHasAccess(pageKey) {
-        if (pageKey === 'myAccount') return !!(currentUser && currentUser.volData);
         if (!currentUser) return false;
-        if (currentUser.isShopKiosk) return pageKey === 'clock';
-
         if (currentUser.isSystemAdmin) return true;
-
-        if (pageKey === 'eurotunnel') {
-          const roles = String(currentUser.volData?.Roles || currentUser.volData?.roles || '')
-            .split(',').map(role => role.trim().toLowerCase());
-          return roles.includes('eurotunnel');
-        }
-
-        const alwaysGranted = ['dashboard', 'clock', 'incidents', 'calendar', 'actions', 'events', 'myAccount', 'help', 'gallery'];
-        if (alwaysGranted.includes(pageKey)) return true;
-
-        if (hasManagementPermission()) return true;
-
-        if (currentUser.volData) {
-          const volRoles = String(currentUser.volData.Roles || currentUser.volData.roles || '').split(',').map(r => r.trim());
-          const rolePageAccess = db.rolePageAccess || {};
-          for (const role of volRoles) {
-            const grantedPages = rolePageAccess[role] || [];
-            if (grantedPages.includes(pageKey)) return true;
-          }
-        }
-
-        const permsMap = db.userPermissions || {};
-        const userPerms = permsMap[currentUser.name];
-        if (Array.isArray(userPerms) && userPerms.includes(pageKey)) return true;
-
-        return false;
+        if (pageKey === 'myAccount' && !currentUser.volData) return false;
+        return currentUser.grantedPages && currentUser.grantedPages[pageKey] === true;
       }
 
       function renderSidebar() {
@@ -3152,10 +3298,8 @@
 
         html += `
           <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
-          <a href="#" class="${currentView === 'help' ? 'active' : ''}" onclick="navigate('help'); return false;">
-            <i data-lucide="life-buoy"></i> Help & Tutorials
-          </a>
-          ${currentUser.volData ? `
+          ${userHasAccess('help') ? `<a href="#" class="${currentView === 'help' ? 'active' : ''}" onclick="navigate('help'); return false;"><i data-lucide="life-buoy"></i> Help & Tutorials</a>` : ''}
+          ${currentUser.volData && userHasAccess('myAccount') ? `
             <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
               <i data-lucide="user-cog"></i> My Account
             </a>
@@ -7561,38 +7705,36 @@
         renderGenericModule(moduleKey);
       }
 
-      function openAccessControlModal(userName) {
-        document.getElementById('accessControlUserName').value = userName;
-        document.getElementById('accessControlTitle').innerText = `Page Permissions: ${userName}`;
-
-        const container = document.getElementById('permissionsCheckboxesList');
-        const permsMap = db.userPermissions || {};
-        const activePerms = permsMap[userName] || [];
-
-        container.innerHTML = ALL_PAGES.map(p => {
-          const checked = activePerms.includes(p.key);
-          return `
-            <label style="display:flex; align-items:center; gap:0.5rem; font-size:0.8rem; cursor:pointer;">
-              <input type="checkbox" value="${p.key}" class="perm-cb" ${checked ? 'checked' : ''}>
-              <strong>${p.label}</strong> <span style="font-size:0.7rem; color:var(--text-muted);">(${p.section})</span>
-            </label>
-          `;
-        }).join('');
-
-        document.getElementById('accessControlModal').style.display = 'flex';
+      async function openAccessControlModal(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        try {
+          const snapshot = await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).once('value');
+          const binding = snapshot.val();
+          if (!binding || binding.approved !== true) { alert('This approved account could not be found.'); return; }
+          document.getElementById('accessControlUserName').value = uid;
+          document.getElementById('accessControlTitle').innerText = 'Page Permissions: ' + (binding.email || binding.volunteerName || 'Account');
+          const container = document.getElementById('permissionsCheckboxesList');
+          renderPagePermissionCheckboxes(container, binding.grantedPages);
+          document.getElementById('accessControlModal').style.display = 'flex';
+        } catch (err) {
+          console.error('Could not load account permissions:', err);
+          alert('Could not load this account. Check your connection and try again.');
+        }
       }
 
-      function saveUserPermissions(e) {
+      async function saveUserPermissions(e) {
         e.preventDefault();
-        const userName = document.getElementById('accessControlUserName').value;
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        const uid = document.getElementById('accessControlUserName').value;
         const selected = Array.from(document.querySelectorAll('.perm-cb:checked')).map(cb => cb.value);
-
-        if (!db.userPermissions) db.userPermissions = {};
-        db.userPermissions[userName] = selected;
-
-        dbSet('EVLT_ADMIN_DB/userPermissions', db.userPermissions);
-        closeModal('accessControlModal');
-        renderVolunteers();
+        try {
+          await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid + '/grantedPages').set(makeGrantedPages(selected));
+          closeModal('accessControlModal');
+          loadApprovedAccountAccess();
+        } catch (err) {
+          console.error('Could not save account permissions:', err);
+          alert('Could not save page access. Check your connection and try again.');
+        }
       }
 
       function canAccessView(view) {
@@ -7912,8 +8054,14 @@
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
             <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Volunteer email sign-ups</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Only approve a request after confirming the person. Each volunteer record can link to one verified email account.</p>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Confirm each person, link their account to a volunteer record, and choose the pages they can open. No pages are granted automatically.</p>
             <div id="accountRequestsPanel" aria-live="polite">Loading sign-up requests…</div>
+          </div>
+
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Approved accounts — page access</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Choose exactly which dashboard pages each approved email account can access. Firebase also enforces these permissions on the data.</p>
+            <div id="approvedAccountAccessPanel" aria-live="polite">Loading approved accounts…</div>
           </div>
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
@@ -7938,6 +8086,7 @@
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
         loadPendingAccountRequests();
+        loadApprovedAccountAccess();
       }
 
       function exportAppHtml() {

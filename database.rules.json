@@ -3,102 +3,143 @@
     ".read": false,
     ".write": false,
     "EVLT_ADMIN_DB": {
-      ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)",
+      ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
       "actions": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('actions').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('actions').val() == true)))"
       },
       "archiveUploads": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))"
       },
       "assets": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('incidents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('incidents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true)))"
       },
       "clockLogs": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clock').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clockLogs').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clock').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clockLogs').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))"
       },
       "dailyChecks": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true)))"
       },
       "documents": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true)))"
       },
       "enquiries": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('enquiries').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('enquiries').val() == true)))"
       },
       "events": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true)))"
       },
       "fleetItems": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true)))"
       },
       "galleryPhotos": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('gallery').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('gallery').val() == true)))"
       },
       "helpGuides": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('help').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('help').val() == true)))"
       },
       "historicalArchive": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))"
       },
       "incidents": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('incidents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('incidents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))"
       },
       "maintenanceLogs": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('archives').val() == true)))"
       },
       "nameChangeRequests": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('myAccount').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('myAccount').val() == true)))"
       },
       "notes": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notes').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notes').val() == true)))"
       },
       "railwayTrackSections": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "railwayTracks": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "stock": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "suppliers": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('suppliers').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('suppliers').val() == true)))"
       },
       "eurotunnelTrains": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "eurotunnelSequences": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "eurotunnelTasks": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "eurotunnelMaintenance": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "eurotunnelTrackSections": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('eurotunnel').val() == true)))"
       },
       "volunteerDocs": {
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email)"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('documents').val() == true)))"
       },
       "customRoles": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('volunteers').val() == true)))"
       },
       "editPermissions": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
       },
       "rolePageAccess": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true)))"
       },
       "userPermissions": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
       },
       "volunteers": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clock').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('clockLogs').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('incidents').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('volunteers').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('actions').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('myAccount').val() == true)))"
       },
       "notifications": {
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))",
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))"
+      },
+      ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+      "rotaSignups": {
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true)))",
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true)))"
+      },
+      "trainingTypes": {
+        ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true)))",
+        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true)))"
       }
     },
     "EVLT_ACCOUNT_REQUESTS": {
@@ -144,6 +185,71 @@
         },
         "$other": {
           ".validate": false
+        },
+        "grantedPages": {
+          "dashboard": {
+            ".validate": "newData.val() == true"
+          },
+          "clock": {
+            ".validate": "newData.val() == true"
+          },
+          "calendar": {
+            ".validate": "newData.val() == true"
+          },
+          "clockLogs": {
+            ".validate": "newData.val() == true"
+          },
+          "incidents": {
+            ".validate": "newData.val() == true"
+          },
+          "competency": {
+            ".validate": "newData.val() == true"
+          },
+          "volunteers": {
+            ".validate": "newData.val() == true"
+          },
+          "actions": {
+            ".validate": "newData.val() == true"
+          },
+          "maintenance": {
+            ".validate": "newData.val() == true"
+          },
+          "events": {
+            ".validate": "newData.val() == true"
+          },
+          "eurotunnel": {
+            ".validate": "newData.val() == true"
+          },
+          "suppliers": {
+            ".validate": "newData.val() == true"
+          },
+          "enquiries": {
+            ".validate": "newData.val() == true"
+          },
+          "documents": {
+            ".validate": "newData.val() == true"
+          },
+          "notes": {
+            ".validate": "newData.val() == true"
+          },
+          "archives": {
+            ".validate": "newData.val() == true"
+          },
+          "notifications": {
+            ".validate": "newData.val() == true"
+          },
+          "gallery": {
+            ".validate": "newData.val() == true"
+          },
+          "help": {
+            ".validate": "newData.val() == true"
+          },
+          "myAccount": {
+            ".validate": "newData.val() == true"
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       }
     }
