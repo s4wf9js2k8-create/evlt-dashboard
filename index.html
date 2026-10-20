@@ -1528,7 +1528,7 @@
           showDatabaseWriteError(new Error('Database connection is unavailable'));
           return Promise.resolve(false);
         }
-        return database.ref(path).set(value).catch(err => {
+        return database.ref(path).set(value).then(() => true).catch(err => {
           showDatabaseWriteError(err);
           return false;
         });
@@ -1541,7 +1541,7 @@
         }
         const payload = {};
         Object.keys(updates).forEach(k => { payload['EVLT_ADMIN_DB/' + k] = updates[k]; });
-        return database.ref().update(payload).catch(err => {
+        return database.ref().update(payload).then(() => true).catch(err => {
           showDatabaseWriteError(err);
           return false;
         });
@@ -2843,12 +2843,6 @@
           const userPin = vol.Pin || vol.pin || '';
           if (userPin && verifyPin(pinVal, userPin)) {
             clearFailedLogins();
-            // quietly upgrade this volunteer's stored PIN if it is still plain text
-            if (!isHashedPin(userPin)) {
-              vol.Pin = hashPin(userPin);
-              delete vol.pin;
-              dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
-            }
             currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
             finishLogin();
           } else { fail(); }
@@ -7524,16 +7518,26 @@
           return;
         }
 
+        const previousPin = vols[idx].Pin;
+        const previousLegacyPin = vols[idx].pin;
         vols[idx].Pin = hashPin(newPin);
         delete vols[idx].pin;
         currentUser.volData = vols[idx];
 
-        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
-
-        document.getElementById('myAccountCurrentPin').value = '';
-        document.getElementById('myAccountNewPin').value = '';
-        document.getElementById('myAccountConfirmPin').value = '';
-        successDiv.style.display = 'block';
+        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers).then(saved => {
+          if (!saved) {
+            if (previousPin === undefined) delete vols[idx].Pin; else vols[idx].Pin = previousPin;
+            if (previousLegacyPin === undefined) delete vols[idx].pin; else vols[idx].pin = previousLegacyPin;
+            currentUser.volData = vols[idx];
+            errDiv.innerText = 'Your PIN could not be changed. Please contact Louie Hull.';
+            errDiv.style.display = 'block';
+            return;
+          }
+          document.getElementById('myAccountCurrentPin').value = '';
+          document.getElementById('myAccountNewPin').value = '';
+          document.getElementById('myAccountConfirmPin').value = '';
+          successDiv.style.display = 'block';
+        });
       }
 
       function renderGalleryPage() {
