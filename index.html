@@ -3287,7 +3287,9 @@
           sections[p.section].push(p);
         });
 
-        let html = '';
+        let html = currentUser.isSystemAdmin
+          ? `<div class="sidebar-section-label">Admin</div><a href="#" class="${currentView === 'settings' ? 'active' : ''}" onclick="navigate('settings'); return false;"><i data-lucide="settings"></i> Settings & Permissions</a>`
+          : '';
         Object.entries(sections).forEach(([secName, pages]) => {
           html += `<div class="sidebar-section-label">${secName}</div>`;
           pages.forEach(p => {
@@ -3303,7 +3305,6 @@
 
         html += `
           <div class="sidebar-section-label" style="margin-top: 1.5rem;">Session</div>
-          ${currentUser.isSystemAdmin ? `<a href="#" class="${currentView === 'settings' ? 'active' : ''}" onclick="navigate('settings'); return false;"><i data-lucide="settings"></i> System Settings & Permissions</a>` : ''}
           ${userHasAccess('help') ? `<a href="#" class="${currentView === 'help' ? 'active' : ''}" onclick="navigate('help'); return false;"><i data-lucide="life-buoy"></i> Help & Tutorials</a>` : ''}
           ${currentUser.volData && userHasAccess('myAccount') ? `
             <a href="#" class="${currentView === 'myAccount' ? 'active' : ''}" onclick="navigate('myAccount'); return false;">
