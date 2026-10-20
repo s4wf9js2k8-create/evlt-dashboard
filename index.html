@@ -303,7 +303,7 @@
     </style>
   </head>
   <body>
-    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-17-GOOGLE-ADMIN-LOGIN</div>
+    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-18-EMAIL-APPROVAL</div>
     <div id="print-area"></div>
 
     <!-- Dedicated Login Page -->
@@ -334,22 +334,26 @@
           <i data-lucide="shield-check"></i> Louie Hull: Admin sign-in with Google
         </button>
         <form onsubmit="handleUserLogin(event)">
-          <div class="form-group">
-            <label for="loginUserSelect">Account</label>
-            <select id="loginUserSelect" required>
-              <option value="">Loading accounts...</option>
-            </select>
+          <div id="signupNameGroup" class="form-group" style="display:none;">
+            <label for="signupVolunteerName">Your full name</label>
+            <input type="text" id="signupVolunteerName" maxlength="120" autocomplete="name" placeholder="Name used on the volunteer rota">
           </div>
           <div class="form-group">
-            <label for="loginUserPin">PIN Code / Password</label>
-            <input type="password" id="loginUserPin" placeholder="Enter PIN" autocomplete="current-password">
+            <label for="loginEmail">Email address</label>
+            <input type="email" id="loginEmail" required autocomplete="username" placeholder="you@example.com">
           </div>
-          <div id="loginErrorMsg" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
-            Incorrect PIN. Please try again.
+          <div class="form-group">
+            <label for="loginUserPin">Password</label>
+            <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters">
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
+          <div id="loginErrorMsg" role="status" aria-live="polite" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
+            Enter your volunteer email and password.
+          </div>
+          <button id="loginSubmitButton" type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
             <i data-lucide="log-in"></i> Sign In
           </button>
+          <button id="signupToggleButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;" onclick="toggleVolunteerSignup()">First time? Create an account</button>
+          <button id="resetPasswordButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;" onclick="resetVolunteerPassword()">Forgot password?</button>
         </form>
       </div>
     </section>
@@ -1251,7 +1255,7 @@
 
       let db = {
         volunteers: [
-          { Name: 'Louie Hull', Pin: '1234', Roles: 'Admin, Management, Driver, Maintenance', 'DBS Status': 'Cleared' }
+          { Name: 'Louie Hull', Roles: 'Admin, Management, Driver, Maintenance', 'DBS Status': 'Cleared' }
         ],
         fleetItems: [
           { name: 'Canadian Pacific', type: 'Steam', gauge: "7 1/4''", state: 'In Service' },
@@ -1997,25 +2001,31 @@
       }
 
       function attachDatabaseListener() {
-        if (!database) {
+        if (!database || !currentUser) {
           showLoginPage();
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
+        if (databaseListener) return;
+        databaseListener = snapshot => {
           const val = snapshot.val();
           if (val) {
             db = val;
             normaliseDb();
+            if (currentUser && !currentUser.isSystemAdmin) {
+              currentUser.volData = (db.volunteers || []).find(v => getVolunteerName(v).toLowerCase() === String(currentUser.name || '').toLowerCase()) || null;
+            }
           }
           processIncomingNotifications();
           archiveAndResetIfNewDay();
           renderInitialApp();
-        }, (err) => {
+        };
+        database.ref('EVLT_ADMIN_DB').on('value', databaseListener, err => {
           console.error("Database connection error:", err);
           currentUser = null;
+          detachDatabaseListener();
           showLoginPage();
-          showLoginError('Could not load secure account data. Please check your connection or contact an administrator.');
+          showLoginError('Could not load approved account data. Check your connection or ask Louie for help.');
         });
       }
 
@@ -2041,7 +2051,7 @@
       let lastActivityAt = 0;
 
       function expireSessionIfIdle() {
-        if (!currentUser || currentUser.isShopKiosk || !lastActivityAt) return false;
+        if (!currentUser || !lastActivityAt) return false;
         if (Date.now() - lastActivityAt < SESSION_IDLE_TIMEOUT_MS) return false;
         logoutDevice();
         showLoginError('You were signed out after 30 minutes without activity.');
@@ -2049,17 +2059,16 @@
       }
 
       function activateAnonymousSession() {
-        if (!auth) return Promise.reject(new Error('Firebase Authentication is unavailable'));
-        if (auth.currentUser && auth.currentUser.isAnonymous) return Promise.resolve();
-        return auth.signOut().then(() => auth.signInAnonymously());
+        return auth ? auth.signOut() : Promise.resolve();
       }
 
       function logoutDevice() {
         clearRememberedUser();
         currentUser = null;
         lastActivityAt = 0;
+        detachDatabaseListener();
         showLoginPage();
-        activateAnonymousSession().catch(err => console.error('Could not return to the normal sign-in session:', err));
+        if (auth) auth.signOut().catch(err => console.error('Could not sign out:', err));
       }
 
       ['pointerdown', 'keydown', 'touchstart'].forEach(eventName => {
@@ -2604,19 +2613,24 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         initFirebaseMessaging();
-
-        if (!auth) {
-          console.error('Firebase Authentication is unavailable.');
+        if (!auth || !database) {
+          console.error('Firebase Authentication or Realtime Database is unavailable.');
           showLoginPage();
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        activateAnonymousSession().then(() => {
-          attachDatabaseListener();
-        }).catch((err) => {
-          console.error("Firebase authentication failed:", err);
+        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).then(() => {
+          auth.onAuthStateChanged(user => { routeAuthenticatedUser(user); }, err => {
+            console.error('Firebase authentication state error:', err);
+            currentUser = null;
+            detachDatabaseListener();
+            showLoginPage();
+            showLoginError('Could not verify your sign-in. Please reload and try again.');
+          });
+        }).catch(err => {
+          console.error('Could not set secure session persistence:', err);
           showLoginPage();
-          showLoginError('Could not establish a secure connection. Please check your connection or contact an administrator.');
+          showLoginError('Could not establish a secure session. Please reload and try again.');
         });
       });
 
@@ -2750,7 +2764,6 @@
       }
 
       const SYSTEM_ADMIN_EMAIL = 'impulseflame619@gmail.com';
-      const KIOSK_PIN_HASH = 'h2:b94f20a6:60bed9a6bdecfbe29e4d4a07f734b596923f5eb747a90ef0aa33155ee1e624a6';
       const LOGIN_MAX_FAILS = 5;
       const LOGIN_LOCK_SECONDS = 60;
 
@@ -2790,99 +2803,272 @@
         }
       }
 
+      let volunteerSignupMode = false;
+      let databaseListener = null;
+      let pendingBindingRef = null;
+
+      function setLoginNotice(message, isError = true) {
+        const notice = document.getElementById('loginErrorMsg');
+        if (!notice) return;
+        notice.textContent = message || '';
+        notice.style.color = isError ? '#dc2626' : '#166534';
+        notice.style.display = message ? 'block' : 'none';
+      }
+
+      function toggleVolunteerSignup() {
+        volunteerSignupMode = !volunteerSignupMode;
+        const nameGroup = document.getElementById('signupNameGroup');
+        const nameInput = document.getElementById('signupVolunteerName');
+        const submit = document.getElementById('loginSubmitButton');
+        const toggle = document.getElementById('signupToggleButton');
+        const reset = document.getElementById('resetPasswordButton');
+        const password = document.getElementById('loginUserPin');
+        if (nameGroup) nameGroup.style.display = volunteerSignupMode ? 'block' : 'none';
+        if (nameInput) nameInput.required = volunteerSignupMode;
+        if (submit) submit.textContent = volunteerSignupMode ? 'Create account' : 'Sign In';
+        if (toggle) toggle.textContent = volunteerSignupMode ? 'Already registered? Sign in' : 'First time? Create an account';
+        if (reset) reset.style.display = volunteerSignupMode ? 'none' : 'block';
+        if (password) password.autocomplete = volunteerSignupMode ? 'new-password' : 'current-password';
+        setLoginNotice('');
+      }
+
       function startSystemAdminLogin() {
-        const select = document.getElementById('loginUserSelect');
-        if (!select) return;
-        select.value = 'SYSTEM_ADMIN';
-        updateLoginCredentialPrompt();
-        const err = document.getElementById('loginErrorMsg');
-        if (err) err.style.display = 'none';
-        return handleUserLogin({ preventDefault() {} });
+        if (!auth) { setLoginNotice('Secure sign-in is unavailable. Please reload and try again.'); return; }
+        setLoginNotice('');
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => {
+          console.error('System administrator sign-in failed:', err);
+          setLoginNotice(err && err.code === 'auth/popup-blocked' ? 'Allow pop-ups for this site, then try Google sign-in again.' : 'Google sign-in failed. Please try again.');
+        });
       }
 
       async function handleUserLogin(e) {
         e.preventDefault();
-        const accountVal = document.getElementById('loginUserSelect').value;
-        const pinVal = document.getElementById('loginUserPin').value.trim();
-        const errDiv = document.getElementById('loginErrorMsg');
-        const showErr = (msg) => {
-          if (msg) errDiv.innerText = msg;
-          errDiv.style.display = 'block';
-        };
-        const defaultErr = errDiv.getAttribute('data-default') || errDiv.innerText;
-        errDiv.setAttribute('data-default', defaultErr);
-
-        if (!accountVal) return;
-
+        const email = String(document.getElementById('loginEmail')?.value || '').trim();
+        const password = String(document.getElementById('loginUserPin')?.value || '');
+        if (!email || !password) return;
         const locked = loginLockSecondsLeft();
-        if (locked > 0) { showErr(`Too many incorrect attempts. Try again in ${locked} seconds.`); return; }
+        if (locked > 0) { setLoginNotice('Too many attempts. Try again in ' + locked + ' seconds.'); return; }
+        if (!auth) { setLoginNotice('Secure sign-in is unavailable. Please reload and try again.'); return; }
 
-        const fail = () => { registerFailedLogin(); showErr(defaultErr); };
-
-        if (accountVal === 'SYSTEM_ADMIN') {
-          try {
-            if (!auth) throw new Error('Secure sign-in is unavailable. Please reload and try again.');
-            const provider = new firebase.auth.GoogleAuthProvider();
-            const result = await auth.signInWithPopup(provider);
-            const signedInUser = result && result.user;
-            const signedInEmail = String(signedInUser?.email || '').toLowerCase();
-            if (!signedInUser || !signedInUser.emailVerified || signedInEmail !== SYSTEM_ADMIN_EMAIL) {
-              await auth.signOut();
-              await auth.signInAnonymously().catch(() => {});
-              throw new Error('Only Louie Hull’s verified Google account can use System Admin.');
+        try {
+          setLoginNotice('Connecting securely…', false);
+          if (volunteerSignupMode) {
+            const name = String(document.getElementById('signupVolunteerName')?.value || '').trim();
+            if (!name) { setLoginNotice('Enter your full name as it appears on the volunteer rota.'); return; }
+            const credential = await auth.createUserWithEmailAndPassword(email, password);
+            if (credential.user) {
+              await credential.user.updateProfile({ displayName: name });
+              await credential.user.sendEmailVerification();
             }
             clearFailedLogins();
-            currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
-            finishLogin();
-          } catch (err) {
-            console.error('System administrator sign-in failed:', err);
-            showErr(err && err.message ? err.message : 'Google sign-in failed. Please try again.');
+            await auth.signOut();
+            volunteerSignupMode = false;
+            toggleVolunteerSignup();
+            const emailInput = document.getElementById('loginEmail');
+            if (emailInput) emailInput.value = email;
+            setLoginNotice('Account created. Check your email and click the verification link, then sign in here. Louie must approve the account before it opens volunteer records.', false);
+            return;
           }
-          return;
-        }
-
-        if (accountVal === 'SHOP_IPAD') {
-          if (verifyPin(pinVal, KIOSK_PIN_HASH)) {
-            clearFailedLogins();
-            currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
-            finishLogin();
-          } else { fail(); }
-          return;
-        }
-
-        const vols = db.volunteers || [];
-        const vol = vols.find(v => getVolunteerName(v) === accountVal);
-        if (vol) {
-          const userPin = vol.Pin || vol.pin || '';
-          if (userPin && verifyPin(pinVal, userPin)) {
-            clearFailedLogins();
-            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
-            finishLogin();
-          } else { fail(); }
-        } else {
-          fail();
+          await auth.signInWithEmailAndPassword(email, password);
+          clearFailedLogins();
+          setLoginNotice('Signed in. Checking your email verification and approval…', false);
+        } catch (err) {
+          console.error('Email sign-in failed:', err);
+          registerFailedLogin();
+          const messages = {
+            'auth/invalid-credential': 'That email or password is not correct.',
+            'auth/user-not-found': 'No account was found for that email. Choose “Create an account” to request access.',
+            'auth/wrong-password': 'That email or password is not correct.',
+            'auth/email-already-in-use': 'An account already uses that email. Sign in or reset its password.',
+            'auth/weak-password': 'Choose a password with at least 8 characters.',
+            'auth/invalid-email': 'Enter a valid email address.',
+            'auth/too-many-requests': 'Too many attempts. Wait a little and try again.',
+            'auth/operation-not-allowed': 'Email sign-in is not enabled in Firebase yet. Ask the administrator to enable it.'
+          };
+          setLoginNotice(messages[err && err.code] || 'Sign-in could not be completed. Check your details and try again.');
         }
       }
 
-      function finishLogin() {
-        const complete = () => {
-          lastActivityAt = Date.now();
-          // Remember-device cannot be implemented safely with a client-side, editable record.
-          clearRememberedUser();
-          hideLoginPage();
-          renderSidebar();
-          navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
-        };
-        if (currentUser && !currentUser.isSystemAdmin) {
-          activateAnonymousSession().then(complete).catch(err => {
-            console.error('Could not establish a normal user session:', err);
-            currentUser = null;
-            showLoginPage();
-            showLoginError('Could not establish a secure session. Please reload and try again.');
-          });
+      async function resetVolunteerPassword() {
+        const email = String(document.getElementById('loginEmail')?.value || '').trim();
+        if (!email) { setLoginNotice('Enter your email address first, then choose “Forgot password?”.'); return; }
+        try {
+          await auth.sendPasswordResetEmail(email);
+          setLoginNotice('If an account exists for that email, Firebase will send a password reset link.', false);
+        } catch (err) {
+          console.error('Password reset request failed:', err);
+          setLoginNotice('Password reset could not be sent. Check the email address and try again.');
+        }
+      }
+
+      function detachDatabaseListener() {
+        if (database && databaseListener) database.ref('EVLT_ADMIN_DB').off('value', databaseListener);
+        databaseListener = null;
+      }
+
+      function launchApprovedAccount(user, binding, isSystemAdmin = false) {
+        if (pendingBindingRef) pendingBindingRef.off();
+        pendingBindingRef = null;
+        const email = String(user.email || '');
+        if (!isSystemAdmin && (!binding || binding.approved !== true || binding.email !== email || !binding.volunteerName)) {
+          currentUser = null;
+          showLoginPage();
+          setLoginNotice('This account is not approved yet. Louie will link it to your volunteer record after reviewing the sign-up.');
           return;
         }
-        complete();
+        currentUser = isSystemAdmin
+          ? { name: 'System Admin', email: email, isSystemAdmin: true, isShopKiosk: false }
+          : { name: String(binding.volunteerName), email: email, isSystemAdmin: false, isShopKiosk: false, volunteerUid: user.uid };
+        lastActivityAt = Date.now();
+        setLoginNotice('');
+        attachDatabaseListener();
+      }
+
+      let authRouteSequence = 0;
+      async function routeAuthenticatedUser(user) {
+        const routeId = ++authRouteSequence;
+        if (pendingBindingRef) pendingBindingRef.off();
+        pendingBindingRef = null;
+        if (!user) {
+          currentUser = null;
+          detachDatabaseListener();
+          showLoginPage();
+          return;
+        }
+        if (user.isAnonymous || !user.email) {
+          await auth.signOut().catch(() => {});
+          setLoginNotice('Sign in with your volunteer email to continue.');
+          return;
+        }
+        try {
+          await user.reload();
+          await user.getIdToken(true);
+          if (routeId !== authRouteSequence) return;
+          if (!user.emailVerified) {
+            showLoginPage();
+            setLoginNotice('Verify your email using the link Firebase sent, then return here and sign in.');
+            return;
+          }
+          const providers = (user.providerData || []).map(p => p.providerId);
+          const isAdmin = String(user.email).toLowerCase() === SYSTEM_ADMIN_EMAIL && providers.includes('google.com');
+          if (isAdmin) {
+            launchApprovedAccount(user, null, true);
+            return;
+          }
+
+          const bindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + user.uid);
+          const bindingSnapshot = await bindingRef.once('value');
+          if (routeId !== authRouteSequence) return;
+          const binding = bindingSnapshot.val();
+          if (binding && binding.approved === true && binding.email === user.email && binding.volunteerName) {
+            launchApprovedAccount(user, binding, false);
+            return;
+          }
+
+          const requestRef = database.ref('EVLT_ACCOUNT_REQUESTS/' + user.uid);
+          const requestSnapshot = await requestRef.once('value');
+          if (routeId !== authRouteSequence) return;
+          if (!requestSnapshot.exists()) {
+            const displayName = String(user.displayName || '').trim();
+            if (!displayName) {
+              showLoginPage();
+              setLoginNotice('Your sign-up needs a full name. Choose “Create an account” and register again with your volunteer name.');
+              return;
+            }
+            await requestRef.set({ email: user.email, name: displayName, createdAt: firebase.database.ServerValue.TIMESTAMP });
+          }
+
+          currentUser = null;
+          detachDatabaseListener();
+          showLoginPage();
+          setLoginNotice('Email verified. Your sign-up is waiting for Louie to link it to your volunteer record.');
+          pendingBindingRef = bindingRef;
+          pendingBindingRef.on('value', snapshot => {
+            const approvedBinding = snapshot.val();
+            if (approvedBinding && approvedBinding.approved === true && approvedBinding.email === user.email && approvedBinding.volunteerName) {
+              launchApprovedAccount(user, approvedBinding, false);
+            }
+          }, err => {
+            console.error('Approval status check failed:', err);
+            setLoginNotice('Could not check approval status. Check your connection and sign in again.');
+          });
+        } catch (err) {
+          if (routeId !== authRouteSequence) return;
+          console.error('Account verification or approval check failed:', err);
+          currentUser = null;
+          detachDatabaseListener();
+          showLoginPage();
+          setLoginNotice('Could not verify your account status. Check your connection and try again.');
+        }
+      }
+
+      function loadPendingAccountRequests() {
+        const panel = document.getElementById('accountRequestsPanel');
+        if (!panel || !currentUser || !currentUser.isSystemAdmin) return;
+        Promise.all([
+          database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
+          database.ref('EVLT_ACCOUNT_BINDINGS').once('value')
+        ]).then(([requestsSnapshot, bindingsSnapshot]) => {
+          if (!document.getElementById('accountRequestsPanel')) return;
+          const requests = requestsSnapshot.val() || {};
+          const bindings = bindingsSnapshot.val() || {};
+          const entries = Object.keys(requests).map(uid => ({ uid: uid, request: requests[uid] })).filter(x => x.request && x.request.email && x.request.name);
+          if (!entries.length) {
+            panel.innerHTML = '<p style="font-size:.82rem;color:var(--text-muted);">No sign-ups are waiting for approval.</p>';
+            return;
+          }
+          const volunteers = (db.volunteers || []).filter(v => !v.disabled);
+          panel.innerHTML = entries.map(entry => {
+            const options = ['<option value="">-- Select the matching volunteer --</option>'].concat(volunteers.map(v => {
+              const name = getVolunteerName(v);
+              const used = Object.keys(bindings).some(uid => uid !== entry.uid && bindings[uid] && bindings[uid].approved === true && String(bindings[uid].volunteerName || '').toLowerCase() === name.toLowerCase());
+              return '<option value="' + escapeHtml(name) + '"' + (used ? ' disabled' : '') + '>' + escapeHtml(name) + (used ? ' (already linked)' : '') + '</option>';
+            })).join('');
+            const safeUid = inlineJsArg(entry.uid);
+            return '<article class="card" style="padding:1rem;margin:.65rem 0;">' +
+              '<strong>' + escapeHtml(entry.request.name) + '</strong><div style="font-size:.82rem;">' + escapeHtml(entry.request.email) + '</div>' +
+              '<label for="accountVolunteer_' + escapeHtml(entry.uid) + '" style="display:block;margin-top:.65rem;">Link to volunteer record</label>' +
+              '<select id="accountVolunteer_' + escapeHtml(entry.uid) + '" style="width:100%;margin:.35rem 0;">' + options + '</select>' +
+              '<div style="display:flex;gap:.5rem;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="approveVolunteerAccount(' + safeUid + ')">Approve and link</button>' +
+              '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button></div></article>';
+          }).join('');
+        }).catch(err => {
+          console.error('Could not load sign-up requests:', err);
+          panel.textContent = 'Could not load sign-up requests. Refresh the page and try again.';
+        });
+      }
+
+      async function approveVolunteerAccount(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        const requestSnapshot = await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).once('value');
+        const request = requestSnapshot.val();
+        const volunteerName = String(document.getElementById('accountVolunteer_' + uid)?.value || '').trim();
+        if (!request || !request.email || !volunteerName) { alert('Choose a volunteer record before approving this request.'); return; }
+        const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
+        const bindings = bindingsSnapshot.val() || {};
+        const alreadyLinked = Object.keys(bindings).some(otherUid => otherUid !== uid && bindings[otherUid] && bindings[otherUid].approved === true && String(bindings[otherUid].volunteerName || '').toLowerCase() === volunteerName.toLowerCase());
+        if (alreadyLinked) { alert('That volunteer record is already linked to another account.'); loadPendingAccountRequests(); return; }
+        const binding = { approved: true, email: request.email, volunteerName: volunteerName, approvedBy: SYSTEM_ADMIN_EMAIL, approvedAt: firebase.database.ServerValue.TIMESTAMP };
+        const updates = {};
+        updates['EVLT_ACCOUNT_BINDINGS/' + uid] = binding;
+        updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null;
+        await database.ref().update(updates);
+        loadPendingAccountRequests();
+      }
+
+      async function rejectVolunteerAccount(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        if (!confirm('Remove this sign-up request? The account will remain unable to access volunteer records.')) return;
+        await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove();
+        loadPendingAccountRequests();
+      }
+
+      function finishLogin() {
+        lastActivityAt = Date.now();
+        clearRememberedUser();
+        hideLoginPage();
+        renderSidebar();
+        navigate(currentUser && currentUser.isShopKiosk ? 'clock' : 'dashboard');
       }
 
       function hasManagementPermission() {
@@ -3475,7 +3661,7 @@
 
       function handleClockAction(e) {
         e.preventDefault();
-        if (currentUser && !currentUser.isSystemAdmin && !currentUser.isShopKiosk) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
           alert('Clock-in actions are restricted to System Admin or Shop iPad accounts only.');
           return;
         }
@@ -3580,7 +3766,7 @@
           <div class="card" style="padding: 1.25rem; text-align:center;">
             <i data-lucide="shield-alert" style="width:36px; height:36px; color:#dc2626; margin-bottom:0.75rem;"></i>
             <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem;">Restricted</h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted);">Attendance can only be recorded from the Shop iPad account, or by a System Admin.</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Attendance can only be recorded by the System Admin.</p>
           </div>
         `;
 
@@ -7467,90 +7653,31 @@
             </div>
 
             <div class="card" style="padding:1.25rem;">
-              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Change PIN / Password</h3>
-              <form onsubmit="saveMyAccountPin(event)">
-                <div class="form-group">
-                  <label>Current PIN</label>
-                  <input type="password" id="myAccountCurrentPin" placeholder="Enter current PIN" required>
-                </div>
-                <div class="form-group">
-                  <label>New PIN</label>
-                  <input type="password" id="myAccountNewPin" placeholder="Enter new PIN" minlength="4" required>
-                </div>
-                <div class="form-group">
-                  <label>Confirm New PIN</label>
-                  <input type="password" id="myAccountConfirmPin" placeholder="Confirm new PIN" minlength="4" required>
-                </div>
-                <div id="myAccountPinError" style="color:#dc2626;font-size:0.75rem;margin-bottom:0.65rem;display:none;"></div>
-                <div id="myAccountPinSuccess" style="color:#16a34a;font-size:0.75rem;margin-bottom:0.65rem;display:none;">PIN updated successfully.</div>
-                <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="key"></i> Update PIN</button>
-              </form>
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Password</h3>
+              <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Signed in as ${escapeHtml(currentUser.email || "")}. Firebase can email you a secure password reset link.</p>
+              <div id="myAccountPasswordNotice" role="status" aria-live="polite" style="font-size:.75rem;margin-bottom:.65rem;display:none;"></div>
+              <button type="button" class="btn btn-primary btn-sm" onclick="sendMyAccountPasswordReset()"><i data-lucide="key"></i> Email a password reset link</button>
             </div>
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveMyAccountPin(e) {
-        e.preventDefault();
-        const errDiv = document.getElementById('myAccountPinError');
-        const successDiv = document.getElementById('myAccountPinSuccess');
-        errDiv.style.display = 'none';
-        successDiv.style.display = 'none';
-
-        if (!currentUser || !currentUser.volData) return;
-
-        const currentPin = document.getElementById('myAccountCurrentPin').value.trim();
-        const newPin = document.getElementById('myAccountNewPin').value.trim();
-        const confirmPin = document.getElementById('myAccountConfirmPin').value.trim();
-
-        const vol = currentUser.volData;
-        const actualPin = vol.Pin || vol.pin || '1234';
-
-        if (!verifyPin(currentPin, actualPin)) {
-          errDiv.innerText = 'Current PIN is incorrect.';
-          errDiv.style.display = 'block';
-          return;
+      async function sendMyAccountPasswordReset() {
+        const notice = document.getElementById('myAccountPasswordNotice');
+        if (!notice || !currentUser || !currentUser.email || !auth) return;
+        notice.style.display = 'block';
+        notice.style.color = '#64748b';
+        notice.textContent = 'Sending reset link…';
+        try {
+          await auth.sendPasswordResetEmail(currentUser.email);
+          notice.style.color = '#166534';
+          notice.textContent = 'If this email belongs to an account, Firebase will send a password reset link.';
+        } catch (err) {
+          console.error('Password reset request failed:', err);
+          notice.style.color = '#dc2626';
+          notice.textContent = 'Could not send the reset link. Please try again or contact Louie Hull.';
         }
-        if (!newPin || newPin.length < 4) {
-          errDiv.innerText = 'New PIN must be at least 4 characters.';
-          errDiv.style.display = 'block';
-          return;
-        }
-        if (newPin !== confirmPin) {
-          errDiv.innerText = 'New PIN and confirmation do not match.';
-          errDiv.style.display = 'block';
-          return;
-        }
-
-        const vols = db.volunteers || [];
-        const idx = vols.findIndex(v => v === vol);
-        if (idx === -1) {
-          errDiv.innerText = 'Unable to locate your volunteer record. Please contact a System Admin.';
-          errDiv.style.display = 'block';
-          return;
-        }
-
-        const previousPin = vols[idx].Pin;
-        const previousLegacyPin = vols[idx].pin;
-        vols[idx].Pin = hashPin(newPin);
-        delete vols[idx].pin;
-        currentUser.volData = vols[idx];
-
-        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers).then(saved => {
-          if (!saved) {
-            if (previousPin === undefined) delete vols[idx].Pin; else vols[idx].Pin = previousPin;
-            if (previousLegacyPin === undefined) delete vols[idx].pin; else vols[idx].pin = previousLegacyPin;
-            currentUser.volData = vols[idx];
-            errDiv.innerText = 'Your PIN could not be changed. Please contact Louie Hull.';
-            errDiv.style.display = 'block';
-            return;
-          }
-          document.getElementById('myAccountCurrentPin').value = '';
-          document.getElementById('myAccountNewPin').value = '';
-          document.getElementById('myAccountConfirmPin').value = '';
-          successDiv.style.display = 'block';
-        });
       }
 
       function renderGalleryPage() {
@@ -7779,6 +7906,12 @@
             </div>
           </div>
 
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Volunteer email sign-ups</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Only approve a request after confirming the person. Each volunteer record can link to one verified email account.</p>
+            <div id="accountRequestsPanel" aria-live="polite">Loading sign-up requests…</div>
+          </div>
+
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
             <div class="card" style="padding:1.25rem;">
               <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Push Notification Token</h3>
@@ -7800,6 +7933,7 @@
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        loadPendingAccountRequests();
       }
 
       function exportAppHtml() {

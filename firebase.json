@@ -4,11 +4,12 @@
   },
   "auth": {
     "providers": {
-      "anonymous": true,
+      "anonymous": false,
       "googleSignIn": {
         "oAuthBrandDisplayName": "EVLT Operations",
         "supportEmail": "impulseflame619@gmail.com"
-      }
+      },
+      "emailPassword": true
     }
   }
 }
