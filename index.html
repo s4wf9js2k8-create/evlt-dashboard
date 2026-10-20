@@ -2992,6 +2992,11 @@
         databaseListener = null;
         if (database) Object.keys(pageDatabaseListeners).forEach(key => database.ref('EVLT_ADMIN_DB/' + key).off('value', pageDatabaseListeners[key]));
         pageDatabaseListeners = {};
+        if (activeBindingRef) activeBindingRef.off();
+        activeBindingRef = null;
+        db = {};
+        const content = document.getElementById('content');
+        if (content) content.innerHTML = '';
       }
 
       function launchApprovedAccount(user, binding, isSystemAdmin = false) {
