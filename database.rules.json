@@ -1,0 +1,10 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "EVLT_ADMIN_DB": {
+      ".read": "auth != null",
+      ".write": "auth != null && ((auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true) || (data.child('customRoles').val() == newData.child('customRoles').val() && data.child('editPermissions').val() == newData.child('editPermissions').val() && data.child('rolePageAccess').val() == newData.child('rolePageAccess').val() && data.child('userPermissions').val() == newData.child('userPermissions').val() && data.child('volunteers').val() == newData.child('volunteers').val() && data.child('notifications').val() == newData.child('notifications').val()))"
+    }
+  }
+}
