@@ -1473,7 +1473,7 @@
         document.getElementById('editPermissionsModalTitle').innerText = title || 'Manage Edit Permissions';
         const perms = getFeatureEditPermissions(featureKey);
         const roles = getAvailableRoles();
-        document.getElementById('editPermissionsRoles').innerHTML = roles.length ? roles.map(role => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${role}" class="edit-perm-role-cb" ${perms.roles.includes(role) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${role}</label>`).join('') : '<p style="font-size:.75rem;color:var(--text-muted);">No qualifications set up yet — add one from the Qualifications page.</p>';
+        document.getElementById('editPermissionsRoles').innerHTML = roles.length ? roles.map(role => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${escapeHtml(role)}" class="edit-perm-role-cb" ${perms.roles.includes(role) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${escapeHtml(role)}</label>`).join('') : '<p style="font-size:.75rem;color:var(--text-muted);">No qualifications set up yet — add one from the Qualifications page.</p>';
         const volunteers = db.volunteers || [];
         document.getElementById('editPermissionsUsers').innerHTML = volunteers.length ? volunteers.map(v => {
           const name = getVolunteerName(v);
@@ -5621,7 +5621,7 @@
         if (!section) return;
         editingModuleKey = 'railwayTrackSections';
         document.getElementById('genericModalTitle').innerText = `Update ${section.name}`;
-        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track section</label><input id="railwayTrackName" readonly value="${section.name}"></div><div class="form-group"><label>Health / state</label><select id="railwayTrackHealth"><option>Good</option><option>Needs Inspection</option><option>Blocked / Poor</option></select></div><div class="form-group"><label>Inspection notes</label><textarea id="railwayTrackNotes" rows="4" placeholder="Record defects, work required, or inspection notes"></textarea></div>`;
+        document.getElementById('genericFormFields').innerHTML = `<div class="form-group"><label>Track section</label><input id="railwayTrackName" readonly value="${escapeHtml(section.name)}"></div><div class="form-group"><label>Health / state</label><select id="railwayTrackHealth"><option>Good</option><option>Needs Inspection</option><option>Blocked / Poor</option></select></div><div class="form-group"><label>Inspection notes</label><textarea id="railwayTrackNotes" rows="4" placeholder="Record defects, work required, or inspection notes"></textarea></div>`;
         document.getElementById('railwayTrackHealth').value = section.health || 'Good';
         document.getElementById('railwayTrackNotes').value = section.notes || '';
         document.getElementById('genericModal').dataset.trackSectionId = sectionId;
