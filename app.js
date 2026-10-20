@@ -1388,6 +1388,7 @@
       document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('signupToggleButton')?.addEventListener('click', toggleVolunteerSignup);
         document.getElementById('resetPasswordButton')?.addEventListener('click', resetVolunteerPassword);
+        document.getElementById('resendVerificationButton')?.addEventListener('click', resendVolunteerVerification);
         initFirebaseMessaging();
         if (!auth || !database) {
           console.error('Firebase Authentication or Realtime Database is unavailable.');
@@ -1599,12 +1600,14 @@
         const submit = document.getElementById('loginSubmitButton');
         const toggle = document.getElementById('signupToggleButton');
         const reset = document.getElementById('resetPasswordButton');
+        const resend = document.getElementById('resendVerificationButton');
         const password = document.getElementById('loginUserPin');
         if (nameGroup) nameGroup.style.display = volunteerSignupMode ? 'block' : 'none';
         if (nameInput) nameInput.required = volunteerSignupMode;
         if (submit) submit.textContent = volunteerSignupMode ? 'Create account' : 'Sign In';
         if (toggle) toggle.textContent = volunteerSignupMode ? 'Already registered? Sign in' : 'First time? Create an account';
         if (reset) reset.style.display = volunteerSignupMode ? 'none' : 'block';
+        if (resend) resend.style.display = volunteerSignupMode ? 'none' : 'block';
         if (password) password.autocomplete = volunteerSignupMode ? 'new-password' : 'current-password';
         setLoginNotice('');
       }
@@ -1613,6 +1616,8 @@
         e.preventDefault();
         const email = String(document.getElementById('loginEmail')?.value || '').trim();
         const password = String(document.getElementById('loginUserPin')?.value || '');
+        let signupStep = 'account creation';
+        let signupUserCreated = false;
         if (!email || !password) return;
         const locked = loginLockSecondsLeft();
         if (locked > 0) { setLoginNotice('Too many attempts. Try again in ' + locked + ' seconds.'); return; }
@@ -1624,8 +1629,11 @@
             const name = String(document.getElementById('signupVolunteerName')?.value || '').trim();
             if (!name) { setLoginNotice('Enter your full name as it appears on the volunteer rota.'); return; }
             const credential = await auth.createUserWithEmailAndPassword(email, password);
+            signupUserCreated = !!credential.user;
             if (credential.user) {
+              signupStep = 'profile setup';
               await credential.user.updateProfile({ displayName: name });
+              signupStep = 'verification email';
               await credential.user.sendEmailVerification();
             }
             clearFailedLogins();
@@ -1651,9 +1659,62 @@
             'auth/weak-password': 'Choose a password with at least 8 characters.',
             'auth/invalid-email': 'Enter a valid email address.',
             'auth/too-many-requests': 'Too many attempts. Wait a little and try again.',
+            'auth/network-request-failed': 'The connection failed. Check the internet connection and try again.',
             'auth/operation-not-allowed': 'Email sign-in is not enabled in Firebase yet. Ask the administrator to enable it.'
           };
-          setLoginNotice(messages[err && err.code] || 'Sign-in could not be completed. Check your details and try again.');
+          const wasSignup = volunteerSignupMode;
+          if (wasSignup && signupUserCreated) {
+            volunteerSignupMode = false;
+            toggleVolunteerSignup();
+            const emailInput = document.getElementById('loginEmail');
+            if (emailInput) emailInput.value = email;
+          }
+          let fallback = wasSignup
+            ? (signupUserCreated
+              ? (signupStep === 'verification email'
+                ? 'Your account was created, but the verification email could not be sent. Sign in with this account, then choose “Resend verification email”.'
+                : 'Your account was created, but account setup did not finish. Do not create another account; ask Louie for help.')
+              : 'The account could not be created. Check the details and try again.');
+          if (!wasSignup) fallback = 'Sign-in could not be completed. Check your details and try again.';
+          if (signupUserCreated && signupStep === 'verification email' && err && err.code === 'auth/too-many-requests') {
+            fallback = 'Your account was created, but Firebase is temporarily limiting verification emails. Wait a little, then sign in and choose “Resend verification email”.';
+          }
+          setLoginNotice((wasSignup && signupUserCreated) ? fallback : (messages[err && err.code] || fallback));
+        }
+      }
+
+      async function resendVolunteerVerification() {
+        if (!auth) {
+          setLoginNotice('Secure sign-in is unavailable. Please reload and try again.');
+          return;
+        }
+        const user = auth.currentUser;
+        if (!user || user.isAnonymous || !user.email) {
+          setLoginNotice('Sign in with the same email and password used to create the account, then choose “Resend verification email”.');
+          document.getElementById('loginEmail')?.focus();
+          return;
+        }
+        const button = document.getElementById('resendVerificationButton');
+        if (button) button.disabled = true;
+        setLoginNotice('Sending a new verification email…', false);
+        try {
+          await user.reload();
+          if (user.emailVerified) {
+            setLoginNotice('This email is already verified. Sign in again to continue.', false);
+            return;
+          }
+          await user.sendEmailVerification();
+          setLoginNotice('Firebase accepted the request. Check the inbox and spam folder for the verification email.', false);
+        } catch (err) {
+          console.error('Verification email resend failed:', err);
+          const messages = {
+            'auth/too-many-requests': 'Firebase is temporarily limiting verification emails. Wait a little before trying again.',
+            'auth/network-request-failed': 'The connection failed. Check the internet connection and try again.',
+            'auth/unauthorized-domain': 'This website is not authorized to send the verification link. Ask Louie to check Firebase settings.'
+          };
+          setLoginNotice(messages[err && err.code] || 'Could not send the verification email. The account is still there; try again later or ask Louie for help.');
+        } finally {
+          if (button) button.disabled = false;
         }
       }
 
