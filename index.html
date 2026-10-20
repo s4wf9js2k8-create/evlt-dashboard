@@ -1331,7 +1331,7 @@
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
         incidents: ['incidents','assets','volunteers'],
-        competency: ['volunteers','trainingTypes','rolePageAccess'],
+        competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles'],
         actions: ['actions','volunteers'],
         maintenance: ['fleetItems','maintenanceLogs','assets'],
@@ -1967,10 +1967,6 @@
         if (!db.userPermissions || typeof db.userPermissions !== 'object' || Array.isArray(db.userPermissions)) {
           db.userPermissions = {};
         }
-        if (!db.rolePageAccess || typeof db.rolePageAccess !== 'object' || Array.isArray(db.rolePageAccess)) {
-          db.rolePageAccess = {};
-        }
-
         if (!db.eurotunnelTrains || !Array.isArray(db.eurotunnelTrains)) db.eurotunnelTrains = [];
         if (!db.eurotunnelSequences || !Array.isArray(db.eurotunnelSequences)) db.eurotunnelSequences = [];
         if (!db.eurotunnelTasks || !Array.isArray(db.eurotunnelTasks)) db.eurotunnelTasks = [];
@@ -2488,7 +2484,7 @@
       // ============================================================
       // NOTIFICATION CENTRE — broadcast messages, visible to anyone
       // granted access to the 'notifications' page (via Manage Page
-      // Permissions or Qualification-Based Page Access, same as any
+      // Permissions, same as any
       // other page). Messages sync to everyone via the normal
       // EVLT_ADMIN_DB realtime listener, and trigger a device
       // notification for anyone with the app open at the time.
@@ -5393,7 +5389,6 @@
         const volunteers = db.volunteers || [];
         const roles = getAvailableRoles();
         const isAdmin = currentUser && currentUser.isSystemAdmin;
-        const rolePageAccess = db.rolePageAccess || {};
         const trainingTypes = db.trainingTypes || [];
 
         content.innerHTML = `
