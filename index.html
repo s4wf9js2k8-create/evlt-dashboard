@@ -339,7 +339,7 @@
           </div>
           <div class="form-group">
             <label for="loginUserPin">PIN Code / Password</label>
-            <input type="password" id="loginUserPin" placeholder="Enter PIN" autocomplete="current-password" required>
+            <input type="password" id="loginUserPin" placeholder="Enter PIN" autocomplete="current-password">
           </div>
           <div id="loginErrorMsg" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
             Incorrect PIN. Please try again.
@@ -2045,11 +2045,18 @@
         return true;
       }
 
+      function activateAnonymousSession() {
+        if (!auth) return Promise.reject(new Error('Firebase Authentication is unavailable'));
+        if (auth.currentUser && auth.currentUser.isAnonymous) return Promise.resolve();
+        return auth.signOut().then(() => auth.signInAnonymously());
+      }
+
       function logoutDevice() {
         clearRememberedUser();
         currentUser = null;
         lastActivityAt = 0;
         showLoginPage();
+        activateAnonymousSession().catch(err => console.error('Could not return to the normal sign-in session:', err));
       }
 
       ['pointerdown', 'keydown', 'touchstart'].forEach(eventName => {
@@ -2601,7 +2608,7 @@
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        (auth.currentUser ? Promise.resolve() : auth.signInAnonymously()).then(() => {
+        activateAnonymousSession().then(() => {
           attachDatabaseListener();
         }).catch((err) => {
           console.error("Firebase authentication failed:", err);
@@ -2627,6 +2634,21 @@
         const currentVal = select.value;
         select.innerHTML = html;
         select.value = currentVal;
+        select.removeEventListener('change', updateLoginCredentialPrompt);
+        select.addEventListener('change', updateLoginCredentialPrompt);
+        updateLoginCredentialPrompt();
+      }
+
+      function updateLoginCredentialPrompt() {
+        const isAdmin = document.getElementById('loginUserSelect')?.value === 'SYSTEM_ADMIN';
+        const label = document.querySelector('label[for="loginUserPin"]');
+        const input = document.getElementById('loginUserPin');
+        if (label) label.innerText = isAdmin ? 'Google account sign-in' : 'PIN Code / Password';
+        if (input) {
+          input.required = !isAdmin;
+          input.placeholder = isAdmin ? 'No PIN needed' : 'Enter PIN';
+          if (isAdmin) input.value = '';
+        }
       }
 
       function showLoginError(message) {
@@ -2724,7 +2746,7 @@
         return entered === String(stored == null ? '' : stored);
       }
 
-      const ADMIN_PIN_HASH = 'h2:e7a1c3d5:d2cbb800f3e518b859b235b977fbbc3943ec95b64d15d056fa0124aa8f2e8888';
+      const SYSTEM_ADMIN_EMAIL = 'impulseflame619@gmail.com';
       const KIOSK_PIN_HASH = 'h2:b94f20a6:60bed9a6bdecfbe29e4d4a07f734b596923f5eb747a90ef0aa33155ee1e624a6';
       const LOGIN_MAX_FAILS = 5;
       const LOGIN_LOCK_SECONDS = 60;
@@ -2785,11 +2807,24 @@
         const fail = () => { registerFailedLogin(); showErr(defaultErr); };
 
         if (accountVal === 'SYSTEM_ADMIN') {
-          if (verifyPin(pinVal, ADMIN_PIN_HASH)) {
+          try {
+            if (!auth) throw new Error('Secure sign-in is unavailable. Please reload and try again.');
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const result = await auth.signInWithPopup(provider);
+            const signedInUser = result && result.user;
+            const signedInEmail = String(signedInUser?.email || '').toLowerCase();
+            if (!signedInUser || !signedInUser.emailVerified || signedInEmail !== SYSTEM_ADMIN_EMAIL) {
+              await auth.signOut();
+              await auth.signInAnonymously().catch(() => {});
+              throw new Error('Only Louie Hull’s verified Google account can use System Admin.');
+            }
             clearFailedLogins();
             currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
             finishLogin();
-          } else { fail(); }
+          } catch (err) {
+            console.error('System administrator sign-in failed:', err);
+            showErr(err && err.message ? err.message : 'Google sign-in failed. Please try again.');
+          }
           return;
         }
 
@@ -2823,12 +2858,24 @@
       }
 
       function finishLogin() {
-        lastActivityAt = Date.now();
-        // Remember-device cannot be implemented safely with a client-side, editable record.
-        clearRememberedUser();
-        hideLoginPage();
-        renderSidebar();
-        navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
+        const complete = () => {
+          lastActivityAt = Date.now();
+          // Remember-device cannot be implemented safely with a client-side, editable record.
+          clearRememberedUser();
+          hideLoginPage();
+          renderSidebar();
+          navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
+        };
+        if (currentUser && !currentUser.isSystemAdmin) {
+          activateAnonymousSession().then(complete).catch(err => {
+            console.error('Could not establish a normal user session:', err);
+            currentUser = null;
+            showLoginPage();
+            showLoginError('Could not establish a secure session. Please reload and try again.');
+          });
+          return;
+        }
+        complete();
       }
 
       function hasManagementPermission() {
