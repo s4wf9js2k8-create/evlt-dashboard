@@ -344,10 +344,6 @@
           <div id="loginErrorMsg" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
             Incorrect PIN. Please try again.
           </div>
-          <div class="form-group" style="display:flex;align-items:center;gap:.5rem;">
-            <input type="checkbox" id="rememberDeviceCheckbox" style="width:auto;" checked>
-            <label for="rememberDeviceCheckbox" style="margin:0;font-weight:500;">Remember this device (skip sign-in next time)</label>
-          </div>
           <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
             <i data-lucide="log-in"></i> Sign In
           </button>
@@ -1353,7 +1349,7 @@
           steps: [
             'On the sign-in screen, choose your name from "Select Account".',
             'Enter your PIN Code / Password.',
-            'Tick "Remember this device" if this is your own phone or a device you use regularly — you won\'t be asked to sign in again on it.',
+            'Sign in with your account whenever you open the dashboard.',
             'Tap "Sign In".'
           ],
           videoUrl: ''
@@ -1534,7 +1530,11 @@
         if (!database) return;
         const payload = {};
         Object.keys(updates).forEach(k => { payload['EVLT_ADMIN_DB/' + k] = updates[k]; });
-        database.ref().update(payload);
+        return database.ref().update(payload).catch(err => {
+          console.error('Database update failed:', err);
+          alert('A change could not be saved. Check your connection and try again.');
+          return false;
+        });
       }
 
       function exportArrayToCsv(filename, rows, columns) {
@@ -1985,7 +1985,8 @@
 
       function attachDatabaseListener() {
         if (!database) {
-          renderInitialApp();
+          showLoginPage();
+          showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
         database.ref('EVLT_ADMIN_DB').on('value', (snapshot) => {
@@ -1999,19 +2000,18 @@
           renderInitialApp();
         }, (err) => {
           console.error("Database connection error:", err);
+          currentUser = null;
+          showLoginPage();
+          showLoginError('Could not load secure account data. Please check your connection or contact an administrator.');
         });
       }
 
       const REMEMBER_KEY = 'evltRememberedUser';
 
+      // Authentication state must never be restored from browser-editable storage.
+      // Keep clearing the legacy value so old devices cannot silently resume a session.
       function saveRememberedUser() {
-        if (!currentUser) return;
-        const record = currentUser.isSystemAdmin
-          ? { type: 'admin' }
-          : currentUser.isShopKiosk
-            ? { type: 'kiosk' }
-            : { type: 'volunteer', name: currentUser.name };
-        try { localStorage.setItem(REMEMBER_KEY, JSON.stringify(record)); } catch (e) {}
+        clearRememberedUser();
       }
 
       function clearRememberedUser() {
@@ -2019,26 +2019,7 @@
       }
 
       function tryRestoreRememberedUser() {
-        let record = null;
-        try { record = JSON.parse(localStorage.getItem(REMEMBER_KEY)); } catch (e) {}
-        if (!record) return false;
-
-        if (record.type === 'admin') {
-          currentUser = { name: 'System Admin', isSystemAdmin: true, isShopKiosk: false };
-          return true;
-        }
-        if (record.type === 'kiosk') {
-          currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
-          return true;
-        }
-        if (record.type === 'volunteer') {
-          const vols = db.volunteers || [];
-          const vol = vols.find(v => getVolunteerName(v) === record.name);
-          if (vol) {
-            currentUser = { name: getVolunteerName(vol), isSystemAdmin: false, isShopKiosk: false, volData: vol };
-            return true;
-          }
-        }
+        // Legacy localStorage records are user-editable and cannot prove identity.
         clearRememberedUser();
         return false;
       }
@@ -2051,13 +2032,6 @@
 
       function renderInitialApp() {
         updateLoginUserDropdown();
-        if (!currentUser && tryRestoreRememberedUser()) {
-          hideLoginPage();
-          renderSidebar();
-          navigate(currentUser.isShopKiosk ? 'clock' : currentView);
-          return;
-        }
-
         if (!currentUser) {
           showLoginPage();
         } else {
@@ -2575,16 +2549,19 @@
         renderDashboard();
         initFirebaseMessaging();
 
-        if (auth) {
-          auth.signInAnonymously().then(() => {
-            attachDatabaseListener();
-          }).catch((err) => {
-            console.error("Auth failed:", err);
-            attachDatabaseListener();
-          });
-        } else {
-          attachDatabaseListener();
+        if (!auth) {
+          console.error('Firebase Authentication is unavailable.');
+          showLoginPage();
+          showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
+          return;
         }
+        auth.signInAnonymously().then(() => {
+          attachDatabaseListener();
+        }).catch((err) => {
+          console.error("Firebase authentication failed:", err);
+          showLoginPage();
+          showLoginError('Could not establish a secure connection. Please check your connection or contact an administrator.');
+        });
       });
 
       function updateLoginUserDropdown() {
@@ -2604,6 +2581,13 @@
         const currentVal = select.value;
         select.innerHTML = html;
         select.value = currentVal;
+      }
+
+      function showLoginError(message) {
+        const err = document.getElementById('loginErrorMsg');
+        if (!err) return;
+        err.innerText = message;
+        err.style.display = 'block';
       }
 
       function showLoginPage() {
@@ -2764,7 +2748,7 @@
         }
 
         if (accountVal === 'SHOP_IPAD') {
-          if (verifyPin(pinVal, ADMIN_PIN_HASH) || verifyPin(pinVal, KIOSK_PIN_HASH)) {
+          if (verifyPin(pinVal, KIOSK_PIN_HASH)) {
             clearFailedLogins();
             currentUser = { name: 'Shop iPad', isSystemAdmin: false, isShopKiosk: true };
             finishLogin();
@@ -2776,7 +2760,7 @@
         const vol = vols.find(v => getVolunteerName(v) === accountVal);
         if (vol) {
           const userPin = vol.Pin || vol.pin || '1234';
-          if (verifyPin(pinVal, userPin) || verifyPin(pinVal, ADMIN_PIN_HASH)) {
+          if (verifyPin(pinVal, userPin)) {
             clearFailedLogins();
             // quietly upgrade this volunteer's stored PIN if it is still plain text
             if (!isHashedPin(userPin)) {
@@ -2793,12 +2777,8 @@
       }
 
       function finishLogin() {
-        const rememberBox = document.getElementById('rememberDeviceCheckbox');
-        if (rememberBox && rememberBox.checked) {
-          saveRememberedUser();
-        } else {
-          clearRememberedUser();
-        }
+        // Remember-device cannot be implemented safely with a client-side, editable record.
+        clearRememberedUser();
         hideLoginPage();
         renderSidebar();
         navigate(currentUser.isShopKiosk ? 'clock' : 'dashboard');
@@ -2822,7 +2802,7 @@
 
       function userHasAccess(pageKey) {
         if (pageKey === 'myAccount') return !!(currentUser && currentUser.volData);
-        if (!currentUser) return true;
+        if (!currentUser) return false;
         if (currentUser.isShopKiosk) return pageKey === 'clock';
 
         if (currentUser.isSystemAdmin) return true;
@@ -3001,7 +2981,7 @@
         const eventBannerHtml = activeEvents.length > 0 ? `
           <div style="background: linear-gradient(135deg, #fef08a, #fde047); color: #713f12; padding: 0.85rem 1rem; border-radius: var(--radius-lg); border: 1px solid #facc15; font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm);">
             <i data-lucide="calendar-range" style="width:20px; height:20px; flex-shrink:0;"></i>
-            <div>Active Event Today: <strong>${activeEvents.map(e => e.Title || e.title).join(', ')}</strong></div>
+            <div>Active Event Today: <strong>${escapeHtml(activeEvents.map(e => e.Title || e.title).join(', '))}</strong></div>
           </div>
         ` : '';
 
@@ -3016,7 +2996,7 @@
         const overdueBannerHtml = overdueActions.length > 0 ? `
           <div style="background:#fef2f2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-lg); border:1px solid #fecaca; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; cursor:pointer;" onclick="navigate('actions')">
             <i data-lucide="clock" style="width:18px; height:18px; flex-shrink:0;"></i>
-            <div><strong>${overdueActions.length} overdue action task${overdueActions.length > 1 ? 's' : ''}:</strong> ${overdueActions.map(a => a.Title || a.title).join(', ')} — <u>View Actions</u></div>
+            <div><strong>${overdueActions.length} overdue action task${overdueActions.length > 1 ? 's' : ''}:</strong> ${escapeHtml(overdueActions.map(a => a.Title || a.title).join(', '))} — <u>View Actions</u></div>
           </div>
         ` : '';
 
@@ -3048,8 +3028,8 @@
                     if (hasCoaches) chips.push({ label: 'Coaches (' + coachNames.join(' & ') + ')', remove: COACHES_VALUE });
                     return chips.map(c => `
                     <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: var(--radius); font-weight: 600; font-size: 0.8rem;">
-                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${c.label}
-                      <button type="button" onclick="removeRunningTrain('${c.remove}')" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
+                      <i data-lucide="train" style="width:14px;height:14px;"></i> ${escapeHtml(c.label)}
+                      <button type="button" onclick="removeRunningTrain(decodeURIComponent('${encodeURIComponent(c.remove).replace(/'/g, '%27')}'))" style="background:none; border:none; color:var(--primary); cursor:pointer; font-weight:bold; padding:0 2px;">&times;</button>
                     </div>
                   `).join('');
                   })()}
@@ -3057,7 +3037,7 @@
               <div style="display: flex; gap: 0.5rem; max-width: 350px;">
                 <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
                   <option value="">-- Add Loco to Today's Run --</option>
-                  ${getLocoOnlyTrains().map(t => `<option value="${t}">${t}</option>`).join('')}
+                  ${getLocoOnlyTrains().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
                   <option value="${COACHES_VALUE}">Coaches (all)</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
