@@ -1207,18 +1207,10 @@
       // ============================================================
       const SCAN_WORKER_URL = "https://hidden-tooth-2a78.s4wf9js2k8.workers.dev";
 
-      // ============================================================
-      // BACKGROUND PUSH — SERVERLESS FUNCTION URL
-      // Deploy the evlt-broadcast-api project to Vercel, then paste
-      // its URL below (ends in /api/send-broadcast).
-      // BROADCAST_SECRET_CLIENT must exactly match the
-      // BROADCAST_SECRET environment variable set on that deployment.
-      // Until both are filled in, notifications still save and show
-      // in-app for anyone with the tab open, they just won't reach
-      // devices where the app is fully closed.
-      // ============================================================
+      // Background push endpoint. Authorization is checked server-side
+      // using a verified Firebase account allowlist; no shared secret is
+      // included in this public dashboard code.
       const BROADCAST_WORKER_URL = "https://evlt-broadcast-api.vercel.app/api/send-broadcast";
-      const BROADCAST_SECRET_CLIENT = "evlt";
 
       // PWA manifest, built at runtime as a Blob so no separate file is needed.
       // Falls back silently if the browser blocks blob: manifests.
@@ -2556,20 +2548,36 @@
       // function isn't configured/reachable — the in-app Notification
       // Centre and open-tab alert above already happened regardless.
       async function triggerBackgroundPush(entry) {
-        if (!BROADCAST_WORKER_URL || BROADCAST_WORKER_URL.includes('YOUR-PROJECT')) return;
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        if (!BROADCAST_WORKER_URL || !auth) return;
 
         try {
-          await fetch(BROADCAST_WORKER_URL, {
+          let firebaseUser = auth.currentUser;
+          if (!firebaseUser || firebaseUser.isAnonymous) {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const result = await auth.signInWithPopup(provider);
+            firebaseUser = result.user;
+          }
+          if (!firebaseUser || !firebaseUser.emailVerified) {
+            throw new Error('Use a verified, approved Google administrator account.');
+          }
+
+          const idToken = await firebaseUser.getIdToken(true);
+          const response = await fetch(BROADCAST_WORKER_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              secret: BROADCAST_SECRET_CLIENT,
-              title: entry.title,
-              body: entry.body
-            })
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + idToken
+            },
+            body: JSON.stringify({ title: entry.title, body: entry.body })
           });
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.error || 'The broadcast service rejected the request.');
+          }
         } catch (e) {
           console.warn('Background push dispatch failed (in-app notification still worked):', e);
+          alert('The in-app notification was saved, but the background push could not be sent. Sign in with an approved Google administrator account and try again.');
         }
       }
 
@@ -2593,7 +2601,7 @@
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
-        auth.signInAnonymously().then(() => {
+        (auth.currentUser ? Promise.resolve() : auth.signInAnonymously()).then(() => {
           attachDatabaseListener();
         }).catch((err) => {
           console.error("Firebase authentication failed:", err);
