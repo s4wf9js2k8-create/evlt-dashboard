@@ -4,7 +4,102 @@
     ".write": false,
     "EVLT_ADMIN_DB": {
       ".read": "auth != null",
-      ".write": "auth != null && ((auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true) || (data.child('customRoles').val() == newData.child('customRoles').val() && data.child('editPermissions').val() == newData.child('editPermissions').val() && data.child('rolePageAccess').val() == newData.child('rolePageAccess').val() && data.child('userPermissions').val() == newData.child('userPermissions').val() && data.child('volunteers').val() == newData.child('volunteers').val() && data.child('notifications').val() == newData.child('notifications').val()))"
+      "actions": {
+        ".write": "auth != null"
+      },
+      "archiveUploads": {
+        ".write": "auth != null"
+      },
+      "assets": {
+        ".write": "auth != null"
+      },
+      "clockLogs": {
+        ".write": "auth != null"
+      },
+      "dailyChecks": {
+        ".write": "auth != null"
+      },
+      "documents": {
+        ".write": "auth != null"
+      },
+      "enquiries": {
+        ".write": "auth != null"
+      },
+      "events": {
+        ".write": "auth != null"
+      },
+      "fleetItems": {
+        ".write": "auth != null"
+      },
+      "galleryPhotos": {
+        ".write": "auth != null"
+      },
+      "helpGuides": {
+        ".write": "auth != null"
+      },
+      "historicalArchive": {
+        ".write": "auth != null"
+      },
+      "incidents": {
+        ".write": "auth != null"
+      },
+      "maintenanceLogs": {
+        ".write": "auth != null"
+      },
+      "nameChangeRequests": {
+        ".write": "auth != null"
+      },
+      "notes": {
+        ".write": "auth != null"
+      },
+      "railwayTrackSections": {
+        ".write": "auth != null"
+      },
+      "railwayTracks": {
+        ".write": "auth != null"
+      },
+      "stock": {
+        ".write": "auth != null"
+      },
+      "suppliers": {
+        ".write": "auth != null"
+      },
+      "eurotunnelTrains": {
+        ".write": "auth != null"
+      },
+      "eurotunnelSequences": {
+        ".write": "auth != null"
+      },
+      "eurotunnelTasks": {
+        ".write": "auth != null"
+      },
+      "eurotunnelMaintenance": {
+        ".write": "auth != null"
+      },
+      "eurotunnelTrackSections": {
+        ".write": "auth != null"
+      },
+      "volunteerDocs": {
+        ".write": "auth != null"
+      },
+      "customRoles": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      },
+      "editPermissions": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      },
+      "rolePageAccess": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      },
+      "userPermissions": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      },
+      "volunteers": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      },
+      "notifications": {
+        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true"
+      }
     }
   }
 }
