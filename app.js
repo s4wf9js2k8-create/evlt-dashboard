@@ -137,10 +137,71 @@
         { key: 'notifications', label: 'Notification Centre', icon: 'bell-ring', section: 'Communication' }
       ];
 
+      const DASHBOARD_WIDGETS = [
+        { key: 'alerts', label: 'Operations alerts' },
+        { key: 'runningTrains', label: "Today's running trains" },
+        { key: 'dailyChecks', label: 'Daily safety inspections' },
+        { key: 'stats', label: 'Operations totals' },
+        { key: 'volunteerHours', label: 'Volunteer hours' },
+        { key: 'railwayLayout', label: 'Railway layout workspace' }
+      ];
+
+      function getDashboardConfig() {
+        const stored = db.dashboardConfig || {};
+        const knownKeys = DASHBOARD_WIDGETS.map(widget => widget.key);
+        const storedOrder = Array.isArray(stored.order) ? stored.order : knownKeys;
+        return {
+          enabled: { ...Object.fromEntries(knownKeys.map(key => [key, true])), ...(stored.enabled || {}) },
+          order: [...new Set([...storedOrder.filter(key => knownKeys.includes(key)), ...knownKeys.filter(key => !storedOrder.includes(key))])]
+        };
+      }
+
+      function renderDashboardWidgetSettings() {
+        const config = getDashboardConfig();
+        const container = document.getElementById('dashboardWidgetSettings');
+        if (!container) return;
+        container.innerHTML = config.order.map((key, index) => {
+          const widget = DASHBOARD_WIDGETS.find(item => item.key === key);
+          return `<div style="display:flex;align-items:center;gap:.55rem;padding:.45rem 0;border-bottom:1px solid var(--border-subtle);">
+            <input type="checkbox" aria-label="Show ${escapeHtml(widget.label)}" ${config.enabled[key] ? 'checked' : ''} onchange="setDashboardWidgetEnabled('${key}', this.checked)">
+            <span style="flex:1;font-size:.8rem;">${escapeHtml(widget.label)}</span>
+            <button type="button" class="btn btn-secondary btn-sm" aria-label="Move ${escapeHtml(widget.label)} up" title="Move up" onclick="moveDashboardWidget('${key}', -1)" ${index === 0 ? 'disabled' : ''}><i data-lucide="arrow-up"></i></button>
+            <button type="button" class="btn btn-secondary btn-sm" aria-label="Move ${escapeHtml(widget.label)} down" title="Move down" onclick="moveDashboardWidget('${key}', 1)" ${index === config.order.length - 1 ? 'disabled' : ''}><i data-lucide="arrow-down"></i></button>
+          </div>`;
+        }).join('');
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveDashboardConfig(config) {
+        db.dashboardConfig = config;
+        dbUpdate({ dashboardConfig: config }).then(saved => {
+          if (saved && currentView === 'dashboard') renderDashboard();
+          if (saved && currentView === 'settings') renderDashboardWidgetSettings();
+        });
+      }
+
+      function setDashboardWidgetEnabled(key, enabled) {
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        const config = getDashboardConfig();
+        if (!DASHBOARD_WIDGETS.some(widget => widget.key === key)) return;
+        config.enabled[key] = Boolean(enabled);
+        saveDashboardConfig(config);
+      }
+
+      function moveDashboardWidget(key, offset) {
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        const config = getDashboardConfig();
+        const index = config.order.indexOf(key);
+        const target = index + offset;
+        if (index < 0 || target < 0 || target >= config.order.length) return;
+        [config.order[index], config.order[target]] = [config.order[target], config.order[index]];
+        saveDashboardConfig(config);
+      }
+
       const ACCOUNT_ACCESS_PAGES = ALL_PAGES.concat([{ key: 'myAccount', label: 'My Account', icon: 'user-cog', section: 'Session' },
         { key: 'help', label: 'Help & Tutorials', icon: 'life-buoy', section: 'Session' }]);
       const PAGE_DATA_KEYS = {
-        dashboard: ['clockLogs','incidents','maintenanceLogs','dailyChecks','actions','events','fleetItems','volunteers'],
+        dashboard: ['clockLogs','incidents','maintenanceLogs','dailyChecks','actions','events','fleetItems','volunteers','dashboardConfig'],
         clock: ['clockLogs','volunteers'],
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
@@ -1148,6 +1209,21 @@
       }
 
       function sendTestNotification() {
+        if (!('Notification' in window) || Notification.permission !== 'granted') {
+          const message = !('Notification' in window)
+            ? 'Push notifications are not supported in this browser.'
+            : 'Allow push notifications on this device before sending a test alert.';
+          const statusMsg = document.getElementById('notifStatusMsg');
+          if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.background = '#fee2e2';
+            statusMsg.style.color = '#991b1b';
+            statusMsg.innerText = message;
+          } else {
+            alert(message);
+          }
+          return;
+        }
         const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
         const title = '🚂 EVLT Operations Alert';
         const options = {
@@ -1674,7 +1750,8 @@
               ? (signupStep === 'verification email'
                 ? 'Your account was created, but the verification email could not be sent. Sign in with this account, then choose “Resend verification email”.'
                 : 'Your account was created, but account setup did not finish. Do not create another account; ask Louie for help.')
-              : 'The account could not be created. Check the details and try again.');
+              : 'The account could not be created. Check the details and try again.')
+            : 'Sign-in could not be completed. Check your details and try again.';
           if (!wasSignup) fallback = 'Sign-in could not be completed. Check your details and try again.';
           if (signupUserCreated && signupStep === 'verification email' && err && err.code === 'auth/too-many-requests') {
             fallback = 'Your account was created, but Firebase is temporarily limiting verification emails. Wait a little, then sign in and choose “Resend verification email”.';
@@ -2202,10 +2279,6 @@
 
         setTimeout(autoCloseStaleShifts, 0);
         content.innerHTML = `
-          ${overdueBannerHtml}
-          ${volDocAlertBannerHtml()}
-          ${eventBannerHtml}
-          ${getDriverStatusHtml()}
           <div class="page-header">
             <div class="page-title">
               <h2>Operations Dashboard</h2>
@@ -2216,6 +2289,15 @@
             </button>
           </div>
 
+          <div id="dashboardWidgets">
+          <div data-dashboard-widget="alerts">
+            ${overdueBannerHtml}
+            ${volDocAlertBannerHtml()}
+            ${eventBannerHtml}
+            ${getDriverStatusHtml()}
+          </div>
+
+          <div data-dashboard-widget="runningTrains">
           <div class="section-group">
             <div class="section-header">Today's Running Trains (Resets Daily)</div>
             <div class="card" style="padding: 1rem;">
@@ -2244,7 +2326,9 @@
               </div>
             </div>
           </div>
+          </div>
 
+          <div data-dashboard-widget="dailyChecks">
           <div class="section-group">
             <div class="section-header">Daily Safety Inspections (Resets Daily)</div>
             <div class="card">
@@ -2282,7 +2366,9 @@
               </div>
             </div>
           </div>
+          </div>
 
+          <div data-dashboard-widget="stats">
           <div class="grid-stats">
             <div class="stat-card" onclick="navigate('clock')">
               <div class="stat-header"><span>Active Staff On Site</span><div class="stat-icon"><i data-lucide="users"></i></div></div>
@@ -2301,12 +2387,32 @@
               <div class="stat-value" style="color:${overdueActions.length > 0 ? '#dc2626' : '#16a34a'};">${overdueActions.length}</div>
             </div>
           </div>
+          </div>
 
+          <div data-dashboard-widget="volunteerHours">
           ${renderVolunteerHoursWidget()}
+          </div>
 
+          <div data-dashboard-widget="railwayLayout">
           ${renderRailwayLayoutWorkspace()}
+          </div>
+          </div>
         `;
+        applyDashboardConfig();
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function applyDashboardConfig() {
+        const container = document.getElementById('dashboardWidgets');
+        if (!container) return;
+        const config = getDashboardConfig();
+        config.order.forEach(key => {
+          const widget = container.querySelector(`[data-dashboard-widget="${key}"]`);
+          if (!widget) return;
+          widget.hidden = config.enabled[key] === false;
+          widget.style.display = widget.hidden ? 'none' : '';
+          container.appendChild(widget);
+        });
       }
 
       function getVolunteerHoursLeaderboard() {
@@ -6775,13 +6881,19 @@
             <div id="approvedAccountAccessPanel" aria-live="polite">Loading approved accounts…</div>
           </div>
 
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Dashboard layout</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Choose which dashboard sections are shown and change their order. This layout applies to everyone.</p>
+            <div id="dashboardWidgetSettings" aria-live="polite"></div>
+          </div>
+
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
             <div class="card" style="padding:1.25rem;">
               <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Push Notification Token</h3>
               <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Web push tokens are used for instant safety alerts on operations.</p>
               <div style="display:flex; gap:0.5rem;">
                 <input type="text" id="vapidKeyInput" value="BBxni9UFiHxKnAW2w0Zhd-WXrrBQwuAqYgw_QqIeH9llPXaz1_bcbcWZo-0QN3r-ANXoQI2hvjZI5WnL7RbV_88" style="font-family:monospace; font-size:0.75rem; padding:0.4rem;" readonly>
-                <button class="btn btn-secondary btn-sm" onclick="alert('Notification push subscription active!')"><i data-lucide="bell"></i> Test</button>
+                <button class="btn btn-secondary btn-sm" onclick="openNotificationModal(); sendTestNotification()"><i data-lucide="bell-ring"></i> Send Test Alert</button>
               </div>
             </div>
 
@@ -6796,6 +6908,7 @@
           </div>
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        renderDashboardWidgetSettings();
         loadPendingAccountRequests();
         loadApprovedAccountAccess();
       }
