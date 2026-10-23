@@ -6945,36 +6945,84 @@
           return;
         }
         try {
-          const user = auth.currentUser;
-          if (typeof user.verifyBeforeUpdateEmail !== 'function') {
-            throw new Error('This Firebase Auth SDK does not support verification before changing email.');
-          }
-          await database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + user.uid).set(true);
-          await user.verifyBeforeUpdateEmail(nextEmail);
-
-          const currentAdminList = (Array.isArray(db.systemAdmins) ? db.systemAdmins : [])
-            .filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) !== normalizeEmail(oldEmail));
-          currentAdminList.push({ email: normalizeEmail(nextEmail), uid: user.uid });
-          db.systemAdmins = currentAdminList;
-          const updates = { 'EVLT_ADMIN_DB/systemAdmins': currentAdminList };
-          await database.ref().update(updates);
-
-          alert('Firebase sent a verification link to ' + nextEmail + '. Open that link to complete the email change, then sign in again using the new email address. Your admin access is retained for this Firebase account.');
-          return;
+          await sendAdminEmailChangeVerification(nextEmail);
         } catch (err) {
+          if (err && err.code === 'auth/requires-recent-login') {
+            const panel = document.getElementById('adminEmailReauthPanel');
+            const notice = document.getElementById('adminEmailReauthNotice');
+            if (panel) panel.style.display = 'block';
+            if (notice) notice.textContent = 'Firebase needs you to confirm your current password before it can send the verification link.';
+            document.getElementById('adminEmailCurrentPassword')?.focus();
+            return;
+          }
           console.error('Changing admin email failed:', err);
-          const messages = {
-            'auth/email-already-in-use': 'That email already belongs to a Firebase Authentication account. Sign in to that account or have the Firebase administrator review the duplicate before retrying.',
-            'auth/invalid-email': 'Firebase rejected the email address. Check that it is typed correctly.',
-            'auth/operation-not-allowed': 'Firebase rejected the email-change request. Check the full Firebase error in the browser console; the email must be changed with Firebase verification before update.',
-            'auth/requires-recent-login': 'Firebase requires a recent sign-in for this change. Sign out, sign back in as the current primary admin, and retry.',
-            'auth/network-request-failed': 'Firebase could not be reached. Check your internet connection and try again.',
-            'auth/too-many-requests': 'Firebase temporarily blocked this attempt. Wait a little while, then try again.',
-            'auth/unauthorized-continue-uri': 'Firebase rejected the verification return URL. Check the authorized domains in Authentication settings.'
-          };
-          const msg = messages[err && err.code] || 'Firebase could not start the email verification. ' + (err && err.message ? err.message : 'Check your connection and try again.');
-          alert(msg);
+          alert(getAdminEmailChangeErrorMessage(err));
         }
+      }
+
+      async function sendAdminEmailChangeVerification(nextEmail) {
+        const user = auth.currentUser;
+        const oldEmail = String(user.email || '');
+        if (typeof user.verifyBeforeUpdateEmail !== 'function') {
+          throw new Error('This Firebase Auth SDK does not support verification before changing email.');
+        }
+        await database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + user.uid).set(true);
+        await user.verifyBeforeUpdateEmail(nextEmail);
+
+        const currentAdminList = (Array.isArray(db.systemAdmins) ? db.systemAdmins : [])
+          .filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) !== normalizeEmail(oldEmail));
+        currentAdminList.push({ email: normalizeEmail(nextEmail), uid: user.uid });
+        await database.ref().update({ 'EVLT_ADMIN_DB/systemAdmins': currentAdminList });
+        db.systemAdmins = currentAdminList;
+        const panel = document.getElementById('adminEmailReauthPanel');
+        if (panel) panel.style.display = 'none';
+        const password = document.getElementById('adminEmailCurrentPassword');
+        if (password) password.value = '';
+        alert('Firebase sent a verification link to ' + nextEmail + '. Open that link to complete the email change, then sign in again using the new email address. Your admin access is retained for this Firebase account.');
+      }
+
+      async function reauthenticateAndSendAdminEmailChange() {
+        const user = auth && auth.currentUser;
+        const emailInput = document.getElementById('currentAdminEmailInput');
+        const passwordInput = document.getElementById('adminEmailCurrentPassword');
+        const notice = document.getElementById('adminEmailReauthNotice');
+        const button = document.getElementById('adminEmailReauthButton');
+        const nextEmail = String(emailInput && emailInput.value || '').trim();
+        const password = String(passwordInput && passwordInput.value || '');
+        if (!user || !password || !nextEmail) {
+          if (notice) notice.textContent = 'Enter your current password and the replacement email address.';
+          return;
+        }
+        if (button) button.disabled = true;
+        if (notice) notice.textContent = 'Confirming your sign-in…';
+        try {
+          const credential = firebase.auth.EmailAuthProvider.credential(user.email, password);
+          await user.reauthenticateWithCredential(credential);
+          passwordInput.value = '';
+          if (notice) notice.textContent = 'Sign-in confirmed. Requesting the verification email…';
+          await sendAdminEmailChangeVerification(nextEmail);
+        } catch (err) {
+          console.error('Admin email reauthentication failed:', err);
+          if (notice) notice.textContent = getAdminEmailChangeErrorMessage(err);
+          if (passwordInput) passwordInput.value = '';
+        } finally {
+          if (button) button.disabled = false;
+        }
+      }
+
+      function getAdminEmailChangeErrorMessage(err) {
+        const messages = {
+          'auth/email-already-in-use': 'That email already belongs to a Firebase Authentication account. Sign in to that account or resolve the duplicate before retrying.',
+          'auth/invalid-email': 'Firebase rejected the email address. Check that it is typed correctly.',
+          'auth/operation-not-allowed': 'Firebase rejected the email-change request. Check Authentication email templates and the project email-change policy.',
+          'auth/wrong-password': 'That current password was not accepted. Try again or reset the password first.',
+          'auth/invalid-credential': 'The current password was not accepted for this Firebase account.',
+          'auth/requires-recent-login': 'Firebase still requires a recent sign-in. Sign out, sign back in, and retry.',
+          'auth/network-request-failed': 'Firebase could not be reached. Check your internet connection and try again.',
+          'auth/too-many-requests': 'Firebase temporarily blocked this attempt. Wait a little while, then try again.',
+          'auth/unauthorized-continue-uri': 'Firebase rejected the verification return URL. Check authorized domains in Authentication settings.'
+        };
+        return messages[err && err.code] || 'Firebase could not start the email verification. ' + (err && err.message ? err.message : 'Check your connection and try again.');
       }
 
       async function clearStaleSignUpLinksForEmail(emailOverride) {
@@ -7283,6 +7331,12 @@
             <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
               <input type="email" id="currentAdminEmailInput" value="${escapeHtml(currentUser.email || '')}" style="min-width:220px; flex:1;">
               <button class="btn btn-primary btn-sm" onclick="changeCurrentAdminEmail()"><i data-lucide="user-cog"></i> Change my admin email</button>
+            </div>
+            <div id="adminEmailReauthPanel" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:8px;">
+              <label for="adminEmailCurrentPassword" style="display:block;font-size:.8rem;font-weight:600;margin-bottom:.35rem;">Current admin password</label>
+              <input type="password" id="adminEmailCurrentPassword" autocomplete="current-password" style="width:100%;margin-bottom:.5rem;">
+              <div id="adminEmailReauthNotice" role="status" aria-live="polite" style="font-size:.78rem;margin-bottom:.5rem;"></div>
+              <button type="button" id="adminEmailReauthButton" class="btn btn-secondary btn-sm" onclick="reauthenticateAndSendAdminEmailChange()">Confirm and send verification email</button>
             </div>
           </div>
 
