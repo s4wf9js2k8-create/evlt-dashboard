@@ -2,8 +2,17 @@
   "rules": {
     ".read": false,
     ".write": false,
+    "EVLT_SYSTEM_ADMIN_UIDS": {
+      ".read": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
+      ".write": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || (auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)))",
+        ".write": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
+        ".validate": "newData.val() == true"
+      }
+    },
     "EVLT_ADMIN_DB": {
-      ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+      ".read": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
       "actions": {
         ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('actions').val() == true)))",
         ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('actions').val() == true)))"
@@ -132,7 +141,7 @@
         ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))",
         ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))"
       },
-      ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+      ".write": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
       "rotaSignups": {
         ".read": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true)))",
         ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true)))"
@@ -143,10 +152,10 @@
       }
     },
     "EVLT_ACCOUNT_REQUESTS": {
-      ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+      ".read": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
       "$uid": {
-        ".read": "auth != null && (auth.uid == $uid || (auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true))",
-        ".write": "(auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true) || (auth != null && auth.uid == $uid && auth.token.email_verified == true && !data.exists() && newData.child('email').val() == auth.token.email)",
+        ".read": "auth != null && (auth.uid == $uid || (auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)))",
+        ".write": "(auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)) || (auth != null && auth.uid == $uid && auth.token.email_verified == true && !data.exists() && newData.child('email').val() == auth.token.email)",
         ".validate": "newData.hasChildren(['email','name','createdAt'])",
         "email": {
           ".validate": "newData.isString() && newData.val() == auth.token.email"
@@ -163,10 +172,10 @@
       }
     },
     "EVLT_ACCOUNT_BINDINGS": {
-      ".read": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+      ".read": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
       "$uid": {
-        ".read": "auth != null && (auth.uid == $uid || (auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true))",
-        ".write": "auth != null && auth.token.email == 'impulseflame619@gmail.com' && auth.token.email_verified == true",
+        ".read": "auth != null && (auth.uid == $uid || (auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)))",
+        ".write": "auth != null && auth.token.email_verified == true && (auth.token.email == 'impulseflame619@gmail.com' || root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
         ".validate": "newData.hasChildren(['approved','email','volunteerName','approvedBy','approvedAt'])",
         "approved": {
           ".validate": "newData.val() == true"

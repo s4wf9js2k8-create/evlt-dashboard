@@ -1685,14 +1685,30 @@
 
       async function removeSystemAdmin(email) {
         const normalized = String(email || '').trim().toLowerCase();
+        if (currentUser && normalized === normalizeEmail(currentUser.email)) {
+          alert('You cannot remove your own admin access while signed in. Sign in as another admin to revoke this account.');
+          return false;
+        }
         if (!normalized || normalized === String(SYSTEM_ADMIN_EMAIL || '').trim().toLowerCase()) {
           alert('The primary admin account cannot be removed here.');
           return false;
         }
-        const next = getSystemAdminEmails().filter(item => item !== normalized);
-        db.systemAdmins = next;
-        const saved = await dbUpdate({ systemAdmins: next });
-        return Boolean(saved);
+        const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins : [];
+        const removed = entries.filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) === normalized);
+        const next = entries.filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) !== normalized);
+        const updates = { 'EVLT_ADMIN_DB/systemAdmins': next };
+        removed.forEach(item => {
+          if (item && typeof item === 'object' && item.uid) updates['EVLT_SYSTEM_ADMIN_UIDS/' + item.uid] = null;
+        });
+        try {
+          await database.ref().update(updates);
+          db.systemAdmins = next;
+          return true;
+        } catch (err) {
+          console.error('Could not revoke system admin access:', err);
+          alert('Could not remove that admin. Check your connection and try again.');
+          return false;
+        }
       }
 
       function loginLockSecondsLeft() {
@@ -1990,7 +2006,15 @@
             setLoginNotice('Verify your email using the link Firebase sent, then return here and sign in.');
             return;
           }
-          const isAdmin = isSystemAdminEmail(user.email);
+          let hasAdminUidGrant = false;
+          try {
+            const adminGrantSnapshot = await database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + user.uid).once('value');
+            hasAdminUidGrant = adminGrantSnapshot.val() === true;
+          } catch (err) {
+            console.warn('Could not check UID-based admin access; checking legacy admin access:', err);
+          }
+          if (routeId !== authRouteSequence) return;
+          const isAdmin = hasAdminUidGrant || isSystemAdminEmail(user.email);
           if (isAdmin) {
             launchApprovedAccount(user, null, true);
             return;
@@ -2009,11 +2033,17 @@
           const requestSnapshot = await requestRef.once('value');
           if (routeId !== authRouteSequence) return;
           if (!requestSnapshot.exists()) {
-            const displayName = String(user.displayName || '').trim();
+            let displayName = String(user.displayName || '').trim();
             if (!displayName) {
-              showLoginPage();
-              setLoginNotice('Your sign-up needs a full name. Choose “Create an account” and register again with your volunteer name.');
-              return;
+              displayName = String(window.prompt('Enter your full name as it appears on the volunteer rota to submit your access request:') || '').trim();
+              if (!displayName) {
+                await auth.signOut().catch(() => {});
+                showLoginPage();
+                setLoginNotice('Your account is signed in and verified. Enter your full name on the next sign-in to submit an access request.');
+                return;
+              }
+              await user.updateProfile({ displayName });
+              if (routeId !== authRouteSequence) return;
             }
             await requestRef.set({ email: user.email, name: displayName, createdAt: firebase.database.ServerValue.TIMESTAMP });
           }
@@ -2088,6 +2118,7 @@
                 '<input type="checkbox" class="request-perm-cb" value="' + escapeHtml(page.key) + '">' + escapeHtml(page.label) + '</label>').join('') +
               '</div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">No pages selected means the account stays blocked until you assign access.</p></details>' +
               '<div style="display:flex;gap:.5rem;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="approveVolunteerAccount(' + safeUid + ')">Approve and link</button>' +
+              '<button class="btn btn-secondary btn-sm" onclick="promotePendingRequestToSystemAdmin(' + safeUid + ')">Grant System Admin</button>' +
               '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button>' +
               '<button class="btn btn-danger btn-sm" onclick="clearOnlyThisRequest(' + safeUid + ')">Clear stale link</button></div></article>';
           }).join('');
@@ -2150,6 +2181,48 @@
         } catch (err) {
           console.error('Could not approve volunteer account:', err);
           alert('Could not save approval. Check your connection and try again.');
+        }
+      }
+
+      async function promotePendingRequestToSystemAdmin(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        try {
+          const snapshot = await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).once('value');
+          const request = snapshot.val();
+          if (!request || !request.email || !request.name) {
+            alert('This account needs a verified sign-up request before it can be promoted.');
+            return;
+          }
+          if (!confirm('Grant full System Admin access to ' + request.email + '? This allows access to all dashboard data and admin settings.')) return;
+
+          const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins.slice() : [];
+          const email = normalizeEmail(request.email);
+          const existingIndex = entries.findIndex(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) === email);
+          if (existingIndex >= 0) entries[existingIndex] = { email, uid };
+          else entries.push({ email, uid });
+          const actorEmail = normalizeEmail(auth.currentUser && auth.currentUser.email);
+          const actorUid = String(auth.currentUser && auth.currentUser.uid || '');
+          if (!actorUid || !actorEmail) throw new Error('The current admin Firebase identity is unavailable.');
+          const actorIndex = entries.findIndex(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) === actorEmail);
+          if (actorIndex >= 0) entries[actorIndex] = { email: actorEmail, uid: actorUid };
+          else entries.push({ email: actorEmail, uid: actorUid });
+
+          const handoffUpdates = {};
+          handoffUpdates['EVLT_SYSTEM_ADMIN_UIDS/' + uid] = true;
+          handoffUpdates['EVLT_SYSTEM_ADMIN_UIDS/' + actorUid] = true;
+          await database.ref().update(handoffUpdates);
+          db.systemAdmins = entries;
+          if (!await dbUpdate({ systemAdmins: entries })) {
+            alert('The UID-based admin grant was created, but the admin list did not save. Keep the old primary account until the new admin has signed in and access has been tested.');
+            return;
+          }
+          await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove();
+          alert('Admin access granted. Have this person sign in and confirm they can open the dashboard and settings. Keep the old primary account until that test succeeds.');
+          loadPendingAccountRequests();
+          loadApprovedAccountAccess();
+        } catch (err) {
+          console.error('Could not promote account to System Admin:', err);
+          alert('Could not grant admin access. Deploy the updated Realtime Database rules first, then retry while signed in as a current admin.');
         }
       }
 
@@ -7181,7 +7254,7 @@
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
             <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Admin access list</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Grant or remove full admin access for email accounts. These accounts can manage settings and approve volunteer access.</p>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Admins are authorized by Firebase account UID. Have the replacement sign in with a verified account and submit an access request, then use “Grant System Admin” on that request. Keep the current primary until the replacement has tested dashboard access.</p>
             <div style="display:flex; flex-direction:column; gap:.6rem; margin-bottom:.8rem;">
               ${adminEmails.length ? adminEmails.map(email => `
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem; background:rgba(255,255,255,.7);">
@@ -7194,15 +7267,13 @@
               `).join('') : '<p style="font-size:.8rem;color:var(--text-muted);">No admin emails assigned yet.</p>'}
             </div>
             <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-              <input type="email" id="adminEmailInput" placeholder="new-admin@example.com" style="min-width:220px; flex:1;">
-              <button class="btn btn-secondary btn-sm" onclick="addAdminFromInput()"><i data-lucide="plus"></i> Add admin</button>
               <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()"><i data-lucide="trash-2"></i> Clear all stale links</button>
             </div>
           </div>
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
             <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Volunteer email sign-ups</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Confirm each person, link their account to a volunteer record, and choose the pages they can open. No pages are granted automatically.</p>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Confirm each person, link their account to a volunteer record, or grant full System Admin access. Keep the current primary account until a replacement admin signs in and access is verified.</p>
             <div id="accountRequestsPanel" aria-live="polite">Loading sign-up requests…</div>
           </div>
 
