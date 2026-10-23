@@ -6842,21 +6842,68 @@
         }
       }
 
-      async function clearStaleSignUpLinksForEmail() {
-        const input = document.getElementById('adminEmailInput');
-        const email = String(input?.value || '').trim();
-        if (!email) {
-          alert('Enter an email address before clearing stale links.');
+      async function clearStaleSignUpLinksForEmail(emailOverride) {
+        const specificEmail = typeof emailOverride === 'string' ? normalizeEmail(emailOverride) : '';
+        if (specificEmail) {
+          try {
+            const result = await removeStaleAccountEntriesForEmail(specificEmail);
+            if (!result.requestCount && !result.bindingCount) {
+              alert('No stale sign-up links were found for that email.');
+              return;
+            }
+            alert(`Removed ${result.requestCount} stale sign-up request(s) and ${result.bindingCount} stale account link(s).`);
+            renderSettings();
+            loadPendingAccountRequests();
+            loadApprovedAccountAccess();
+          } catch (err) {
+            console.error('Could not clear stale sign-up links for that email:', err);
+            alert('Could not clear the stale links. Please try again.');
+          }
           return;
         }
+
         try {
-          const result = await removeStaleAccountEntriesForEmail(email);
-          if (!result.requestCount && !result.bindingCount) {
-            alert('No stale sign-up links were found for that email.');
+          const [requestsSnapshot, bindingsSnapshot] = await Promise.all([
+            database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
+            database.ref('EVLT_ACCOUNT_BINDINGS').once('value')
+          ]);
+
+          const requests = requestsSnapshot.val() || {};
+          const bindings = bindingsSnapshot.val() || {};
+          const pendingRequestUids = Object.keys(requests);
+          const pendingRequestEmails = new Set(
+            pendingRequestUids
+              .map(uid => requests[uid])
+              .filter(value => value && value.email)
+              .map(value => normalizeEmail(value.email))
+              .filter(Boolean)
+          );
+
+          const staleBindingUids = Object.keys(bindings).filter(uid => {
+            const entry = bindings[uid];
+            if (!entry || !entry.email) return false;
+            const email = normalizeEmail(entry.email);
+            return !entry.approved || pendingRequestEmails.has(email);
+          });
+
+          const updates = {};
+          pendingRequestUids.forEach(uid => {
+            updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null;
+          });
+          staleBindingUids.forEach(uid => {
+            updates['EVLT_ACCOUNT_BINDINGS/' + uid] = null;
+          });
+
+          if (!pendingRequestUids.length && !staleBindingUids.length) {
+            alert('No stale sign-up links were found to clear.');
             return;
           }
-          alert(`Removed ${result.requestCount} stale sign-up request(s) and ${result.bindingCount} stale account link(s).`);
+
+          await database.ref().update(updates);
+          alert(`Removed ${pendingRequestUids.length} stale sign-up request(s) and ${staleBindingUids.length} stale account link(s).`);
           renderSettings();
+          loadPendingAccountRequests();
+          loadApprovedAccountAccess();
         } catch (err) {
           console.error('Could not clear stale sign-up links:', err);
           alert('Could not clear the stale links. Please try again.');
@@ -7121,7 +7168,7 @@
             <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
               <input type="email" id="adminEmailInput" placeholder="new-admin@example.com" style="min-width:220px; flex:1;">
               <button class="btn btn-secondary btn-sm" onclick="addAdminFromInput()"><i data-lucide="plus"></i> Add admin</button>
-              <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()"><i data-lucide="trash-2"></i> Clear stale links</button>
+              <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()"><i data-lucide="trash-2"></i> Clear all stale links</button>
             </div>
           </div>
 
