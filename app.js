@@ -6421,7 +6421,7 @@
           <div class="page-header">
             <div class="page-title"><h2>Item Register</h2><p>Scan or enter an item code, record where it is stored, and find it again quickly.</p></div>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-              <button class="btn btn-secondary btn-sm" type="button" onclick="startItemCodeCamera()"><i data-lucide="scan-line"></i> Scan code</button>
+              <button class="btn btn-secondary btn-sm" type="button" onclick="startItemCodeCamera()"><i data-lucide="scan-line"></i> Scan code/label</button>
               <button class="btn btn-primary btn-sm" type="button" onclick="openItemCodeForm()"><i data-lucide="plus"></i> Add item</button>
             </div>
           </div>
@@ -6431,7 +6431,7 @@
           </div>
           <div id="itemCodeCameraPanel" class="card item-code-camera" style="display:none;padding:1rem;margin-bottom:1rem;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem;">
-              <strong>Scan an item barcode</strong>
+              <strong>Scan a barcode or item code label</strong>
               <button type="button" class="btn btn-subtle btn-sm" onclick="stopItemCodeCamera();document.getElementById('itemCodeCameraPanel').style.display='none'" aria-label="Close scanner">Close</button>
             </div>
             <video id="itemCodeCameraVideo" playsinline muted style="display:block;width:100%;max-height:320px;object-fit:contain;background:#17271f;border-radius:6px;"></video>
@@ -6471,25 +6471,121 @@
         renderItemCodeRegister();
       }
 
+      function normaliseItemCodeCategory(value) {
+        return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+
+      function getItemCodePrefixNumber(code) {
+        const match = String(code || '').trim().match(/^([A-Za-z]+)[\-\s/]*?(\d+)$/);
+        if (!match) return null;
+        return { prefix: match[1].toUpperCase(), number: Number(match[2]), raw: match[0] };
+      }
+
+      function getNextAvailableItemCode(category) {
+        const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
+        const categoryKey = normaliseItemCodeCategory(category);
+        const matches = records.filter(item => {
+          const itemCategory = normaliseItemCodeCategory(item.category);
+          return categoryKey && itemCategory && itemCategory === categoryKey;
+        });
+        const applicable = matches.map(item => getItemCodePrefixNumber(item.itemCode)).filter(Boolean);
+        const prefixCandidates = [...new Set(applicable.map(item => item.prefix))];
+        let nextCode = '';
+        if (!prefixCandidates.length) {
+          const fallbackPrefix = String(category || '').trim().match(/[A-Za-z]/) ? String(category).trim().match(/[A-Za-z]+/gi)?.join('').slice(0, 2).toUpperCase() : 'A';
+          nextCode = `${fallbackPrefix}-1`;
+          return nextCode;
+        }
+        const preferredPrefix = prefixCandidates.sort((a, b) => b.length - a.length)[0];
+        const maxNumber = Math.max(...applicable.filter(item => item.prefix === preferredPrefix).map(item => item.number), 0);
+        return `${preferredPrefix}-${maxNumber + 1}`;
+      }
+
+      function getItemCodeRecommendationData(category = '', location = '') {
+        const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
+        const categoryKey = normaliseItemCodeCategory(category);
+        const locationKey = normaliseItemCodeCategory(location);
+        const locationCounts = {};
+        const categoryCounts = {};
+        records.forEach(item => {
+          const itemCategory = normaliseItemCodeCategory(item.category);
+          const itemLocation = normaliseItemCodeCategory(item.location);
+          if (!itemCategory || !itemLocation) return;
+          if (categoryKey && itemCategory === categoryKey) {
+            locationCounts[itemLocation] = (locationCounts[itemLocation] || 0) + 1;
+          }
+          if (locationKey && itemLocation === locationKey) {
+            categoryCounts[itemCategory] = (categoryCounts[itemCategory] || 0) + 1;
+          }
+        });
+        const suggestedLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ name: String(records.find(item => normaliseItemCodeCategory(item.location) === key)?.location || key).trim(), count }));
+        const suggestedCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ name: String(records.find(item => normaliseItemCodeCategory(item.category) === key)?.category || key).trim(), count }));
+        return { suggestedLocations, suggestedCategories };
+      }
+
+      function applyItemCodeSuggestion(field, value) {
+        const target = field === 'location' ? document.getElementById('itemCodeLocation') : document.getElementById('itemCodeCategory');
+        if (target) target.value = value;
+        if (field === 'category') {
+          const codeInput = document.getElementById('itemCodeValue');
+          const nextCode = getNextAvailableItemCode(value);
+          if (codeInput && (!codeInput.value.trim() || codeInput.dataset.userEdited === '0')) {
+            codeInput.value = nextCode;
+            codeInput.dataset.userEdited = '0';
+          }
+          const suggestionText = document.getElementById('itemCodeSuggestionText');
+          if (suggestionText) suggestionText.innerHTML = `Next suggested: <strong>${escapeHtml(nextCode)}</strong>`;
+        }
+      }
+
+      function syncItemCodeSuggestion() {
+        const categoryInput = document.getElementById('itemCodeCategory');
+        const codeInput = document.getElementById('itemCodeValue');
+        const suggestionText = document.getElementById('itemCodeSuggestionText');
+        if (!categoryInput || !suggestionText) return;
+        const categoryValue = categoryInput.value.trim();
+        const nextCode = categoryValue ? getNextAvailableItemCode(categoryValue) : '';
+        suggestionText.innerHTML = categoryValue ? `Next suggested: <strong>${escapeHtml(nextCode)}</strong>` : 'Choose a category to generate the next code.';
+        if (!categoryValue || !codeInput || codeInput.dataset.userEdited === '1') return;
+        const currentValue = codeInput.value.trim();
+        if (!currentValue || currentValue === codeInput.dataset.lastAutoCode || !codeInput.dataset.lastAutoCode) {
+          codeInput.value = nextCode;
+          codeInput.dataset.lastAutoCode = nextCode;
+        }
+      }
+
       function openItemCodeForm(id = null, scannedCode = '') {
         itemCodeFormId = id;
         const editor = document.getElementById('itemCodeEditor');
         if (!editor) return;
         const existing = id === null ? null : (db.itemCodes || []).find(item => String(item.id) === String(id));
+        const categoryValue = existing?.category || '';
+        const locationValue = existing?.location || '';
+        const recommendationData = getItemCodeRecommendationData(categoryValue, locationValue);
+        const categoryOptions = [...new Set((db.itemCodes || []).map(item => item.category).filter(Boolean))].sort();
+        const locationOptions = [...new Set((db.itemCodes || []).map(item => item.location).filter(Boolean))].sort();
+        const suggestedLocationHtml = recommendationData.suggestedLocations.length ? `<div class="item-code-recommendations"><span>Suggested locations</span><div class="item-code-recommendation-list">${recommendationData.suggestedLocations.slice(0, 4).map(item => `<button type="button" class="item-code-suggestion-tag" onclick="applyItemCodeSuggestion('location', ${inlineJsArg(item.name)})">${escapeHtml(item.name)}</button>`).join('')}</div></div>` : '';
+        const suggestedCategoryHtml = recommendationData.suggestedCategories.length ? `<div class="item-code-recommendations"><span>Suggested categories</span><div class="item-code-recommendation-list">${recommendationData.suggestedCategories.slice(0, 4).map(item => `<button type="button" class="item-code-suggestion-tag" onclick="applyItemCodeSuggestion('category', ${inlineJsArg(item.name)})">${escapeHtml(item.name)}</button>`).join('')}</div></div>` : '';
+        const defaultCode = existing?.itemCode || scannedCode || (categoryValue ? getNextAvailableItemCode(categoryValue) : '');
+        const nextSuggestedCode = categoryValue ? getNextAvailableItemCode(categoryValue) : '';
         editor.style.display = 'block';
         editor.innerHTML = `
           <h3 style="font-size:.95rem;margin-bottom:.8rem;">${existing ? 'Edit item' : 'Add item'}</h3>
           <form onsubmit="saveItemCode(event)">
             <div class="item-code-form-grid">
-              <div class="form-group"><label for="itemCodeValue">Item code</label><input id="itemCodeValue" required maxlength="120" autocomplete="off" value="${escapeHtml(existing?.itemCode || scannedCode)}" placeholder="Scan or type code"></div>
+              <div class="form-group"><label for="itemCodeValue">Item code</label><div class="item-code-value-stack"><div class="item-code-input-row"><input id="itemCodeValue" data-user-edited="${existing ? '1' : '0'}" data-last-auto-code="${escapeHtml(defaultCode)}" required maxlength="120" autocomplete="off" value="${escapeHtml(defaultCode)}" placeholder="Scan or type code" oninput="this.dataset.userEdited = this.value.trim() ? '1' : '0';"><button type="button" class="btn btn-secondary btn-sm item-code-suggest-btn" ${nextSuggestedCode ? '' : 'disabled'} onclick="const field = document.getElementById('itemCodeValue'); field.value = ${inlineJsArg(nextSuggestedCode)}; field.dataset.userEdited = '0'; field.dataset.lastAutoCode = ${inlineJsArg(nextSuggestedCode)}; field.focus();">Use suggested</button></div><small id="itemCodeSuggestionText" class="item-code-suggestion-text">${categoryValue ? `Next suggested: <strong>${escapeHtml(nextSuggestedCode)}</strong>` : 'Choose a category to generate the next code.'}</small></div></div>
               <div class="form-group"><label for="itemCodeName">Item name</label><input id="itemCodeName" required maxlength="160" value="${escapeHtml(existing?.itemName || '')}" placeholder="What is the item?"></div>
-              <div class="form-group"><label for="itemCodeLocation">Storage location</label><input id="itemCodeLocation" required maxlength="160" list="itemCodeLocationOptions" value="${escapeHtml(existing?.location || '')}" placeholder="e.g. Workshop / Shelf B"><datalist id="itemCodeLocationOptions">${[...new Set((db.itemCodes || []).map(item => item.location).filter(Boolean))].map(location => `<option value="${escapeHtml(location)}"></option>`).join('')}</datalist></div>
-              <div class="form-group"><label for="itemCodeCategory">Category</label><input id="itemCodeCategory" maxlength="100" value="${escapeHtml(existing?.category || '')}" placeholder="Optional"></div>
+              <div class="form-group"><label for="itemCodeLocation">Storage location</label><input id="itemCodeLocation" required maxlength="160" list="itemCodeLocationOptions" value="${escapeHtml(locationValue)}" placeholder="e.g. Workshop / Shelf B"><datalist id="itemCodeLocationOptions">${locationOptions.map(location => `<option value="${escapeHtml(location)}"></option>`).join('')}</datalist>${suggestedLocationHtml}</div>
+              <div class="form-group"><label for="itemCodeCategory">Category</label><input id="itemCodeCategory" maxlength="100" list="itemCodeCategoryOptions" value="${escapeHtml(categoryValue)}" placeholder="Tool, Spare part, etc." oninput="syncItemCodeSuggestion()"><datalist id="itemCodeCategoryOptions">${categoryOptions.map(category => `<option value="${escapeHtml(category)}"></option>`).join('')}</datalist>${suggestedCategoryHtml}</div>
               <div class="form-group item-code-notes"><label for="itemCodeNotes">Notes</label><textarea id="itemCodeNotes" rows="2" maxlength="500" placeholder="Optional details">${escapeHtml(existing?.notes || '')}</textarea></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-secondary btn-sm" onclick="closeItemCodeForm()">Cancel</button><button type="submit" class="btn btn-primary btn-sm">${existing ? 'Save changes' : 'Save item'}</button></div>
           </form>`;
-        document.getElementById('itemCodeValue')?.focus();
+        const codeInput = document.getElementById('itemCodeValue');
+        const categoryInput = document.getElementById('itemCodeCategory');
+        codeInput?.focus();
+        if (categoryInput && !categoryInput.value.trim()) categoryInput.focus();
+        if (categoryInput && categoryInput.value.trim()) syncItemCodeSuggestion();
       }
 
       function closeItemCodeForm() {
@@ -6544,63 +6640,111 @@
         renderItemCodeRegister();
       }
 
+      function normaliseItemCodeCandidate(rawValue) {
+        const candidate = String(rawValue || '')
+          .replace(/[\u2010-\u2015]/g, '-')
+          .replace(/\s+/g, '')
+          .replace(/[^A-Za-z0-9/-]/g, '')
+          .replace(/-{2,}/g, '-')
+          .replace(/\/{2,}/g, '/');
+        return candidate.replace(/^-+|-+$/g, '').replace(/^\/+|\/+$/g, '');
+      }
+
+      function findItemCodeCandidatesFromText(text) {
+        const source = String(text || '')
+          .replace(/[\u2010-\u2015]/g, '-')
+          .replace(/\s+/g, ' ')
+          .replace(/[^A-Za-z0-9\s\-_/]/g, ' ');
+        const matches = new Set();
+        const pattern = /(?:\b\d+\s*[-/ ]?\s*[A-Za-z][A-Za-z0-9]*\b|\b[A-Za-z]+\s*[-/ ]?\s*\d+[A-Za-z0-9]*\b|\b\d+\s*[-/ ]\s*[A-Za-z0-9]+(?:\s*[-/ ]\s*[A-Za-z0-9]+)*\b|\b[A-Za-z]+\s*[-/ ]\s*\d+(?:\s*[-/ ]\s*[A-Za-z0-9]+)*\b)/gi;
+        const candidates = source.match(pattern) || [];
+        candidates.forEach(candidate => {
+          const normalised = normaliseItemCodeCandidate(candidate);
+          if (!normalised || normalised.length < 2 || normalised.length > 20) return;
+          if (!/\d/.test(normalised) || !/[A-Za-z]/.test(normalised)) return;
+          if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}$/.test(normalised)) return;
+          if (/^\d{1,2}:\d{2}$/.test(normalised)) return;
+          if (/^(?:item|code|label|ref|id)$/i.test(normalised)) return;
+          matches.add(normalised);
+        });
+        return [...matches].sort((a, b) => a.length - b.length);
+      }
+
       async function startItemCodeCamera() {
         const panel = document.getElementById('itemCodeCameraPanel');
         const video = document.getElementById('itemCodeCameraVideo');
         const status = document.getElementById('itemCodeCameraStatus');
         if (!panel || !video || !status) return;
         panel.style.display = 'block';
-        if (!('BarcodeDetector' in window)) {
-          status.textContent = 'Camera barcode scanning is not supported in this browser. Use a USB/Bluetooth scanner in the item-code field or type the code.';
+        if (!navigator.mediaDevices?.getUserMedia) {
+          status.textContent = 'Camera access is unavailable. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
           return;
         }
-        if (!navigator.mediaDevices?.getUserMedia) {
-          status.textContent = 'Camera access is unavailable. Use a scanner in the item-code field or type the code.';
+        if (!('BarcodeDetector' in window) && !window.Tesseract) {
+          status.textContent = 'This browser cannot scan barcodes or item-code labels from the camera. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
           return;
         }
         try {
           stopItemCodeCamera();
           const desiredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf'];
-          const supportedFormats = typeof BarcodeDetector.getSupportedFormats === 'function'
-            ? await BarcodeDetector.getSupportedFormats()
-            : desiredFormats;
-          const formats = desiredFormats.filter(format => supportedFormats.includes(format));
-          if (!formats.length) {
-            status.textContent = 'This camera does not support common barcode formats. Use a USB/Bluetooth scanner in the item-code field or type the code.';
-            openItemCodeForm();
-            return;
-          }
-          const detector = new BarcodeDetector({ formats });
+          const supportedFormats = 'BarcodeDetector' in window && typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : desiredFormats;
+          const barcodeFormats = desiredFormats.filter(format => supportedFormats.includes(format));
+          const detector = 'BarcodeDetector' in window && barcodeFormats.length ? new BarcodeDetector({ formats: barcodeFormats }) : null;
           itemCodeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
           video.srcObject = itemCodeCameraStream;
           await video.play();
           itemCodeScanRunning = true;
-          status.textContent = 'Point the camera at an item barcode.';
-          const scanFrame = async () => {
+          status.textContent = 'Point the camera at a barcode or a printed item code label.';
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          const processScan = async () => {
             if (!itemCodeScanRunning) return;
             try {
-              const results = await detector.detect(video);
-              if (results.length && results[0].rawValue) {
-                const code = results[0].rawValue.trim();
-                stopItemCodeCamera();
-                panel.style.display = 'none';
-                const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
-                if (existing) {
-                  alert('This code is already registered. Review or update its item and location.');
-                  openItemCodeForm(existing.id);
-                } else openItemCodeForm(null, code);
-                return;
+              if (detector) {
+                const results = await detector.detect(video);
+                if (results.length && results[0].rawValue) {
+                  const code = results[0].rawValue.trim();
+                  stopItemCodeCamera();
+                  panel.style.display = 'none';
+                  const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
+                  if (existing) {
+                    alert('This code is already registered. Review or update its item and location.');
+                    openItemCodeForm(existing.id);
+                  } else openItemCodeForm(null, code);
+                  return;
+                }
+              }
+              if (window.Tesseract && context) {
+                const width = video.videoWidth || 1280;
+                const height = video.videoHeight || 720;
+                canvas.width = width;
+                canvas.height = height;
+                context.drawImage(video, 0, 0, width, height);
+                const ocrResult = await Tesseract.recognize(canvas, 'eng');
+                const ocrText = ocrResult?.data?.text || '';
+                const codeCandidates = findItemCodeCandidatesFromText(ocrText);
+                if (codeCandidates.length) {
+                  const code = codeCandidates[0];
+                  stopItemCodeCamera();
+                  panel.style.display = 'none';
+                  const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
+                  if (existing) {
+                    alert('This code is already registered. Review or update its item and location.');
+                    openItemCodeForm(existing.id);
+                  } else openItemCodeForm(null, code);
+                  return;
+                }
               }
             } catch (err) {
-              console.warn('Barcode scan frame failed:', err);
+              console.warn('Item scan frame failed:', err);
             }
-            if (itemCodeScanRunning) requestAnimationFrame(scanFrame);
+            if (itemCodeScanRunning) setTimeout(processScan, 750);
           };
-          requestAnimationFrame(scanFrame);
+          processScan();
         } catch (err) {
-          console.error('Could not start item barcode camera:', err);
+          console.error('Could not start item camera scanner:', err);
           status.textContent = err && err.name === 'NotAllowedError' ? 'Camera permission was denied. Use a scanner in the item-code field or type the code.' : 'Could not start the camera. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
         }
