@@ -2088,7 +2088,8 @@
                 '<input type="checkbox" class="request-perm-cb" value="' + escapeHtml(page.key) + '">' + escapeHtml(page.label) + '</label>').join('') +
               '</div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">No pages selected means the account stays blocked until you assign access.</p></details>' +
               '<div style="display:flex;gap:.5rem;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="approveVolunteerAccount(' + safeUid + ')">Approve and link</button>' +
-              '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button></div></article>';
+              '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button>' +
+              '<button class="btn btn-danger btn-sm" onclick="clearOnlyThisRequest(' + safeUid + ')">Clear stale link</button></div></article>';
           }).join('');
         }).catch(err => {
           console.error('Could not load sign-up requests:', err);
@@ -2157,6 +2158,26 @@
         if (!confirm('Remove this sign-up request? The account will remain unable to access volunteer records.')) return;
         await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove();
         loadPendingAccountRequests();
+      }
+
+      async function clearOnlyThisRequest(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        const requestSnapshot = await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).once('value');
+        const request = requestSnapshot.val();
+        if (!request || !request.email) {
+          alert('There is no stale sign-up request for this account to clear.');
+          return;
+        }
+        if (!confirm('Clear this stale sign-up request and any linked approval for ' + request.email + '?')) return;
+        const updates = { ['EVLT_ACCOUNT_REQUESTS/' + uid]: null };
+        const bindingSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).once('value');
+        const binding = bindingSnapshot.val();
+        if (binding && binding.email && binding.email.toLowerCase() === String(request.email).toLowerCase()) {
+          updates['EVLT_ACCOUNT_BINDINGS/' + uid] = null;
+        }
+        await database.ref().update(updates);
+        loadPendingAccountRequests();
+        loadApprovedAccountAccess();
       }
 
       function finishLogin() {
