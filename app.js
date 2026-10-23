@@ -6823,10 +6823,26 @@
           return;
         }
         const oldEmail = String(auth.currentUser.email || '').trim();
+        if (normalizeEmail(nextEmail) === normalizeEmail(oldEmail)) {
+          alert('Enter a different email address from the one currently in use.');
+          return;
+        }
         try {
-          await removeStaleAccountEntriesForEmail(oldEmail);
-          await removeStaleAccountEntriesForEmail(nextEmail);
-          await auth.currentUser.updateEmail(nextEmail);
+          const updateEmail = () => auth.currentUser.updateEmail(nextEmail);
+          try {
+            await updateEmail();
+          } catch (err) {
+            if (!err || err.code !== 'auth/requires-recent-login') throw err;
+            const password = window.prompt('For security, enter your current admin password to confirm this email change:');
+            if (password === null) return;
+            if (!password) {
+              alert('Your current password is required to confirm this email change.');
+              return;
+            }
+            const credential = firebase.auth.EmailAuthProvider.credential(oldEmail, password);
+            await auth.currentUser.reauthenticateWithCredential(credential);
+            await updateEmail();
+          }
           const currentAdminList = getSystemAdminEmails().filter(email => email !== normalizeEmail(oldEmail));
           currentAdminList.push(normalizeEmail(nextEmail));
           db.systemAdmins = [...new Set(currentAdminList)];
@@ -6837,7 +6853,19 @@
           setLoginNotice('Your admin email has been updated. Please sign in again with the new address.', false);
         } catch (err) {
           console.error('Changing admin email failed:', err);
-          const msg = err && err.code === 'auth/email-already-in-use' ? 'That email is already in use by another account. Remove any stale account requests for that address first.' : 'The admin email could not be changed. Try again in a moment.';
+          const messages = {
+            'auth/email-already-in-use': 'Firebase Authentication already has an account with that email. Clearing stale dashboard links does not remove Firebase accounts. Sign in to that account or ask an administrator to review it under Firebase Console > Authentication > Users.',
+            'auth/invalid-email': 'Firebase rejected the email address. Check that it is typed correctly.',
+            'auth/operation-not-allowed': 'Email changes are disabled for this Firebase project. Enable Email/Password sign-in in Firebase Authentication settings.',
+            'auth/weak-password': 'The password entered for confirmation is too weak. Use your current account password and try again.',
+            'auth/wrong-password': 'The current admin password was not accepted. Try again or use the password reset link.',
+            'auth/invalid-credential': 'The current admin password was not accepted, or this account does not use email/password sign-in.',
+            'auth/user-mismatch': 'The password could not be used to confirm this signed-in admin account.',
+            'auth/network-request-failed': 'Firebase could not be reached. Check your internet connection and try again.',
+            'auth/too-many-requests': 'Firebase temporarily blocked this attempt. Wait a little while, then try again.',
+            'auth/requires-recent-login': 'Firebase still requires a recent sign-in. Sign out, sign back in, and retry the email change.'
+          };
+          const msg = messages[err && err.code] || 'The admin email could not be changed. Firebase error: ' + (err && err.code ? err.code : 'unknown') + '. Check the connection and try again.';
           alert(msg);
         }
       }
