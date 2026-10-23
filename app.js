@@ -1357,8 +1357,9 @@
               <textarea id="notif_body" rows="3" placeholder="Details for everyone..."></textarea>
             </div>
             <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
-              <button type="button" class="btn btn-primary" onclick="sendBroadcastNotification()"><i data-lucide="send"></i> Send to Everyone</button>
+              <button type="button" class="btn btn-primary" id="sendBroadcastNotificationButton" onclick="sendBroadcastNotification()"><i data-lucide="send"></i> Send to Everyone</button>
             </div>
+            <div id="notificationSendStatus" role="status" aria-live="polite" style="font-size:.78rem;margin-top:.55rem;"></div>
           </div>
           <div class="section-header">Sent Notifications</div>
           <div class="card">
@@ -1385,9 +1386,12 @@
         renderSidebar();
       }
 
-      function sendBroadcastNotification() {
+      async function sendBroadcastNotification() {
         const titleEl = document.getElementById('notif_title');
         const bodyEl = document.getElementById('notif_body');
+        const sendButton = document.getElementById('sendBroadcastNotificationButton');
+        const status = document.getElementById('notificationSendStatus');
+        if (!titleEl || !bodyEl || !sendButton || sendButton.disabled) return;
         const title = (titleEl.value || '').trim();
         const body = (bodyEl.value || '').trim();
         if (!title) { alert('Please enter a title for the notification.'); return; }
@@ -1400,14 +1404,30 @@
           sentAt: new Date().toISOString()
         };
 
-        if (!db.notifications) db.notifications = [];
-        db.notifications.push(entry);
-        seenNotificationIds.add(entry.id);
-        dbSet('EVLT_ADMIN_DB/notifications', db.notifications);
+        const previousNotifications = Array.isArray(db.notifications) ? db.notifications : [];
+        const nextNotifications = [...previousNotifications, entry];
+        sendButton.disabled = true;
+        if (status) status.textContent = 'Saving notification…';
+        const saved = await dbSet('EVLT_ADMIN_DB/notifications', nextNotifications);
+        if (!saved) {
+          if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = 'The notification was not saved or sent. Check your connection and try again.';
+          }
+          sendButton.disabled = false;
+          return;
+        }
 
+        db.notifications = nextNotifications;
+        seenNotificationIds.add(entry.id);
         showLocalNotification('🚂 ' + entry.title, entry.body);
         triggerBackgroundPush(entry);
         renderNotificationsPage();
+        const successStatus = document.getElementById('notificationSendStatus');
+        if (successStatus) {
+          successStatus.style.color = '#166534';
+          successStatus.textContent = 'Notification saved and sent.';
+        }
       }
 
       // Asks the server to push to every registered device. The server
@@ -1645,29 +1665,6 @@
 
       function isSystemAdminEmail(email) {
         return getSystemAdminEmails().includes(normalizeEmail(email));
-      }
-
-      async function removeStaleAccountEntriesForEmail(email) {
-        const normalized = normalizeEmail(email);
-        if (!normalized) return { requestCount: 0, bindingCount: 0, adminCount: 0 };
-        const [requestsSnapshot, bindingsSnapshot] = await Promise.all([
-          database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
-          database.ref('EVLT_ACCOUNT_BINDINGS').once('value')
-        ]);
-        const requests = requestsSnapshot.val() || {};
-        const bindings = bindingsSnapshot.val() || {};
-        const requestMatches = Object.entries(requests)
-          .filter(([_, value]) => normalizeEmail(value && value.email) === normalized)
-          .map(([uid]) => uid);
-        const bindingMatches = Object.entries(bindings)
-          .filter(([_, value]) => normalizeEmail(value && value.email) === normalized)
-          .map(([uid]) => uid);
-        if (!requestMatches.length && !bindingMatches.length) return { requestCount: 0, bindingCount: 0, adminCount: 0 };
-        const updates = {};
-        requestMatches.forEach(uid => { updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null; });
-        bindingMatches.forEach(uid => { updates['EVLT_ACCOUNT_BINDINGS/' + uid] = null; });
-        await database.ref().update(updates);
-        return { requestCount: requestMatches.length, bindingCount: bindingMatches.length, adminCount: 0 };
       }
 
       async function addSystemAdmin(email) {
@@ -7031,26 +7028,7 @@
         return messages[err && err.code] || 'Firebase could not start the email verification. ' + (err && err.message ? err.message : 'Check your connection and try again.');
       }
 
-      async function clearStaleSignUpLinksForEmail(emailOverride) {
-        const specificEmail = typeof emailOverride === 'string' ? normalizeEmail(emailOverride) : '';
-        if (specificEmail) {
-          try {
-            const result = await removeStaleAccountEntriesForEmail(specificEmail);
-            if (!result.requestCount && !result.bindingCount) {
-              alert('No stale sign-up links were found for that email.');
-              return;
-            }
-            alert(`Removed ${result.requestCount} stale sign-up request(s) and ${result.bindingCount} stale account link(s).`);
-            renderSettings();
-            loadPendingAccountRequests();
-            loadApprovedAccountAccess();
-          } catch (err) {
-            console.error('Could not clear stale sign-up links for that email:', err);
-            alert('Could not clear the stale links. Please try again.');
-          }
-          return;
-        }
-
+      async function clearStaleSignUpLinksForEmail() {
         try {
           const [requestsSnapshot, bindingsSnapshot] = await Promise.all([
             database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
@@ -7059,37 +7037,36 @@
 
           const requests = requestsSnapshot.val() || {};
           const bindings = bindingsSnapshot.val() || {};
-          const pendingRequestUids = Object.keys(requests);
-          const pendingRequestEmails = new Set(
-            pendingRequestUids
-              .map(uid => requests[uid])
-              .filter(value => value && value.email)
-              .map(value => normalizeEmail(value.email))
-              .filter(Boolean)
-          );
-
-          const staleBindingUids = Object.keys(bindings).filter(uid => {
-            const entry = bindings[uid];
-            if (!entry || !entry.email) return false;
-            const email = normalizeEmail(entry.email);
-            return !entry.approved || pendingRequestEmails.has(email);
+          const staleBefore = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          const staleRequests = Object.entries(requests).filter(([, request]) => {
+            const createdAt = Number(request && request.createdAt);
+            return request && request.email && request.name && Number.isFinite(createdAt) && createdAt <= staleBefore;
           });
+          const staleRequestUids = staleRequests.map(([uid]) => uid);
+          const staleBindingUids = staleRequests
+            .filter(([uid, request]) => {
+              const binding = bindings[uid];
+              return binding && binding.approved !== true && normalizeEmail(binding.email) === normalizeEmail(request.email);
+            })
+            .map(([uid]) => uid);
 
           const updates = {};
-          pendingRequestUids.forEach(uid => {
+          staleRequestUids.forEach(uid => {
             updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null;
           });
           staleBindingUids.forEach(uid => {
             updates['EVLT_ACCOUNT_BINDINGS/' + uid] = null;
           });
 
-          if (!pendingRequestUids.length && !staleBindingUids.length) {
-            alert('No stale sign-up links were found to clear.');
+          if (!staleRequestUids.length) {
+            alert('No sign-up requests older than 30 days were found. Recent requests were left untouched.');
             return;
           }
 
+          if (!confirm(`Remove ${staleRequestUids.length} sign-up request(s) older than 30 days and ${staleBindingUids.length} matching unapproved account link(s)? Recent requests and approved accounts will be kept.`)) return;
+
           await database.ref().update(updates);
-          alert(`Removed ${pendingRequestUids.length} stale sign-up request(s) and ${staleBindingUids.length} stale account link(s).`);
+          alert(`Removed ${staleRequestUids.length} sign-up request(s) older than 30 days and ${staleBindingUids.length} matching unapproved account link(s).`);
           renderSettings();
           loadPendingAccountRequests();
           loadApprovedAccountAccess();
@@ -7361,7 +7338,7 @@
               `).join('') : '<p style="font-size:.8rem;color:var(--text-muted);">No admin emails assigned yet.</p>'}
             </div>
             <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
-              <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()"><i data-lucide="trash-2"></i> Clear all stale links</button>
+              <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()" title="Only removes sign-up requests at least 30 days old"><i data-lucide="trash-2"></i> Clear requests older than 30 days</button>
             </div>
           </div>
 
