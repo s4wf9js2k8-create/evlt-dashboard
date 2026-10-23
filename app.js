@@ -1981,6 +1981,56 @@
         attachDatabaseListener();
       }
 
+      function showMissingProfileNameForm() {
+        const notice = document.getElementById('loginErrorMsg');
+        if (!notice) return;
+        notice.replaceChildren();
+        notice.style.display = 'block';
+        notice.style.color = '#334155';
+
+        const message = document.createElement('p');
+        message.textContent = 'Your email is verified. Enter your full name as it appears on the volunteer rota to submit an access request.';
+        const label = document.createElement('label');
+        label.htmlFor = 'accessRequestFullName';
+        label.textContent = 'Full name';
+        label.style.cssText = 'display:block;margin:.65rem 0 .25rem;font-weight:600;';
+        const input = document.createElement('input');
+        input.id = 'accessRequestFullName';
+        input.type = 'text';
+        input.autocomplete = 'name';
+        input.maxLength = 120;
+        input.required = true;
+        input.placeholder = 'Name used on the volunteer rota';
+        input.style.cssText = 'display:block;width:100%;margin-bottom:.5rem;';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-primary btn-sm';
+        button.textContent = 'Submit access request';
+        button.addEventListener('click', submitMissingProfileName);
+        notice.append(message, label, input, button);
+        input.focus();
+      }
+
+      async function submitMissingProfileName() {
+        const user = auth && auth.currentUser;
+        const input = document.getElementById('accessRequestFullName');
+        const name = String(input && input.value || '').trim();
+        if (!user || !name) {
+          input && input.focus();
+          return;
+        }
+        const button = document.querySelector('#loginErrorMsg button');
+        if (button) button.disabled = true;
+        try {
+          await user.updateProfile({ displayName: name });
+          await routeAuthenticatedUser(user);
+        } catch (err) {
+          console.error('Could not submit verified account request:', err);
+          setLoginNotice('Could not submit your access request. Check your connection and try again.');
+          if (button) button.disabled = false;
+        }
+      }
+
       let authRouteSequence = 0;
       async function routeAuthenticatedUser(user) {
         const routeId = ++authRouteSequence;
@@ -2035,15 +2085,9 @@
           if (!requestSnapshot.exists()) {
             let displayName = String(user.displayName || '').trim();
             if (!displayName) {
-              displayName = String(window.prompt('Enter your full name as it appears on the volunteer rota to submit your access request:') || '').trim();
-              if (!displayName) {
-                await auth.signOut().catch(() => {});
-                showLoginPage();
-                setLoginNotice('Your account is signed in and verified. Enter your full name on the next sign-in to submit an access request.');
-                return;
-              }
-              await user.updateProfile({ displayName });
-              if (routeId !== authRouteSequence) return;
+              showLoginPage();
+              showMissingProfileNameForm();
+              return;
             }
             await requestRef.set({ email: user.email, name: displayName, createdAt: firebase.database.ServerValue.TIMESTAMP });
           }
