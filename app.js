@@ -214,7 +214,7 @@
         eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
         suppliers: ['suppliers'],
         enquiries: ['enquiries'],
-        documents: ['documents','volunteerDocs','archiveUploads'],
+        documents: ['documents','volunteerDocs','archiveUploads','itemCodes'],
         notes: ['notes'],
         archives: ['historicalArchive','archiveUploads','clockLogs','incidents','maintenanceLogs'],
         notifications: ['notifications'],
@@ -222,7 +222,7 @@
         help: ['helpGuides'],
         myAccount: ['volunteers','nameChangeRequests']
       };
-      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','maintenanceLogs','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
       function grantedPageKeys(grants) {
         if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
         return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
@@ -2411,6 +2411,7 @@
           alert('Access Restricted: You do not have permission to view this page.');
           return;
         }
+        if (view !== 'documents') stopItemCodeCamera();
         currentView = view;
         renderSidebar();
 
@@ -6349,6 +6350,11 @@
       ];
       let docsSubView = 'general';
       let tempVolDocPhoto = '';
+      let itemCodeSort = 'location';
+      let itemCodeSearch = '';
+      let itemCodeCameraStream = null;
+      let itemCodeScanRunning = false;
+      let itemCodeFormId = null;
 
       function canManageVolDocs() {
         if (!currentUser) return false;
@@ -6381,13 +6387,231 @@
         return `
           <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn ${docsSubView === 'general' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('general')">General Documents</button>
+            <button class="btn ${docsSubView === 'items' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('items')">Item Register</button>
             <button class="btn ${docsSubView === 'volunteer' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('volunteer')">Volunteer Documents</button>
           </div>`;
       }
 
       function renderDocuments() {
+        if (docsSubView !== 'items') stopItemCodeCamera();
         if (docsSubView === 'volunteer') return renderVolunteerDocs();
+        if (docsSubView === 'items') return renderItemCodeRegister();
         renderGenericModule('documents');
+      }
+
+      function itemCodeCompare(left, right, key) {
+        const a = String(left[key] || '').trim();
+        const b = String(right[key] || '').trim();
+        return a.localeCompare(b, undefined, { numeric: key === 'itemCode', sensitivity: 'base' });
+      }
+
+      function renderItemCodeRegister() {
+        stopItemCodeCamera();
+        const content = document.getElementById('content');
+        const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
+        const query = itemCodeSearch.trim().toLowerCase();
+        const key = itemCodeSort === 'code' ? 'itemCode' : itemCodeSort === 'name' ? 'itemName' : 'location';
+        const filtered = records.filter(item => !query || [item.itemCode, item.itemName, item.location, item.category, item.notes]
+          .some(value => String(value || '').toLowerCase().includes(query)));
+        const sorted = filtered.slice().sort((a, b) => itemCodeCompare(a, b, key) || itemCodeCompare(a, b, 'itemCode'));
+        const locations = new Set(records.map(item => String(item.location || '').trim()).filter(Boolean));
+
+        content.innerHTML = `
+          ${docsTabsHtml()}
+          <div class="page-header">
+            <div class="page-title"><h2>Item Register</h2><p>Scan or enter an item code, record where it is stored, and find it again quickly.</p></div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-sm" type="button" onclick="startItemCodeCamera()"><i data-lucide="scan-line"></i> Scan code</button>
+              <button class="btn btn-primary btn-sm" type="button" onclick="openItemCodeForm()"><i data-lucide="plus"></i> Add item</button>
+            </div>
+          </div>
+          <div class="grid-stats item-register-stats">
+            <div class="stat-card"><div class="stat-header"><span>Registered items</span><div class="stat-icon"><i data-lucide="package"></i></div></div><div class="stat-value">${records.length}</div></div>
+            <div class="stat-card"><div class="stat-header"><span>Known locations</span><div class="stat-icon"><i data-lucide="map-pin"></i></div></div><div class="stat-value">${locations.size}</div></div>
+          </div>
+          <div id="itemCodeCameraPanel" class="card item-code-camera" style="display:none;padding:1rem;margin-bottom:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem;">
+              <strong>Scan an item barcode</strong>
+              <button type="button" class="btn btn-subtle btn-sm" onclick="stopItemCodeCamera();document.getElementById('itemCodeCameraPanel').style.display='none'" aria-label="Close scanner">Close</button>
+            </div>
+            <video id="itemCodeCameraVideo" playsinline muted style="display:block;width:100%;max-height:320px;object-fit:contain;background:#17271f;border-radius:6px;"></video>
+            <p id="itemCodeCameraStatus" role="status" aria-live="polite" style="font-size:.78rem;color:var(--text-muted);margin-top:.55rem;">Starting camera…</p>
+          </div>
+          <div id="itemCodeEditor" class="card item-code-editor" style="display:none;padding:1rem;margin-bottom:1rem;"></div>
+          <div class="item-register-toolbar">
+            <label class="item-register-search"><i data-lucide="search"></i><input id="itemCodeSearch" type="search" value="${escapeHtml(itemCodeSearch)}" placeholder="Search code, item, location…" oninput="setItemCodeSearch(this.value)"></label>
+            <label class="item-register-sort"><span>Sort by</span><select id="itemCodeSort" onchange="setItemCodeSort(this.value)">
+              <option value="location" ${itemCodeSort === 'location' ? 'selected' : ''}>Location, then code</option>
+              <option value="code" ${itemCodeSort === 'code' ? 'selected' : ''}>Item code</option>
+              <option value="name" ${itemCodeSort === 'name' ? 'selected' : ''}>Item name</option>
+            </select></label>
+          </div>
+          <div class="card"><div class="table-container"><table class="item-register-table">
+            <thead><tr><th>Item code</th><th>Item</th><th>Location</th><th>Category</th><th>Notes</th><th></th></tr></thead>
+            <tbody>${sorted.length ? sorted.map(item => `
+              <tr><td><code>${escapeHtml(item.itemCode)}</code></td><td><strong>${escapeHtml(item.itemName || '-')}</strong></td>
+                <td>${escapeHtml(item.location || 'Unassigned')}</td><td>${escapeHtml(item.category || '-')}</td><td>${escapeHtml(item.notes || '-')}</td>
+                <td><div style="display:flex;gap:.35rem;justify-content:flex-end;"><button type="button" class="btn btn-secondary btn-sm" onclick="openItemCodeForm(${inlineJsArg(item.id)})" aria-label="Edit ${escapeHtml(item.itemCode)}" title="Edit"><i data-lucide="pencil"></i></button><button type="button" class="btn btn-danger btn-sm" onclick="deleteItemCode(${inlineJsArg(item.id)})" aria-label="Delete ${escapeHtml(item.itemCode)}" title="Delete"><i data-lucide="trash-2"></i></button></div></td>
+              </tr>`).join('') : `<tr><td colspan="6" class="item-register-empty">${records.length ? 'No items match that search.' : 'No items registered yet. Scan a code or add the first item.'}</td></tr>`}</tbody>
+          </table></div></div>`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function setItemCodeSearch(value) {
+        itemCodeSearch = String(value || '');
+        const cursor = document.getElementById('itemCodeSearch')?.selectionStart;
+        renderItemCodeRegister();
+        const input = document.getElementById('itemCodeSearch');
+        input?.focus();
+        if (cursor !== undefined) input?.setSelectionRange(cursor, cursor);
+      }
+
+      function setItemCodeSort(value) {
+        itemCodeSort = ['location', 'code', 'name'].includes(value) ? value : 'location';
+        renderItemCodeRegister();
+      }
+
+      function openItemCodeForm(id = null, scannedCode = '') {
+        itemCodeFormId = id;
+        const editor = document.getElementById('itemCodeEditor');
+        if (!editor) return;
+        const existing = id === null ? null : (db.itemCodes || []).find(item => String(item.id) === String(id));
+        editor.style.display = 'block';
+        editor.innerHTML = `
+          <h3 style="font-size:.95rem;margin-bottom:.8rem;">${existing ? 'Edit item' : 'Add item'}</h3>
+          <form onsubmit="saveItemCode(event)">
+            <div class="item-code-form-grid">
+              <div class="form-group"><label for="itemCodeValue">Item code</label><input id="itemCodeValue" required maxlength="120" autocomplete="off" value="${escapeHtml(existing?.itemCode || scannedCode)}" placeholder="Scan or type code"></div>
+              <div class="form-group"><label for="itemCodeName">Item name</label><input id="itemCodeName" required maxlength="160" value="${escapeHtml(existing?.itemName || '')}" placeholder="What is the item?"></div>
+              <div class="form-group"><label for="itemCodeLocation">Storage location</label><input id="itemCodeLocation" required maxlength="160" list="itemCodeLocationOptions" value="${escapeHtml(existing?.location || '')}" placeholder="e.g. Workshop / Shelf B"><datalist id="itemCodeLocationOptions">${[...new Set((db.itemCodes || []).map(item => item.location).filter(Boolean))].map(location => `<option value="${escapeHtml(location)}"></option>`).join('')}</datalist></div>
+              <div class="form-group"><label for="itemCodeCategory">Category</label><input id="itemCodeCategory" maxlength="100" value="${escapeHtml(existing?.category || '')}" placeholder="Optional"></div>
+              <div class="form-group item-code-notes"><label for="itemCodeNotes">Notes</label><textarea id="itemCodeNotes" rows="2" maxlength="500" placeholder="Optional details">${escapeHtml(existing?.notes || '')}</textarea></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-secondary btn-sm" onclick="closeItemCodeForm()">Cancel</button><button type="submit" class="btn btn-primary btn-sm">${existing ? 'Save changes' : 'Save item'}</button></div>
+          </form>`;
+        document.getElementById('itemCodeValue')?.focus();
+      }
+
+      function closeItemCodeForm() {
+        itemCodeFormId = null;
+        const editor = document.getElementById('itemCodeEditor');
+        if (editor) { editor.style.display = 'none'; editor.innerHTML = ''; }
+      }
+
+      async function saveItemCode(event) {
+        event.preventDefault();
+        const itemCode = String(document.getElementById('itemCodeValue')?.value || '').trim();
+        const itemName = String(document.getElementById('itemCodeName')?.value || '').trim();
+        const location = String(document.getElementById('itemCodeLocation')?.value || '').trim();
+        if (!itemCode || !itemName || !location) return;
+        const records = Array.isArray(db.itemCodes) ? db.itemCodes.slice() : [];
+        const duplicate = records.find(item => String(item.itemCode || '').trim().toLowerCase() === itemCode.toLowerCase() && String(item.id) !== String(itemCodeFormId));
+        if (duplicate) {
+          alert('That item code is already registered. Edit the existing item instead.');
+          openItemCodeForm(duplicate.id);
+          return;
+        }
+        const record = {
+          id: itemCodeFormId || 'item-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          itemCode,
+          itemName,
+          location,
+          category: String(document.getElementById('itemCodeCategory')?.value || '').trim(),
+          notes: String(document.getElementById('itemCodeNotes')?.value || '').trim(),
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser?.name || currentUser?.email || ''
+        };
+        const index = records.findIndex(item => String(item.id) === String(itemCodeFormId));
+        if (index >= 0) records[index] = { ...records[index], ...record };
+        else records.push(record);
+        const saveButton = event.submitter;
+        if (saveButton) saveButton.disabled = true;
+        if (!await dbSet('EVLT_ADMIN_DB/itemCodes', records)) {
+          if (saveButton) saveButton.disabled = false;
+          return;
+        }
+        db.itemCodes = records;
+        itemCodeFormId = null;
+        renderItemCodeRegister();
+      }
+
+      async function deleteItemCode(id) {
+        const record = (db.itemCodes || []).find(item => String(item.id) === String(id));
+        if (!record || !confirm(`Remove ${record.itemCode} - ${record.itemName}?`)) return;
+        const records = db.itemCodes.filter(item => String(item.id) !== String(id));
+        if (!await dbSet('EVLT_ADMIN_DB/itemCodes', records)) return;
+        db.itemCodes = records;
+        renderItemCodeRegister();
+      }
+
+      async function startItemCodeCamera() {
+        const panel = document.getElementById('itemCodeCameraPanel');
+        const video = document.getElementById('itemCodeCameraVideo');
+        const status = document.getElementById('itemCodeCameraStatus');
+        if (!panel || !video || !status) return;
+        panel.style.display = 'block';
+        if (!('BarcodeDetector' in window)) {
+          status.textContent = 'Camera barcode scanning is not supported in this browser. Use a USB/Bluetooth scanner in the item-code field or type the code.';
+          openItemCodeForm();
+          return;
+        }
+        if (!navigator.mediaDevices?.getUserMedia) {
+          status.textContent = 'Camera access is unavailable. Use a scanner in the item-code field or type the code.';
+          openItemCodeForm();
+          return;
+        }
+        try {
+          stopItemCodeCamera();
+          const desiredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf'];
+          const supportedFormats = typeof BarcodeDetector.getSupportedFormats === 'function'
+            ? await BarcodeDetector.getSupportedFormats()
+            : desiredFormats;
+          const formats = desiredFormats.filter(format => supportedFormats.includes(format));
+          if (!formats.length) {
+            status.textContent = 'This camera does not support common barcode formats. Use a USB/Bluetooth scanner in the item-code field or type the code.';
+            openItemCodeForm();
+            return;
+          }
+          const detector = new BarcodeDetector({ formats });
+          itemCodeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+          video.srcObject = itemCodeCameraStream;
+          await video.play();
+          itemCodeScanRunning = true;
+          status.textContent = 'Point the camera at an item barcode.';
+          const scanFrame = async () => {
+            if (!itemCodeScanRunning) return;
+            try {
+              const results = await detector.detect(video);
+              if (results.length && results[0].rawValue) {
+                const code = results[0].rawValue.trim();
+                stopItemCodeCamera();
+                panel.style.display = 'none';
+                const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
+                if (existing) {
+                  alert('This code is already registered. Review or update its item and location.');
+                  openItemCodeForm(existing.id);
+                } else openItemCodeForm(null, code);
+                return;
+              }
+            } catch (err) {
+              console.warn('Barcode scan frame failed:', err);
+            }
+            if (itemCodeScanRunning) requestAnimationFrame(scanFrame);
+          };
+          requestAnimationFrame(scanFrame);
+        } catch (err) {
+          console.error('Could not start item barcode camera:', err);
+          status.textContent = err && err.name === 'NotAllowedError' ? 'Camera permission was denied. Use a scanner in the item-code field or type the code.' : 'Could not start the camera. Use a scanner in the item-code field or type the code.';
+          openItemCodeForm();
+        }
+      }
+
+      function stopItemCodeCamera() {
+        itemCodeScanRunning = false;
+        if (itemCodeCameraStream) itemCodeCameraStream.getTracks().forEach(track => track.stop());
+        itemCodeCameraStream = null;
+        const video = document.getElementById('itemCodeCameraVideo');
+        if (video) video.srcObject = null;
       }
 
       function volDocStatus(d) {

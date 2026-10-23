@@ -452,4 +452,112 @@
           animation-iteration-count: 1 !important;
         }
       }
+
+      .item-register-stats {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 220px));
+        margin-bottom: 1rem;
+      }
+
+      .item-register-toolbar {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+
+      .item-register-search {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1 1 260px;
+        min-width: 0;
+        padding: 0 0.65rem;
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+
+      .item-register-search svg {
+        width: 16px;
+        height: 16px;
+        color: var(--text-muted);
+        flex: 0 0 auto;
+      }
+
+      .item-register-search input {
+        width: 100%;
+        min-width: 0;
+        height: 38px;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+        font-size: 0.82rem;
+      }
+
+      .item-register-sort {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--text-muted);
+        font-size: 0.76rem;
+        font-weight: 600;
+      }
+
+      .item-register-sort select {
+        min-height: 38px;
+        padding: 0 0.55rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card-bg);
+        color: var(--text);
+      }
+
+      .item-code-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 0.75rem;
+      }
+
+      .item-code-form-grid .item-code-notes {
+        grid-column: 1 / -1;
+      }
+
+      .item-register-table code {
+        color: #254d35;
+        font-weight: 700;
+        font-size: 0.78rem;
+      }
+
+      .item-register-empty {
+        padding: 2rem !important;
+        text-align: center;
+        color: var(--text-muted);
+      }
+
+      @media (max-width: 600px) {
+        .item-register-toolbar {
+          align-items: stretch;
+        }
+
+        .item-register-sort {
+          justify-content: space-between;
+        }
+
+        .item-register-sort select {
+          flex: 1;
+          max-width: 65%;
+        }
+
+        .item-code-form-grid {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+
+        .item-code-form-grid .item-code-notes {
+          grid-column: auto;
+        }
+      }
     
