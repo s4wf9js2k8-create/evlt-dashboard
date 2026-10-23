@@ -3285,25 +3285,42 @@
         const content = document.getElementById('content');
         const volunteers = db.volunteers || [];
         const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const totalVolunteers = volunteers.length;
+        const clearedDbs = volunteers.filter(v => String(v['DBS Status'] || 'Cleared').toLowerCase() === 'cleared').length;
+        const totalYtdHours = volunteers.reduce((sum, volunteer) => sum + getVolYtdHours(getVolunteerName(volunteer)), 0);
 
         content.innerHTML = `
-          <div class="page-header">
+          <div class="page-header" style="align-items:flex-start;">
             <div class="page-title">
-              <h2>Volunteer Directory & Roles</h2>
-              <p>Manage volunteer profiles, PIN codes, DBS statuses, and qualifications.</p>
+              <h2>Volunteer Directory</h2>
+              <p>Manage volunteer profiles, roles, and DBS status.</p>
             </div>
             ${isAdmin ? `
               <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                ${(db.volunteers || []).some(v => (v.Pin || v.pin) && !isHashedPin(v.Pin || v.pin)) ? `<button class="btn btn-secondary btn-sm" onclick="secureAllPins()"><i data-lucide="lock"></i> Secure All PINs</button>` : ''}
                 <button class="btn btn-primary btn-sm" onclick="openVolunteerModal(null)">
-                  <i data-lucide="user-plus"></i> Add New Volunteer
+                  <i data-lucide="user-plus"></i> Add volunteer
                 </button>
               </div>
             ` : ''}
           </div>
 
-          <div style="margin-bottom:0.75rem;">
-            <input type="search" id="volSearchInput" placeholder="🔍  Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.85rem; outline:none;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.85rem; margin-bottom:1rem;">
+            <div class="card" style="padding:1rem; background:linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.02)); border:1px solid var(--border);">
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Volunteers</div>
+              <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalVolunteers}</div>
+            </div>
+            <div class="card" style="padding:1rem; border:1px solid var(--border);">
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Cleared DBS</div>
+              <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem; color:#166534;">${clearedDbs}</div>
+            </div>
+            <div class="card" style="padding:1rem; border:1px solid var(--border);">
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">YTD hours</div>
+              <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalYtdHours.toFixed(1)}h</div>
+            </div>
+          </div>
+
+          <div class="card" style="padding:0.85rem; margin-bottom:1rem; border:1px solid var(--border); background:rgba(255,255,255,0.65);">
+            <input type="search" id="volSearchInput" placeholder="Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.8rem 0.9rem; border:1px solid var(--border); border-radius:12px; font-size:0.9rem; background:#fff; outline:none; box-shadow: inset 0 1px 2px rgba(15,23,42,0.04);">
           </div>
 
           <div class="card">
@@ -3311,7 +3328,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Volunteer Name</th>
+                    <th>Volunteer</th>
                     <th>Roles / Qualifications</th>
                     <th>YTD Hours</th>
                     <th>DBS Status</th>
@@ -3319,23 +3336,29 @@
                   </tr>
                 </thead>
                 <tbody id="volTableBody">
-                  ${volunteers.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem;">No volunteers registered.</td></tr>' :
+                  ${volunteers.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No volunteers registered.</td></tr>' :
                     volunteers.map((v, idx) => {
                       const name = getVolunteerName(v);
                       const ytd = getVolYtdHours(name);
+                      const roleText = v.Roles || v.roles || 'Standard';
                       return `
-                        <tr data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml((v.Roles||v.roles||'').toLowerCase())}">
+                        <tr data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml(roleText.toLowerCase())}">
                           <td>
-                            <strong>${escapeHtml(name)}</strong>
-                            <div style="font-size:0.7rem; color:var(--text-muted); font-family:monospace;">${isHashedPin(v.Pin || v.pin) ? 'PIN: set &#128274;' : 'PIN: ' + escapeHtml(v.Pin || v.pin || '1234') + ' (not yet secured)'}</div>
+                            <div style="display:flex; align-items:center; gap:0.75rem;">
+                              <div style="width:2.25rem; height:2.25rem; border-radius:50%; background:linear-gradient(135deg, #dbeafe, #e0e7ff); color:#1d4ed8; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.8rem;">${escapeHtml(name.charAt(0).toUpperCase() || 'V')}</div>
+                              <div>
+                                <div style="font-weight:700;">${escapeHtml(name)}</div>
+                                <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(roleText.split(',')[0] || 'Volunteer')}</div>
+                              </div>
+                            </div>
                           </td>
-                          <td style="font-size:0.78rem;">${escapeHtml(v.Roles || v.roles || 'Standard')}</td>
+                          <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(roleText)}</td>
                           <td>
                             ${ytd > 0
-                              ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 7px; border-radius:4px; font-weight:700; font-size:0.75rem;">${ytd.toFixed(1)} hrs</span>`
+                              ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 7px; border-radius:8px; font-weight:700; font-size:0.75rem;">${ytd.toFixed(1)} hrs</span>`
                               : `<span style="color:var(--text-muted); font-size:0.75rem;">0 hrs</span>`}
                           </td>
-                          <td><span style="background:${v['DBS Status'] === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${v['DBS Status'] === 'Cleared' ? '#166534' : '#92400e'}; padding:2px 6px; border-radius:4px; font-weight:700; font-size:0.7rem;">${v['DBS Status'] || 'Cleared'}</span></td>
+                          <td><span style="display:inline-flex; align-items:center; justify-content:center; min-width:82px; background:${v['DBS Status'] === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${v['DBS Status'] === 'Cleared' ? '#166534' : '#92400e'}; padding:4px 8px; border-radius:999px; font-weight:700; font-size:0.7rem;">${v['DBS Status'] || 'Cleared'}</span></td>
                           ${isAdmin ? `
                             <td style="text-align:right;">
                               <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
@@ -3370,10 +3393,6 @@
         document.getElementById('volunteerModalTitle').innerText = existing ? 'Edit Volunteer' : 'Add New Volunteer';
         document.getElementById('volEditIndex').value = index !== null ? index : '';
         document.getElementById('volName').value = existing ? getVolunteerName(existing) : '';
-        const volPinInput = document.getElementById('volPin');
-        volPinInput.value = '';
-        volPinInput.required = !existing;
-        volPinInput.placeholder = existing ? 'Leave blank to keep current PIN' : 'Choose a PIN (4-6 digits)';
         document.getElementById('volDbs').value = existing ? (existing['DBS Status'] || 'Cleared') : 'Cleared';
 
         const rolesListContainer = document.getElementById('volRolesCheckboxes');
@@ -3396,8 +3415,12 @@
         e.preventDefault();
         const indexVal = document.getElementById('volEditIndex').value;
         const name = document.getElementById('volName').value.trim();
-        const pin = document.getElementById('volPin').value.trim();
         const dbs = document.getElementById('volDbs').value;
+
+        if (!name) {
+          alert('Please enter the volunteer name.');
+          return;
+        }
 
         const selectedRoles = Array.from(document.querySelectorAll('.vol-role-cb:checked')).map(cb => cb.value);
         const rolesStr = selectedRoles.join(', ') || 'Standard';
@@ -3405,18 +3428,13 @@
         if (!db.volunteers) db.volunteers = [];
 
         const isEdit = indexVal !== '' && db.volunteers[indexVal];
-        if (!isEdit && pin.length < 4) { alert('Please choose a PIN of at least 4 characters.'); return; }
-        if (pin && pin.length < 4) { alert('A PIN must be at least 4 characters.'); return; }
-
         if (isEdit) {
           db.volunteers[indexVal].Name = name;
-          if (pin) { db.volunteers[indexVal].Pin = hashPin(pin); delete db.volunteers[indexVal].pin; }
           db.volunteers[indexVal].Roles = rolesStr;
           db.volunteers[indexVal]['DBS Status'] = dbs;
         } else {
           db.volunteers.push({
             Name: name,
-            Pin: hashPin(pin),
             Roles: rolesStr,
             'DBS Status': dbs
           });
