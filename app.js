@@ -1637,13 +1637,10 @@
 
       function getSystemAdminEmails() {
         const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins : [];
-        const list = entries
+        return [...new Set(entries
           .map(item => typeof item === 'string' ? item : (item && item.email ? item.email : ''))
           .map(item => normalizeEmail(item))
-          .filter(Boolean);
-        const primary = normalizeEmail(SYSTEM_ADMIN_EMAIL);
-        if (primary) list.push(primary);
-        return [...new Set(list)].filter(Boolean);
+          .filter(Boolean))];
       }
 
       function isSystemAdminEmail(email) {
@@ -1689,13 +1686,22 @@
           alert('You cannot remove your own admin access while signed in. Sign in as another admin to revoke this account.');
           return false;
         }
-        if (!normalized || normalized === String(SYSTEM_ADMIN_EMAIL || '').trim().toLowerCase()) {
-          alert('The primary admin account cannot be removed here.');
-          return false;
-        }
+        if (!normalized) return false;
         const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins : [];
         const removed = entries.filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) === normalized);
         const next = entries.filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) !== normalized);
+        const retainedUidAdmins = next.filter(item => item && typeof item === 'object' && item.uid);
+        const actorUid = String(auth && auth.currentUser && auth.currentUser.uid || '');
+        const actorStillListed = retainedUidAdmins.some(item => item.uid === actorUid);
+        if (normalized === normalizeEmail(SYSTEM_ADMIN_EMAIL) && (!actorUid || !actorStillListed || !currentUser || !currentUser.isSystemAdmin)) {
+          alert('The primary admin can only be removed while signed in as a different UID-based System Admin.');
+          return false;
+        }
+        if (normalized === normalizeEmail(SYSTEM_ADMIN_EMAIL) && !confirm('Remove the old primary admin access? The signed-in replacement admin will remain. This does not delete the old Firebase Authentication login.')) return false;
+        if (normalized === normalizeEmail(SYSTEM_ADMIN_EMAIL) && retainedUidAdmins.length === 0) {
+          alert('Keep at least one UID-based System Admin before removing the primary admin.');
+          return false;
+        }
         const updates = { 'EVLT_ADMIN_DB/systemAdmins': next };
         removed.forEach(item => {
           if (item && typeof item === 'object' && item.uid) updates['EVLT_SYSTEM_ADMIN_UIDS/' + item.uid] = null;
