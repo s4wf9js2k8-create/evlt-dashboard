@@ -1465,6 +1465,7 @@
         document.getElementById('signupToggleButton')?.addEventListener('click', toggleVolunteerSignup);
         document.getElementById('resetPasswordButton')?.addEventListener('click', resetVolunteerPassword);
         document.getElementById('resendVerificationButton')?.addEventListener('click', resendVolunteerVerification);
+        document.getElementById('loginPasswordToggle')?.addEventListener('click', togglePasswordVisibility);
         initFirebaseMessaging();
         if (!auth || !database) {
           console.error('Firebase Authentication or Realtime Database is unavailable.');
@@ -1507,6 +1508,16 @@
         select.removeEventListener('change', updateLoginCredentialPrompt);
         select.addEventListener('change', updateLoginCredentialPrompt);
         updateLoginCredentialPrompt();
+      }
+
+      function togglePasswordVisibility() {
+        const input = document.getElementById('loginUserPin');
+        const toggle = document.getElementById('loginPasswordToggle');
+        if (!input || !toggle) return;
+        const showing = input.type === 'text';
+        input.type = showing ? 'password' : 'text';
+        toggle.textContent = showing ? 'Show' : 'Hide';
+        toggle.setAttribute('aria-pressed', String(!showing));
       }
 
       function updateLoginCredentialPrompt() {
@@ -1619,6 +1630,43 @@
       const SYSTEM_ADMIN_EMAIL = 'impulseflame619@gmail.com';
       const LOGIN_MAX_FAILS = 5;
       const LOGIN_LOCK_SECONDS = 60;
+
+      function getSystemAdminEmails() {
+        const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins : [];
+        const list = entries
+          .map(item => typeof item === 'string' ? item : (item && item.email ? item.email : ''))
+          .map(item => String(item || '').trim())
+          .filter(Boolean);
+        const primary = String(SYSTEM_ADMIN_EMAIL || '').trim();
+        if (primary) list.push(primary);
+        return [...new Set(list.map(email => email.toLowerCase()))].filter(Boolean).map(email => email.toLowerCase());
+      }
+
+      function isSystemAdminEmail(email) {
+        return getSystemAdminEmails().includes(String(email || '').trim().toLowerCase());
+      }
+
+      async function addSystemAdmin(email) {
+        const normalized = String(email || '').trim();
+        if (!normalized) return false;
+        const existing = getSystemAdminEmails();
+        const next = [...new Set([...existing, normalized.toLowerCase()])];
+        db.systemAdmins = next;
+        const saved = await dbUpdate({ systemAdmins: next });
+        return Boolean(saved);
+      }
+
+      async function removeSystemAdmin(email) {
+        const normalized = String(email || '').trim().toLowerCase();
+        if (!normalized || normalized === String(SYSTEM_ADMIN_EMAIL || '').trim().toLowerCase()) {
+          alert('The primary admin account cannot be removed here.');
+          return false;
+        }
+        const next = getSystemAdminEmails().filter(item => item !== normalized);
+        db.systemAdmins = next;
+        const saved = await dbUpdate({ systemAdmins: next });
+        return Boolean(saved);
+      }
 
       function loginLockSecondsLeft() {
         let until = 0;
@@ -1884,6 +1932,9 @@
         }
         lastActivityAt = Date.now();
         setLoginNotice('');
+        hideLoginPage();
+        renderSidebar();
+        navigate(currentUser && currentUser.isShopKiosk ? 'clock' : 'dashboard');
         attachDatabaseListener();
       }
 
@@ -1912,9 +1963,7 @@
             setLoginNotice('Verify your email using the link Firebase sent, then return here and sign in.');
             return;
           }
-          // A verified match to this exact email is the sole administrator identity.
-          // Admins use the same email/password form as every volunteer.
-          const isAdmin = String(user.email || '').trim().toLowerCase() === SYSTEM_ADMIN_EMAIL.toLowerCase();
+          const isAdmin = isSystemAdminEmail(user.email);
           if (isAdmin) {
             launchApprovedAccount(user, null, true);
             return;
@@ -2038,7 +2087,11 @@
             return '<article class="card" style="padding:.85rem;margin:.55rem 0;display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
               '<div><strong>' + escapeHtml(binding.volunteerName || 'Volunteer') + '</strong><div style="font-size:.78rem;color:var(--text-muted);">' + escapeHtml(binding.email) + '</div>' +
               '<div style="font-size:.72rem;margin-top:.2rem;">' + (pages.length ? escapeHtml(pages.map(key => ACCOUNT_ACCESS_PAGES.find(p => p.key === key)?.label || key).join(', ')) : '<span style="color:#b91c1c;">No pages assigned</span>') + '</div></div>' +
-              '<button class="btn btn-secondary btn-sm" onclick="openAccessControlModal(' + safeUid + ')">Set page access</button></article>';
+              '<div style="display:flex;gap:.4rem;flex-wrap:wrap;">' +
+              '<button class="btn btn-secondary btn-sm" onclick="openAccessControlModal(' + safeUid + ')">Set pages</button>' +
+              '<button class="btn btn-secondary btn-sm" onclick="editApprovedAccount(' + safeUid + ')">Edit</button>' +
+              '<button class="btn btn-danger btn-sm" onclick="deleteApprovedAccount(' + safeUid + ')">Delete</button>' +
+              '</div></article>';
           }).join('');
         }).catch(err => {
           console.error('Could not load approved account access:', err);
@@ -6557,6 +6610,32 @@
         }
       }
 
+      async function editApprovedAccount(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        const snapshot = await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).once('value');
+        const binding = snapshot.val();
+        if (!binding || binding.approved !== true) {
+          alert('That approved account cannot be edited right now.');
+          return;
+        }
+        const name = prompt('Update the volunteer name for this account:', String(binding.volunteerName || ''));
+        if (name === null) return;
+        const cleaned = name.trim();
+        if (!cleaned) {
+          alert('The volunteer name cannot be empty.');
+          return;
+        }
+        await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid + '/volunteerName').set(cleaned);
+        loadApprovedAccountAccess();
+      }
+
+      async function deleteApprovedAccount(uid) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        if (!confirm('Delete this approved account and revoke its page access?')) return;
+        await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove();
+        loadApprovedAccountAccess();
+      }
+
       async function saveUserPermissions(e) {
         e.preventDefault();
         if (!currentUser || !currentUser.isSystemAdmin || !database) return;
@@ -6658,6 +6737,58 @@
           console.error('Password reset request failed:', err);
           notice.style.color = '#dc2626';
           notice.textContent = 'Could not send the reset link. Please try again or contact Louie Hull.';
+        }
+      }
+
+      async function addAdminFromInput() {
+        const input = document.getElementById('adminEmailInput');
+        const email = String(input?.value || '').trim();
+        if (!email) {
+          alert('Enter an email address before adding an admin.');
+          return;
+        }
+        const added = await addSystemAdmin(email);
+        if (added) {
+          input.value = '';
+          renderSettings();
+          return;
+        }
+        alert('Could not save that admin email.');
+      }
+
+      async function removeAdminFromList(email) {
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        const ok = await removeSystemAdmin(email);
+        if (ok) renderSettings();
+      }
+
+      async function changeCurrentAdminEmail() {
+        if (!currentUser || !currentUser.isSystemAdmin || !auth || !auth.currentUser) return;
+        const input = document.getElementById('currentAdminEmailInput');
+        const nextEmail = String(input?.value || '').trim();
+        if (!nextEmail) {
+          alert('Enter a new admin email before updating it.');
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+          alert('Enter a valid email address.');
+          return;
+        }
+        const oldEmail = String(auth.currentUser.email || '').trim();
+        try {
+          await auth.currentUser.updateEmail(nextEmail);
+          const currentAdminList = getSystemAdminEmails().filter(email => email !== oldEmail.toLowerCase());
+          currentAdminList.push(nextEmail.toLowerCase());
+          db.systemAdmins = [...new Set(currentAdminList)];
+          await dbUpdate({ systemAdmins: db.systemAdmins });
+          alert('Your admin email has been updated. Please sign back in with the new address.');
+          await auth.signOut();
+          showLoginPage();
+          setLoginNotice('Your admin email has been updated. Please sign in again with the new address.', false);
+        } catch (err) {
+          console.error('Changing admin email failed:', err);
+          const msg = err && err.code === 'auth/email-already-in-use' ? 'That email is already in use by another account.' : 'The admin email could not be changed. Try again in a moment.';
+          alert(msg);
         }
       }
 
@@ -6879,11 +7010,46 @@
           return;
         }
 
+        const adminEmails = getSystemAdminEmails();
+        const currentAdminEmail = String(currentUser && currentUser.email || '').trim().toLowerCase();
+
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
               <h2>System Settings & Permissions</h2>
               <p>Configure administrative access, notification push tokens, and data synchronisation.</p>
+            </div>
+          </div>
+
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">My admin account</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">This is the admin account currently signed in and available to manage the system.</p>
+            <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:.8rem;">
+              <span class="tag" style="display:inline-flex; align-items:center; gap:.4rem; background:#eef2ff; color:#3730a3; padding:.38rem .7rem; border-radius:999px; font-size:.78rem; font-weight:700;">${escapeHtml(currentUser.email || 'Unknown admin')}</span>
+            </div>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
+              <input type="email" id="currentAdminEmailInput" value="${escapeHtml(currentUser.email || '')}" style="min-width:220px; flex:1;">
+              <button class="btn btn-primary btn-sm" onclick="changeCurrentAdminEmail()"><i data-lucide="user-cog"></i> Change my admin email</button>
+            </div>
+          </div>
+
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Admin access list</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Grant or remove full admin access for email accounts. These accounts can manage settings and approve volunteer access.</p>
+            <div style="display:flex; flex-direction:column; gap:.6rem; margin-bottom:.8rem;">
+              ${adminEmails.length ? adminEmails.map(email => `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem; background:rgba(255,255,255,.7);">
+                  <div>
+                    <strong>${escapeHtml(email)}</strong>
+                    ${email === currentAdminEmail ? '<div style="font-size:.7rem;color:var(--text-muted);">Current signed-in admin</div>' : ''}
+                  </div>
+                  <button class="btn btn-danger btn-sm" onclick="removeAdminFromList('${escapeHtml(email)}')">Remove</button>
+                </div>
+              `).join('') : '<p style="font-size:.8rem;color:var(--text-muted);">No admin emails assigned yet.</p>'}
+            </div>
+            <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+              <input type="email" id="adminEmailInput" placeholder="new-admin@example.com" style="min-width:220px; flex:1;">
+              <button class="btn btn-secondary btn-sm" onclick="addAdminFromInput()"><i data-lucide="plus"></i> Add admin</button>
             </div>
           </div>
 

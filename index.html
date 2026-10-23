@@ -60,7 +60,10 @@
           </div>
           <div class="form-group">
             <label for="loginUserPin">Password</label>
-            <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters">
+            <div style="position:relative;">
+              <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters" style="padding-right:2.8rem;">
+              <button type="button" id="loginPasswordToggle" aria-label="Show or hide password" style="position:absolute; right:0.55rem; top:50%; transform:translateY(-50%); border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:0.72rem; font-weight:600;">Show</button>
+            </div>
           </div>
           <div id="loginErrorMsg" role="status" aria-live="polite" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
             Enter your volunteer email and password.
