@@ -6945,44 +6945,34 @@
           return;
         }
         try {
-          const updateEmail = () => auth.currentUser.updateEmail(nextEmail);
-          try {
-            await updateEmail();
-          } catch (err) {
-            if (!err || err.code !== 'auth/requires-recent-login') throw err;
-            const password = window.prompt('For security, enter your current admin password to confirm this email change:');
-            if (password === null) return;
-            if (!password) {
-              alert('Your current password is required to confirm this email change.');
-              return;
-            }
-            const credential = firebase.auth.EmailAuthProvider.credential(oldEmail, password);
-            await auth.currentUser.reauthenticateWithCredential(credential);
-            await updateEmail();
+          const user = auth.currentUser;
+          if (typeof user.verifyBeforeUpdateEmail !== 'function') {
+            throw new Error('This Firebase Auth SDK does not support verification before changing email.');
           }
-          const currentAdminList = getSystemAdminEmails().filter(email => email !== normalizeEmail(oldEmail));
-          currentAdminList.push(normalizeEmail(nextEmail));
-          db.systemAdmins = [...new Set(currentAdminList)];
-          await dbUpdate({ systemAdmins: db.systemAdmins });
-          alert('Your admin email has been updated. Please sign back in with the new address.');
-          await auth.signOut();
-          showLoginPage();
-          setLoginNotice('Your admin email has been updated. Please sign in again with the new address.', false);
+          await database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + user.uid).set(true);
+          await user.verifyBeforeUpdateEmail(nextEmail);
+
+          const currentAdminList = (Array.isArray(db.systemAdmins) ? db.systemAdmins : [])
+            .filter(item => normalizeEmail(typeof item === 'string' ? item : item && item.email) !== normalizeEmail(oldEmail));
+          currentAdminList.push({ email: normalizeEmail(nextEmail), uid: user.uid });
+          db.systemAdmins = currentAdminList;
+          const updates = { 'EVLT_ADMIN_DB/systemAdmins': currentAdminList };
+          await database.ref().update(updates);
+
+          alert('Firebase sent a verification link to ' + nextEmail + '. Open that link to complete the email change, then sign in again using the new email address. Your admin access is retained for this Firebase account.');
+          return;
         } catch (err) {
           console.error('Changing admin email failed:', err);
           const messages = {
-            'auth/email-already-in-use': 'Firebase Authentication already has an account with that email. Clearing stale dashboard links does not remove Firebase accounts. Sign in to that account or ask an administrator to review it under Firebase Console > Authentication > Users.',
+            'auth/email-already-in-use': 'That email already belongs to a Firebase Authentication account. Sign in to that account or have the Firebase administrator review the duplicate before retrying.',
             'auth/invalid-email': 'Firebase rejected the email address. Check that it is typed correctly.',
-            'auth/operation-not-allowed': 'Email changes are disabled for this Firebase project. Enable Email/Password sign-in in Firebase Authentication settings.',
-            'auth/weak-password': 'The password entered for confirmation is too weak. Use your current account password and try again.',
-            'auth/wrong-password': 'The current admin password was not accepted. Try again or use the password reset link.',
-            'auth/invalid-credential': 'The current admin password was not accepted, or this account does not use email/password sign-in.',
-            'auth/user-mismatch': 'The password could not be used to confirm this signed-in admin account.',
+            'auth/operation-not-allowed': 'Firebase rejected the email-change request. Check the full Firebase error in the browser console; the email must be changed with Firebase verification before update.',
+            'auth/requires-recent-login': 'Firebase requires a recent sign-in for this change. Sign out, sign back in as the current primary admin, and retry.',
             'auth/network-request-failed': 'Firebase could not be reached. Check your internet connection and try again.',
             'auth/too-many-requests': 'Firebase temporarily blocked this attempt. Wait a little while, then try again.',
-            'auth/requires-recent-login': 'Firebase still requires a recent sign-in. Sign out, sign back in, and retry the email change.'
+            'auth/unauthorized-continue-uri': 'Firebase rejected the verification return URL. Check the authorized domains in Authentication settings.'
           };
-          const msg = messages[err && err.code] || 'The admin email could not be changed. Firebase error: ' + (err && err.code ? err.code : 'unknown') + '. Check the connection and try again.';
+          const msg = messages[err && err.code] || 'Firebase could not start the email verification. ' + (err && err.message ? err.message : 'Check your connection and try again.');
           alert(msg);
         }
       }
