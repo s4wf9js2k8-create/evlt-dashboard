@@ -1,0 +1,15 @@
+{
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "auth": {
+    "providers": {
+      "anonymous": false,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "EVLT Operations",
+        "supportEmail": "impulseflame619@gmail.com"
+      },
+      "emailPassword": true
+    }
+  }
+}

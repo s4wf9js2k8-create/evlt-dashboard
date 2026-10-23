@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVLT Operations Platform</title>
+    <meta name="theme-color" content="#1e3a1e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="EVLT Ops">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" href="apple-touch-icon.png">
+    <link rel="manifest" id="webManifestLink" href="">
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js"></script>
+    <script src="https://unpkg.com/lucide@1.60.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-18-EMAIL-APPROVAL</div>
+    <div id="print-area"></div>
+
+    <!-- Dedicated Login Page -->
+    <section id="loginPage" aria-label="EVLT Operations sign in">
+      <div class="login-card">
+        <div class="login-brand">
+          <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+            <defs>
+              <path id="loginTopArc" d="M 15,50 A 35,35 0 0,1 85,50" />
+              <path id="loginBottomArc" d="M 85,50 A 35,35 0 0,1 15,50" />
+            </defs>
+            <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+              <textPath href="#loginTopArc" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+            </text>
+            <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+              <textPath href="#loginBottomArc" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+            </text>
+            <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+            <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+            <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+            <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+          </svg>
+          <h1>EVLT Operations</h1>
+          <p>Sign in to access the operations platform</p>
+        </div>
+        <form onsubmit="handleUserLogin(event)">
+          <div id="signupNameGroup" class="form-group" style="display:none;">
+            <label for="signupVolunteerName">Your full name</label>
+            <input type="text" id="signupVolunteerName" maxlength="120" autocomplete="name" placeholder="Name used on the volunteer rota">
+          </div>
+          <div class="form-group">
+            <label for="loginEmail">Email address</label>
+            <input type="email" id="loginEmail" required autocomplete="username" placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label for="loginUserPin">Password</label>
+            <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters">
+          </div>
+          <div id="loginErrorMsg" role="status" aria-live="polite" style="color:#dc2626;font-size:.75rem;margin-bottom:.6rem;display:none;">
+            Enter your volunteer email and password.
+          </div>
+          <button id="loginSubmitButton" type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:.35rem;">
+            <i data-lucide="log-in"></i> Sign In
+          </button>
+          <button id="signupToggleButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">First time? Create an account</button>
+          <button id="resetPasswordButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">Forgot password?</button>
+          <button id="resendVerificationButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">Resend verification email</button>
+        </form>
+      </div>
+    </section>
+
+    <header>
+      <div class="header-left">
+        <button class="menu-btn" onclick="toggleMenu()" aria-label="Toggle navigation menu">
+          <i data-lucide="menu"></i>
+        </button>
+        <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="48" fill="#fcf8ee" stroke="#1e3a1e" stroke-width="4"/>
+          <defs>
+            <path id="topArc" d="M 15,50 A 35,35 0 0,1 85,50" />
+            <path id="bottomArc" d="M 85,50 A 35,35 0 0,1 15,50" />
+          </defs>
+          <text font-family="-apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#1e3a1e">
+            <textPath href="#topArc" startOffset="50%" text-anchor="middle">WHEELS OF TIME</textPath>
+          </text>
+          <text font-family="-apple-system, sans-serif" font-size="7" font-weight="bold" fill="#1e3a1e">
+            <textPath href="#bottomArc" startOffset="50%" text-anchor="middle">RAILWAY MUSEUM</textPath>
+          </text>
+          <rect x="20" y="38" width="60" height="24" rx="12" fill="#1e3a1e"/>
+          <rect x="22" y="40" width="56" height="20" rx="10" fill="#fcf8ee"/>
+          <text x="50" y="49" font-family="serif" font-size="6.5" font-weight="bold" fill="#1e3a1e" text-anchor="middle">ELHAM VALLEY</text>
+          <text x="50" y="56" font-family="-apple-system, sans-serif" font-size="4" font-weight="bold" fill="#1e3a1e" text-anchor="middle">LINE TRUST</text>
+        </svg>
+        <div class="brand-title">
+          <span>EVLT Operations</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-subtle" onclick="openGlobalSearchModal()" title="Search" style="color: white; padding: 0.4rem 0.6rem; min-width: 38px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+          <i data-lucide="search" style="width: 17px; height: 17px;"></i>
+        </button>
+        <button class="btn btn-subtle" onclick="openNotificationModal()" title="Push Notifications" style="color: white; padding: 0.4rem 0.6rem; min-width: 38px; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+          <i data-lucide="bell" style="width: 17px; height: 17px;"></i>
+        </button>
+
+      </div>
+    </header>
+
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+    <div class="app-container">
+      <sidebar id="sidebar">
+        <!-- Dynamically rendered -->
+      </sidebar>
+      <main id="content">
+        <!-- Renders dynamically -->
+      </main>
+    </div>
+
+    <!-- Page Access Control Modal (Admin) -->
+    <div class="modal-overlay" id="accessControlModal">
+      <div class="modal">
+        <h3 id="accessControlTitle">Manage Page Permissions</h3>
+        <form onsubmit="saveUserPermissions(event)">
+          <input type="hidden" id="accessControlUserName" value="">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check the pages this user is allowed to access in the sidebar menu.</p>
+          <div id="permissionsCheckboxesList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc; max-height: 250px; overflow-y: auto;">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('accessControlModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Permissions</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Volunteer Add/Edit Modal -->
+    <div class="modal-overlay" id="volunteerModal">
+      <div class="modal">
+        <h3 id="volunteerModalTitle">Add / Edit Volunteer</h3>
+        <form onsubmit="saveVolunteerForm(event)">
+          <input type="hidden" id="volEditIndex" value="">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="volName" placeholder="e.g. Jane Doe" required>
+          </div>
+          <div class="form-group">
+            <label>PIN Code (4 Digits)</label>
+            <input type="password" id="volPin" placeholder="1234" maxlength="6" required>
+          </div>
+          <div class="form-group">
+            <label>Roles & Qualifications (Select all that apply)</label>
+            <div id="volRolesCheckboxes" style="display:flex; flex-direction:column; gap:0.4rem; border:1px solid var(--border); padding:0.6rem; border-radius:var(--radius); background:#f8fafc; max-height:140px; overflow-y:auto;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>DBS Status</label>
+            <select id="volDbs">
+              <option value="Cleared">Cleared</option>
+              <option value="Pending">Pending</option>
+              <option value="Not Required">Not Required</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('volunteerModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Volunteer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="opCheckModal">
+      <div class="modal">
+        <h3 id="opCheckTitle">Log Inspection Check</h3>
+        <form onsubmit="saveOpCheck(event)">
+          <input type="hidden" id="opCheckKey" value="">
+          <div class="form-group">
+            <label>Inspected By (Volunteer)</label>
+            <select id="opCheckInspector" required></select>
+          </div>
+          <div class="form-group">
+            <label>Inspection Outcome</label>
+            <select id="opCheckResult" required onchange="toggleOpCheckReason(this.value)">
+              <option value="Pass">Pass</option>
+              <option value="Fail">Fail</option>
+              <option value="Not Completed">Not Completed</option>
+            </select>
+          </div>
+          <div class="form-group" id="reasonSelectionGroup" style="display: none;">
+            <label id="reasonLabel">Reason for Failure</label>
+            <textarea id="opCheckReason" rows="3" placeholder="Specify failure reason or defect..."></textarea>
+          </div>
+          <div class="form-group" id="trainSelectionGroup">
+            <label>Locomotives Used</label>
+            <select id="opCheckLocoSelect" class="form-group">
+              <option value="">-- Select Locomotive --</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('opCheckModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Check</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="incidentModal">
+      <div class="modal">
+        <h3 id="incidentModalTitle">Log Incident / Defect</h3>
+        <form id="incidentForm" onsubmit="saveIncident(event); return false;">
+          <div class="form-group">
+            <label>Asset / Locomotive / Location</label>
+            <input type="text" id="incidentAsset" placeholder="e.g. Canadian Pacific, North Turnout" required>
+          </div>
+          <div class="form-group">
+            <label>Defect Description</label>
+            <textarea id="incidentDesc" rows="3" placeholder="Describe the issue or defect..." required></textarea>
+          </div>
+          <div class="form-group">
+            <label>Red Tag Status (Out of Service)</label>
+            <select id="incidentRedTag">
+              <option value="Operational">Operational (Minor Issue)</option>
+              <option value="Out of Service">Out of Service (LOCKOUT / RED TAG)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Assigned To</label>
+            <select id="incidentAssignedTo">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="incidentStatus">
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Defect Photo (Optional)</label>
+            <input type="file" id="incidentPhoto" accept="image/*" onchange="previewIncidentPhoto(event)">
+            <img id="incidentPhotoPreview" class="preview-thumb" style="display:none;" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('incidentModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="incidentSubmitBtn">Report Defect</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Fleet Item Edit Modal -->
+    <div class="modal-overlay" id="fleetModal">
+      <div class="modal">
+        <h3 id="fleetModalTitle">Add / Edit Fleet Item</h3>
+        <form onsubmit="saveFleetItem(event)">
+          <input type="hidden" id="fleetEditIndex" value="">
+          <div class="form-group">
+            <label>Name / Identifier</label>
+            <input type="text" id="fleetName" placeholder="e.g. Canadian Pacific" required>
+          </div>
+          <div class="form-group">
+            <label>Locomotive / Stock Type</label>
+            <select id="fleetType" required>
+              <option value="Steam">Steam</option>
+              <option value="Diesel">Diesel</option>
+              <option value="Electric">Electric</option>
+              <option value="Coach">Coach</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Track Gauge</label>
+            <select id="fleetGauge" required>
+              <option value="7 1/4''">7 1/4''</option>
+              <option value="5''">5''</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Operational Status</label>
+            <select id="fleetState" required>
+              <option value="In Service">In Service</option>
+              <option value="Out of Service">Out of Service</option>
+              <option value="Overhaul">Overhaul</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('fleetModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Fleet Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="maintLogModal">
+      <div class="modal">
+        <h3 id="maintLogModalTitle">Add / Edit Maintenance Log</h3>
+        <form onsubmit="saveMaintenanceLogEntry(event)">
+          <input type="hidden" id="maintLogAsset" value="">
+          <input type="hidden" id="maintLogEditIndex" value="">
+          <div class="form-group">
+            <label>Asset / Locomotive</label>
+            <select id="maintAssetSelect" class="form-group" required>
+              <option value="">-- Select Locomotive / Asset --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Work Done / Description</label>
+            <textarea id="maintWorkDone" rows="3" placeholder="Describe the maintenance or repairs performed..." required></textarea>
+          </div>
+          <div class="form-group" style="display: flex; gap: 0.5rem;">
+            <div style="flex:1;">
+              <label>Start Date</label>
+              <input type="date" id="maintStartDate" required>
+            </div>
+            <div style="flex:1;">
+              <label>End Date</label>
+              <input type="date" id="maintEndDate" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Performed By (Select all volunteers involved)</label>
+            <div id="maintVolunteersList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); background: #f8fafc; max-height: 140px; overflow-y: auto;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Update Asset State</label>
+            <select id="maintUpdateState">
+              <option value="">-- Keep Current State --</option>
+              <option value="In Service">In Service</option>
+              <option value="Out of Service">Out of Service</option>
+              <option value="Overhaul">Overhaul</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Photo (Optional)</label>
+            <input type="file" id="maintPhoto" accept="image/*" onchange="previewMaintPhoto(event)">
+            <img id="maintPhotoPreview" class="preview-thumb" style="display:none;" />
+          </div>
+          <div class="form-group">
+            <label>Additional Notes / Parts Used</label>
+            <textarea id="maintNotes" rows="2" placeholder="Optional notes..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('maintLogModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Log Entry</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="addRoleModal">
+      <div class="modal">
+        <h3>Add New Role / Qualification</h3>
+        <form onsubmit="saveNewRole(event)">
+          <div class="form-group">
+            <label>Role or Qualification Name</label>
+            <input type="text" id="newRoleName" placeholder="e.g. Social Media, Signalman, Guard" required>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('addRoleModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Add Role</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Clock Log Modal -->
+    <div class="modal-overlay" id="editClockLogModal">
+      <div class="modal" style="max-width: 420px;">
+        <h3 id="editClockLogModalTitle">Edit Clock Log Shift Record</h3>
+        <form onsubmit="saveClockLogShiftEdit(event)">
+          <input type="hidden" id="editClockLogId" value="">
+          <div class="form-group">
+            <label>Volunteer Name</label>
+            <select id="editClockLogName" required></select>
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="editClockLogDate" required>
+          </div>
+          <div class="form-group" style="display: flex; gap: 0.5rem;">
+            <div style="flex:1;">
+              <label>Clock In Time</label>
+              <select id="editClockLogIn" required></select>
+            </div>
+            <div style="flex:1;">
+              <label>Clock Out Time</label>
+              <select id="editClockLogOut" required></select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('editClockLogModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Archive Modal -->
+    <div class="modal-overlay" id="editArchiveModal">
+      <div class="modal" style="max-width: 700px; max-height: 90vh;">
+        <h3>Edit Archive Record (<span id="editArchiveDateTxt"></span>)</h3>
+        <form onsubmit="saveArchiveEdit(event)">
+          <input type="hidden" id="editArchiveIndex" value="">
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.85rem;">Use structured selection menus below to update this date's inspections, shifts, locos, defects, and maintenance.</p>
+
+          <!-- Section 1: Track Walk Inspection -->
+          <div class="arch-section-box">
+            <div class="arch-section-title">
+              <span><i data-lucide="footprints" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> Track Walk Inspection</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+              <div class="form-group" style="margin:0;">
+                <label>Inspection Outcome</label>
+                <select id="editArch_TW_Result" onchange="toggleEditArchTWNotes(this.value)">
+                  <option value="Pass">Pass</option>
+                  <option value="Fail">Fail</option>
+                  <option value="Not Completed">Not Completed</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Inspected By</label>
+                <select id="editArch_TW_Inspector"></select>
+              </div>
+            </div>
+            <div class="form-group" id="editArch_TW_NotesGroup" style="margin-top:0.5rem; margin-bottom:0;">
+              <label>Track Walk Defect / Notes</label>
+              <input type="text" id="editArch_TW_Notes" placeholder="Details or defect reason...">
+            </div>
+          </div>
+
+          <!-- Section 2: Test Run Inspection -->
+          <div class="arch-section-box">
+            <div class="arch-section-title">
+              <span><i data-lucide="play-circle" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> Test Run & Locomotives</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom:0.5rem;">
+              <div class="form-group" style="margin:0;">
+                <label>Test Run Outcome</label>
+                <select id="editArch_TR_Result">
+                  <option value="Pass">Pass</option>
+                  <option value="Fail">Fail</option>
+                  <option value="Not Completed">Not Completed</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Test Run Inspector</label>
+                <select id="editArch_TR_Inspector"></select>
+              </div>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label>Running Trains / Locos Used (Select all that ran)</label>
+              <div id="editArch_LocosContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.4rem; background: white; border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); max-height: 120px; overflow-y: auto;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Volunteers On Site & Hours -->
+          <div class="arch-section-box">
+            <div class="arch-section-title">
+              <span><i data-lucide="users" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> Volunteers On Site & Shift Hours</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addArchiveShiftRow()"><i data-lucide="plus"></i> Add Volunteer Shift</button>
+            </div>
+            <div id="editArch_ShiftsContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            </div>
+            <p style="font-size:0.7rem; color:var(--text-muted); margin-top:0.4rem;">Note: Saving changes here also updates the Clock Log Records page for this date.</p>
+          </div>
+
+          <!-- Section 4: Incidents & Defects -->
+          <div class="arch-section-box">
+            <div class="arch-section-title">
+              <span><i data-lucide="alert-triangle" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> Incidents & Defects</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addArchiveIncidentRow()"><i data-lucide="plus"></i> Add Defect</button>
+            </div>
+            <div id="editArch_IncidentsContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            </div>
+          </div>
+
+          <!-- Section 5: Maintenance Completed -->
+          <div class="arch-section-box">
+            <div class="arch-section-title">
+              <span><i data-lucide="wrench" style="width:14px; height:14px; vertical-align:middle; margin-right:4px;"></i> Maintenance Completed</span>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="addArchiveMaintRow()"><i data-lucide="plus"></i> Add Maintenance</button>
+            </div>
+            <div id="editArch_MaintContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('editArchiveModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save All Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Per-feature Edit/Delete Permissions Modal (Admin) -->
+    <div class="modal-overlay" id="editPermissionsModal">
+      <div class="modal" style="max-width: 560px; max-height: 90vh;">
+        <h3 id="editPermissionsModalTitle">Manage Edit Permissions</h3>
+        <form onsubmit="saveFeatureEditPermissions(event)">
+          <input type="hidden" id="editPermissionsFeatureKey" value="">
+          <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Choose which qualifications and which individual volunteers can add, edit, and delete here. The System Admin can always do this regardless of these settings.</p>
+          <div class="form-group">
+            <label>Qualifications / Roles</label>
+            <div id="editPermissionsRoles" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.3rem; max-height:140px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div>
+          </div>
+          <div class="form-group">
+            <label>Individual volunteers</label>
+            <div id="editPermissionsUsers" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:0.3rem; max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('editPermissionsModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Permissions</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Asset Maintenance History Modal -->
+    <div class="modal-overlay" id="assetHistoryModal">
+      <div class="modal" style="max-width: 560px;">
+        <h3 id="assetHistoryTitle">Maintenance History</h3>
+        <div id="assetHistoryBody"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('assetHistoryModal')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Image Lightbox -->
+    <div id="globalLightbox" onclick="this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.85);z-index:1300;align-items:center;justify-content:center;cursor:zoom-out;padding:2rem;">
+      <img id="globalLightboxImg" style="max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5);" src="">
+    </div>
+
+    <!-- Global Search Modal -->
+    <div class="modal-overlay" id="globalSearchModal">
+      <div class="modal" style="max-width:480px;">
+        <h3 style="margin-bottom:.75rem;">Search</h3>
+        <input type="text" id="globalSearchInput" placeholder="Search volunteers, incidents, documents, locos..." oninput="performGlobalSearch()" style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:.9rem;margin-bottom:.75rem;">
+        <div id="globalSearchResults" style="max-height:50vh;overflow-y:auto;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('globalSearchModal')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scan Document Modal (OCR) -->
+    <div class="modal-overlay" id="scanDocumentModal">
+      <div class="modal" style="max-width: 560px;">
+        <h3>Scan Document</h3>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">Take a photo of, or upload, a maintenance sheet or piece of paperwork. AI will read it and turn it into a draft record for you to check before saving.</p>
+
+        <div id="scanStep1">
+          <div class="form-group">
+            <label>Photo of Document</label>
+            <input type="file" id="scan_file" accept="image/*" capture="environment" onchange="handleScanFileSelect(event)">
+            <img id="scan_preview" class="preview-thumb" style="display:none; max-height:200px;" />
+          </div>
+          <button type="button" class="btn btn-primary" id="scan_run_btn" style="width:100%; display:none;" onclick="runDocumentScan()"><i data-lucide="scan-line"></i> Read Document</button>
+          <div id="scan_status" style="font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; text-align:center;"></div>
+        </div>
+
+        <div id="scanStep2" style="display:none;">
+          <div style="background:#f0f4f0; border:1px solid var(--primary); border-radius:var(--radius); padding:0.6rem 0.8rem; font-size:0.75rem; color:var(--primary); margin-bottom:0.85rem;">
+            <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
+            Best-effort automatic reading — please check everything below before saving.
+          </div>
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="scan_title" placeholder="e.g. Toby - Brake Inspection Sheet">
+          </div>
+          <div class="form-group">
+            <label>Linked Asset / Locomotive (auto-detected — please confirm)</label>
+            <select id="scan_asset">
+              <option value="">-- Select Locomotive / Asset --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="scan_date">
+          </div>
+          <div class="form-group">
+            <label>Extracted Text / Work Done (edit as needed)</label>
+            <textarea id="scan_workdone" rows="6"></textarea>
+          </div>
+          <div class="modal-actions" style="flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('scanDocumentModal')">Cancel</button>
+            <button type="button" class="btn btn-secondary" onclick="finalizeScan('document')"><i data-lucide="save"></i> Save as Document Only</button>
+            <button type="button" class="btn btn-primary" onclick="finalizeScan('maintenance')"><i data-lucide="wrench"></i> Add to Maintenance Log</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generic Modal for modules like Assets, Stock, etc. -->
+    <div class="modal-overlay" id="genericModal">
+      <div class="modal">
+        <h3 id="genericModalTitle">Add Item</h3>
+        <form id="genericForm" onsubmit="saveGenericItem(event)">
+          <div id="genericFormFields"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('genericModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Item</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Volunteer Document / Licence Modal -->
+    <div class="modal-overlay" id="volDocModal">
+      <div class="modal" style="max-height:90vh; overflow-y:auto;">
+        <h3 id="volDocModalTitle">Add Volunteer Document</h3>
+        <form onsubmit="saveVolunteerDoc(event)">
+          <input type="hidden" id="volDocId" value="">
+          <div class="form-group">
+            <label>Volunteer</label>
+            <select id="volDocVolunteer" required></select>
+          </div>
+          <div class="form-group">
+            <label>Document Type</label>
+            <select id="volDocType" onchange="toggleVolDocTypeFields()" required></select>
+          </div>
+          <div class="form-group" id="volDocLocoGroup">
+            <label>Certified Locomotive</label>
+            <select id="volDocLoco"></select>
+          </div>
+          <div class="form-group" id="volDocTitleGroup" style="display:none;">
+            <label>Document Title</label>
+            <input type="text" id="volDocTitle" placeholder="e.g. Signalling Competence">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label id="volDocIssuedLabel">Date Licensed / Issued</label>
+              <input type="date" id="volDocIssued" required>
+            </div>
+            <div class="form-group">
+              <label>Expiry / Renewal Date (optional)</label>
+              <input type="date" id="volDocExpiry">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group">
+              <label>Certified / Signed Off By</label>
+              <input type="text" id="volDocIssuer" placeholder="Examiner or provider">
+            </div>
+            <div class="form-group">
+              <label>Licence / Certificate No. (optional)</label>
+              <input type="text" id="volDocRef">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Notes (optional)</label>
+            <textarea id="volDocNotes" placeholder="Restrictions, conditions, supervised hours, etc."></textarea>
+          </div>
+          <div class="form-group">
+            <label id="volDocPhotoLabel">Photo (loco image or certificate scan)</label>
+            <input type="file" accept="image/*" onchange="previewVolDocPhoto(event)">
+            <img id="volDocPhotoPreview" style="display:none; max-width:100%; max-height:160px; margin-top:0.5rem; border-radius:8px; object-fit:cover;">
+            <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">If left blank for a loco certification, the last photo used for that loco is reused.</div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('volDocModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Document</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dedicated Action Modal -->
+    <div class="modal-overlay" id="actionModal">
+      <div class="modal">
+        <h3 id="actionModalTitle">Add Action / Task</h3>
+        <form id="actionForm" onsubmit="saveActionItem(event)">
+          <input type="hidden" id="actionEditIndex" value="">
+          <div class="form-group">
+            <label>Action Title</label>
+            <input type="text" id="act_title" placeholder="e.g. Monthly carriage service" required>
+          </div>
+          <div class="form-group">
+            <label>Description / Details</label>
+            <textarea id="act_desc" rows="2" placeholder="Detailed instructions or parts required..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Related Asset / Locomotive / Carriage (Optional)</label>
+            <select id="act_asset">
+              <option value="">-- None / General Site --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Assigned To (Optional)</label>
+            <input type="text" id="act_assigned" placeholder="e.g. Louie Hull or Maintenance Team">
+          </div>
+          <div class="form-group">
+            <label>Due Date</label>
+            <input type="date" id="act_duedate" required>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Recurrence</label>
+              <select id="act_recurrence">
+                <option value="None">One-off Task</option>
+                <option value="Daily">Daily</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Monthly">Monthly</option>
+                <option value="3 Monthly">3 Monthly</option>
+                <option value="6 Monthly">6 Monthly</option>
+                <option value="Yearly">Yearly</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label>Priority</label>
+              <select id="act_priority">
+                <option value="Normal">Normal</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('actionModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Action</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dedicated Event Modal -->
+    <div class="modal-overlay" id="eventModal">
+      <div class="modal" style="max-width:560px;">
+        <h3 id="eventModalTitle">Add Event</h3>
+        <form onsubmit="saveEventItem(event)">
+          <input type="hidden" id="eventEditIndex" value="">
+          <div class="form-group">
+            <label>Event Name</label>
+            <input type="text" id="evt_title" placeholder="e.g. Steam Gala Weekend" required>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Event Type</label>
+              <input type="text" id="evt_type" list="evt_type_list" placeholder="e.g. Gala Day">
+              <datalist id="evt_type_list">
+                <option value="Gala Day">
+                <option value="Public Running Day">
+                <option value="Private Charter">
+                <option value="Photography Charter">
+                <option value="Members Day">
+                <option value="Working Party">
+                <option value="Other">
+              </datalist>
+            </div>
+            <div style="flex:1;">
+              <label>Who can attend</label>
+              <select id="evt_access">
+                <option>Public</option>
+                <option>Members Only</option>
+                <option>Private / Invite Only</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Start Date</label>
+              <input type="date" id="evt_start" required>
+            </div>
+            <div style="flex:1;">
+              <label>End Date</label>
+              <input type="date" id="evt_end" required>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex; gap:0.5rem;">
+            <div style="flex:1;">
+              <label>Start Time <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+              <input type="time" id="evt_start_time">
+            </div>
+            <div style="flex:1;">
+              <label>End Time <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+              <input type="time" id="evt_end_time">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Location <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+            <input type="text" id="evt_location" placeholder="e.g. Main line, Peene Yard, Barn">
+          </div>
+          <div class="form-group">
+            <label>Booking / Contact info <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+            <input type="text" id="evt_contact" placeholder="e.g. Book via website, or contact Jane on 07…">
+          </div>
+          <div class="form-group">
+            <label>Requirements <span style="font-weight:400;color:var(--text-muted);">(what's needed or included — tickets, food, etc.)</span></label>
+            <div style="display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:.5rem;">
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Train Tickets Required" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Train Tickets</label>
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Museum Entry Required" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Museum Tickets</label>
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Food Available" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Food</label>
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Refreshments Available" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Drink</label>
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Booking Required" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Booking Required</label>
+              <label style="display:flex;align-items:center;gap:.3rem;font-size:.8rem;cursor:pointer;"><input type="checkbox" class="evt-req-cb" value="Parking Available" style="width:14px;height:14px;margin:0;accent-color:var(--primary);"> Parking</label>
+            </div>
+            <input type="text" id="evt_requirements_other" placeholder="Type another requirement and press Enter" onkeydown="if(event.key==='Enter'){event.preventDefault();addEventRequirementTag();}">
+            <div id="evt_requirements_tags" style="display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.5rem;"></div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="evt_desc" rows="3" placeholder="Event details..."></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('eventModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Photo/Document Upload Modal -->
+    <div class="modal-overlay" id="archiveUploadModal">
+      <div class="modal">
+        <h3>Upload Photo or Document</h3>
+        <form onsubmit="saveArchiveUpload(event)">
+          <div class="form-group">
+            <label>Title / Caption</label>
+            <input type="text" id="up_title" placeholder="e.g. 1994 Opening Day Photo" required>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="up_category">
+              <option value="Photo">Photo</option>
+              <option value="Document">Document / PDF</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Select File</label>
+            <input type="file" id="up_file" accept="image/*,.pdf,.doc,.docx" required onchange="previewArchiveFile(event)">
+            <img id="up_preview" class="preview-thumb" style="display:none;" />
+          </div>
+          <input type="hidden" id="up_filedata" value="">
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('archiveUploadModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Upload</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Push Notification Modal -->
+    <div class="modal-overlay" id="notificationModal">
+      <div class="modal" style="max-width: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.85rem;">
+          <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"><i data-lucide="bell" style="color: #16a34a; width: 18px; height: 18px;"></i> Push Notifications &amp; Alerts</h3>
+          <button type="button" class="btn btn-subtle btn-sm" onclick="closeModal('notificationModal')">✕</button>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+          Enable background device alerts for safety defects, red tags, track walk reminders, and operational notices.
+        </div>
+        
+        <!-- iOS Safari Home Screen Requirement Guide -->
+        <div id="iosNotifNotice" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius); padding: 0.75rem; margin-bottom: 0.85rem; font-size: 0.75rem; color: #1e40af;">
+          <div style="font-weight: 700; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.25rem;">
+            <i data-lucide="smartphone" style="width: 14px; height: 14px;"></i> iPhone / iPad Web Push Notice
+          </div>
+          <div>On Apple iOS, Web Push is enabled when the app is installed to your Home Screen:</div>
+          <ol style="margin: 0.35rem 0 0 1.1rem; padding: 0; line-height: 1.4;">
+            <li>Tap the <strong>Share</strong> button ( <span style="font-size: 0.9rem;">⎋</span> ) in Safari.</li>
+            <li>Scroll down and tap <strong>&quot;Add to Home Screen&quot;</strong>.</li>
+            <li>Launch <strong>EVLT Operations</strong> from your home screen and tap Push Alerts.</li>
+          </ol>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; margin-bottom: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <strong style="font-size: 0.75rem; color: var(--text);">Notification Status:</strong>
+            <span id="notifPermBadge" style="font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e;">CHECKING...</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
+            <span>Firebase Project:</span>
+            <strong style="color: var(--text);">evlt-admin</strong>
+          </div>
+        </div>
+        
+        <div style="margin-bottom: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+            <label style="font-size: 0.75rem; font-weight: 600;">Device Push Token (FCM)</label>
+            <button type="button" class="btn btn-subtle btn-sm" id="copyTokenBtn" onclick="copyFcmToken()" style="display: none; font-size: 0.7rem; color: var(--primary);">
+              <i data-lucide="copy" style="width: 12px; height: 12px;"></i> Copy Token
+            </button>
+          </div>
+          <div id="tokenDisplayBox" style="font-family: monospace; font-size: 0.7rem; background: #0f172a; color: #4ade80; padding: 0.6rem; border-radius: var(--radius); word-break: break-all; max-height: 80px; overflow-y: auto; display: none;"></div>
+          <div id="noTokenNotice" style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">
+            Click &quot;Enable Push Notifications&quot; below to register this device.
+          </div>
+        </div>
+        <div id="notifStatusMsg" style="font-size: 0.75rem; margin-bottom: 0.85rem; padding: 0.5rem; border-radius: var(--radius); display: none;"></div>
+        <div class="modal-actions" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('notificationModal')">Close</button>
+          <button type="button" class="btn btn-secondary" id="testPushBtn" onclick="sendTestNotification()" style="display: none;"><i data-lucide="bell-ring"></i> Send Test Alert</button>
+          <button type="button" class="btn btn-primary" id="enablePushBtn" onclick="registerForPush()"><i data-lucide="bell"></i> Enable Push Notifications</button>
+        </div>
+      </div>
+    </div>
+    <script src="help-guides.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
+
