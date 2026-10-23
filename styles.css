@@ -516,6 +516,33 @@
         color: var(--text);
       }
 
+      .item-register-filter-bar {
+        display: flex;
+        align-items: end;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin: 0 0 1rem;
+      }
+
+      .item-register-filter {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        min-width: 180px;
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .item-register-filter select {
+        min-height: 38px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card-bg);
+        color: var(--text);
+        padding: 0 0.55rem;
+      }
+
       .item-code-form-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));

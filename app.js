@@ -6352,6 +6352,8 @@
       let tempVolDocPhoto = '';
       let itemCodeSort = 'location';
       let itemCodeSearch = '';
+      let itemCodeCategoryFilter = '';
+      let itemCodeLocationFilter = '';
       let itemCodeCameraStream = null;
       let itemCodeScanRunning = false;
       let itemCodeFormId = null;
@@ -6411,8 +6413,15 @@
         const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
         const query = itemCodeSearch.trim().toLowerCase();
         const key = itemCodeSort === 'code' ? 'itemCode' : itemCodeSort === 'name' ? 'itemName' : 'location';
-        const filtered = records.filter(item => !query || [item.itemCode, item.itemName, item.location, item.category, item.notes]
-          .some(value => String(value || '').toLowerCase().includes(query)));
+        const categoryOptions = [...new Set(records.map(item => String(item.category || '').trim()).filter(Boolean))].sort();
+        const locationOptions = [...new Set(records.map(item => String(item.location || '').trim()).filter(Boolean))].sort();
+        const filtered = records.filter(item => {
+          const matchesSearch = !query || [item.itemCode, item.itemName, item.location, item.category, item.notes]
+            .some(value => String(value || '').toLowerCase().includes(query));
+          const matchesCategory = !itemCodeCategoryFilter || String(item.category || '').trim() === itemCodeCategoryFilter;
+          const matchesLocation = !itemCodeLocationFilter || String(item.location || '').trim() === itemCodeLocationFilter;
+          return matchesSearch && matchesCategory && matchesLocation;
+        });
         const sorted = filtered.slice().sort((a, b) => itemCodeCompare(a, b, key) || itemCodeCompare(a, b, 'itemCode'));
         const locations = new Set(records.map(item => String(item.location || '').trim()).filter(Boolean));
 
@@ -6428,6 +6437,7 @@
           <div class="grid-stats item-register-stats">
             <div class="stat-card"><div class="stat-header"><span>Registered items</span><div class="stat-icon"><i data-lucide="package"></i></div></div><div class="stat-value">${records.length}</div></div>
             <div class="stat-card"><div class="stat-header"><span>Known locations</span><div class="stat-icon"><i data-lucide="map-pin"></i></div></div><div class="stat-value">${locations.size}</div></div>
+            <div class="stat-card"><div class="stat-header"><span>Categories</span><div class="stat-icon"><i data-lucide="tags"></i></div></div><div class="stat-value">${categoryOptions.length}</div></div>
           </div>
           <div id="itemCodeCameraPanel" class="card item-code-camera" style="display:none;padding:1rem;margin-bottom:1rem;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.6rem;">
@@ -6446,13 +6456,30 @@
               <option value="name" ${itemCodeSort === 'name' ? 'selected' : ''}>Item name</option>
             </select></label>
           </div>
+          <div class="item-register-filter-bar">
+            <label class="item-register-filter">
+              <span>Category</span>
+              <select onchange="setItemCodeCategoryFilter(this.value)">
+                <option value="">All categories</option>
+                ${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${itemCodeCategoryFilter === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}
+              </select>
+            </label>
+            <label class="item-register-filter">
+              <span>Location</span>
+              <select onchange="setItemCodeLocationFilter(this.value)">
+                <option value="">All locations</option>
+                ${locationOptions.map(location => `<option value="${escapeHtml(location)}" ${itemCodeLocationFilter === location ? 'selected' : ''}>${escapeHtml(location)}</option>`).join('')}
+              </select>
+            </label>
+            ${(itemCodeCategoryFilter || itemCodeLocationFilter) ? `<button type="button" class="btn btn-secondary btn-sm" onclick="clearItemCodeFilters()">Clear filters</button>` : ''}
+          </div>
           <div class="card"><div class="table-container"><table class="item-register-table">
             <thead><tr><th>Item code</th><th>Item</th><th>Location</th><th>Category</th><th>Notes</th><th></th></tr></thead>
             <tbody>${sorted.length ? sorted.map(item => `
               <tr><td><code>${escapeHtml(item.itemCode)}</code></td><td><strong>${escapeHtml(item.itemName || '-')}</strong></td>
                 <td>${escapeHtml(item.location || 'Unassigned')}</td><td>${escapeHtml(item.category || '-')}</td><td>${escapeHtml(item.notes || '-')}</td>
                 <td><div style="display:flex;gap:.35rem;justify-content:flex-end;"><button type="button" class="btn btn-secondary btn-sm" onclick="openItemCodeForm(${inlineJsArg(item.id)})" aria-label="Edit ${escapeHtml(item.itemCode)}" title="Edit"><i data-lucide="pencil"></i></button><button type="button" class="btn btn-danger btn-sm" onclick="deleteItemCode(${inlineJsArg(item.id)})" aria-label="Delete ${escapeHtml(item.itemCode)}" title="Delete"><i data-lucide="trash-2"></i></button></div></td>
-              </tr>`).join('') : `<tr><td colspan="6" class="item-register-empty">${records.length ? 'No items match that search.' : 'No items registered yet. Scan a code or add the first item.'}</td></tr>`}</tbody>
+              </tr>`).join('') : `<tr><td colspan="6" class="item-register-empty">${records.length ? 'No items match the current filters.' : 'No items registered yet. Scan a code or add the first item.'}</td></tr>`}</tbody>
           </table></div></div>`;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
@@ -6468,6 +6495,22 @@
 
       function setItemCodeSort(value) {
         itemCodeSort = ['location', 'code', 'name'].includes(value) ? value : 'location';
+        renderItemCodeRegister();
+      }
+
+      function setItemCodeCategoryFilter(value) {
+        itemCodeCategoryFilter = String(value || '');
+        renderItemCodeRegister();
+      }
+
+      function setItemCodeLocationFilter(value) {
+        itemCodeLocationFilter = String(value || '');
+        renderItemCodeRegister();
+      }
+
+      function clearItemCodeFilters() {
+        itemCodeCategoryFilter = '';
+        itemCodeLocationFilter = '';
         renderItemCodeRegister();
       }
 
