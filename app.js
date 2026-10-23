@@ -1631,19 +1631,46 @@
       const LOGIN_MAX_FAILS = 5;
       const LOGIN_LOCK_SECONDS = 60;
 
+      function normalizeEmail(value) {
+        return String(value || '').trim().toLowerCase();
+      }
+
       function getSystemAdminEmails() {
         const entries = Array.isArray(db.systemAdmins) ? db.systemAdmins : [];
         const list = entries
           .map(item => typeof item === 'string' ? item : (item && item.email ? item.email : ''))
-          .map(item => String(item || '').trim())
+          .map(item => normalizeEmail(item))
           .filter(Boolean);
-        const primary = String(SYSTEM_ADMIN_EMAIL || '').trim();
+        const primary = normalizeEmail(SYSTEM_ADMIN_EMAIL);
         if (primary) list.push(primary);
-        return [...new Set(list.map(email => email.toLowerCase()))].filter(Boolean).map(email => email.toLowerCase());
+        return [...new Set(list)].filter(Boolean);
       }
 
       function isSystemAdminEmail(email) {
-        return getSystemAdminEmails().includes(String(email || '').trim().toLowerCase());
+        return getSystemAdminEmails().includes(normalizeEmail(email));
+      }
+
+      async function removeStaleAccountEntriesForEmail(email) {
+        const normalized = normalizeEmail(email);
+        if (!normalized) return { requestCount: 0, bindingCount: 0, adminCount: 0 };
+        const [requestsSnapshot, bindingsSnapshot] = await Promise.all([
+          database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
+          database.ref('EVLT_ACCOUNT_BINDINGS').once('value')
+        ]);
+        const requests = requestsSnapshot.val() || {};
+        const bindings = bindingsSnapshot.val() || {};
+        const requestMatches = Object.entries(requests)
+          .filter(([_, value]) => normalizeEmail(value && value.email) === normalized)
+          .map(([uid]) => uid);
+        const bindingMatches = Object.entries(bindings)
+          .filter(([_, value]) => normalizeEmail(value && value.email) === normalized)
+          .map(([uid]) => uid);
+        if (!requestMatches.length && !bindingMatches.length) return { requestCount: 0, bindingCount: 0, adminCount: 0 };
+        const updates = {};
+        requestMatches.forEach(uid => { updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null; });
+        bindingMatches.forEach(uid => { updates['EVLT_ACCOUNT_BINDINGS/' + uid] = null; });
+        await database.ref().update(updates);
+        return { requestCount: requestMatches.length, bindingCount: bindingMatches.length, adminCount: 0 };
       }
 
       async function addSystemAdmin(email) {
@@ -6776,9 +6803,11 @@
         }
         const oldEmail = String(auth.currentUser.email || '').trim();
         try {
+          await removeStaleAccountEntriesForEmail(oldEmail);
+          await removeStaleAccountEntriesForEmail(nextEmail);
           await auth.currentUser.updateEmail(nextEmail);
-          const currentAdminList = getSystemAdminEmails().filter(email => email !== oldEmail.toLowerCase());
-          currentAdminList.push(nextEmail.toLowerCase());
+          const currentAdminList = getSystemAdminEmails().filter(email => email !== normalizeEmail(oldEmail));
+          currentAdminList.push(normalizeEmail(nextEmail));
           db.systemAdmins = [...new Set(currentAdminList)];
           await dbUpdate({ systemAdmins: db.systemAdmins });
           alert('Your admin email has been updated. Please sign back in with the new address.');
@@ -6787,8 +6816,29 @@
           setLoginNotice('Your admin email has been updated. Please sign in again with the new address.', false);
         } catch (err) {
           console.error('Changing admin email failed:', err);
-          const msg = err && err.code === 'auth/email-already-in-use' ? 'That email is already in use by another account.' : 'The admin email could not be changed. Try again in a moment.';
+          const msg = err && err.code === 'auth/email-already-in-use' ? 'That email is already in use by another account. Remove any stale account requests for that address first.' : 'The admin email could not be changed. Try again in a moment.';
           alert(msg);
+        }
+      }
+
+      async function clearStaleSignUpLinksForEmail() {
+        const input = document.getElementById('adminEmailInput');
+        const email = String(input?.value || '').trim();
+        if (!email) {
+          alert('Enter an email address before clearing stale links.');
+          return;
+        }
+        try {
+          const result = await removeStaleAccountEntriesForEmail(email);
+          if (!result.requestCount && !result.bindingCount) {
+            alert('No stale sign-up links were found for that email.');
+            return;
+          }
+          alert(`Removed ${result.requestCount} stale sign-up request(s) and ${result.bindingCount} stale account link(s).`);
+          renderSettings();
+        } catch (err) {
+          console.error('Could not clear stale sign-up links:', err);
+          alert('Could not clear the stale links. Please try again.');
         }
       }
 
@@ -7050,6 +7100,7 @@
             <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
               <input type="email" id="adminEmailInput" placeholder="new-admin@example.com" style="min-width:220px; flex:1;">
               <button class="btn btn-secondary btn-sm" onclick="addAdminFromInput()"><i data-lucide="plus"></i> Add admin</button>
+              <button class="btn btn-secondary btn-sm" onclick="clearStaleSignUpLinksForEmail()"><i data-lucide="trash-2"></i> Clear stale links</button>
             </div>
           </div>
 
