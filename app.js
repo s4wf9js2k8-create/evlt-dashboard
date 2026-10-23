@@ -6523,9 +6523,48 @@
         return { suggestedLocations, suggestedCategories };
       }
 
+      function setItemCodeChoiceValue(fieldKey, value, useCustomText = false) {
+        const select = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationSelect' : 'itemCodeCategorySelect');
+        const customInput = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationCustom' : 'itemCodeCategoryCustom');
+        if (!select || !customInput) return;
+        const options = [...select.options].map(option => option.value).filter(value => value && value !== '__custom__');
+        if (!value || useCustomText || !options.includes(value)) {
+          select.value = '__custom__';
+          customInput.value = value || '';
+          customInput.style.display = 'block';
+          return;
+        }
+        select.value = value;
+        customInput.value = '';
+        customInput.style.display = 'none';
+      }
+
+      function setItemCodeChoiceMode(fieldKey, value) {
+        const customInput = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationCustom' : 'itemCodeCategoryCustom');
+        if (!customInput) return;
+        customInput.style.display = value === '__custom__' ? 'block' : 'none';
+        if (value !== '__custom__') customInput.value = '';
+      }
+
+      function getItemCodeChoiceValue(fieldKey) {
+        const select = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationSelect' : 'itemCodeCategorySelect');
+        const customInput = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationCustom' : 'itemCodeCategoryCustom');
+        if (!select) return '';
+        if (select.value === '__custom__') return String(customInput?.value || '').trim();
+        return String(select.value || '').trim();
+      }
+
       function applyItemCodeSuggestion(field, value) {
-        const target = field === 'location' ? document.getElementById('itemCodeLocation') : document.getElementById('itemCodeCategory');
-        if (target) target.value = value;
+        const target = field === 'location' ? 'itemCodeLocationSelect' : 'itemCodeCategorySelect';
+        const select = document.getElementById(target);
+        if (select) {
+          const options = [...select.options].map(option => option.value).filter(option => option && option !== '__custom__');
+          if (options.includes(value)) {
+            setItemCodeChoiceValue(field, value, false);
+          } else {
+            setItemCodeChoiceValue(field, value, true);
+          }
+        }
         if (field === 'category') {
           const codeInput = document.getElementById('itemCodeValue');
           const nextCode = getNextAvailableItemCode(value);
@@ -6539,11 +6578,12 @@
       }
 
       function syncItemCodeSuggestion() {
-        const categoryInput = document.getElementById('itemCodeCategory');
+        const categorySelect = document.getElementById('itemCodeCategorySelect');
+        const categoryCustom = document.getElementById('itemCodeCategoryCustom');
         const codeInput = document.getElementById('itemCodeValue');
         const suggestionText = document.getElementById('itemCodeSuggestionText');
-        if (!categoryInput || !suggestionText) return;
-        const categoryValue = categoryInput.value.trim();
+        if (!suggestionText) return;
+        const categoryValue = getItemCodeChoiceValue('category');
         const nextCode = categoryValue ? getNextAvailableItemCode(categoryValue) : '';
         suggestionText.innerHTML = categoryValue ? `Next suggested: <strong>${escapeHtml(nextCode)}</strong>` : 'Choose a category to generate the next code.';
         if (!categoryValue || !codeInput || codeInput.dataset.userEdited === '1') return;
@@ -6568,6 +6608,8 @@
         const suggestedCategoryHtml = recommendationData.suggestedCategories.length ? `<div class="item-code-recommendations"><span>Suggested categories</span><div class="item-code-recommendation-list">${recommendationData.suggestedCategories.slice(0, 4).map(item => `<button type="button" class="item-code-suggestion-tag" onclick="applyItemCodeSuggestion('category', ${inlineJsArg(item.name)})">${escapeHtml(item.name)}</button>`).join('')}</div></div>` : '';
         const defaultCode = existing?.itemCode || scannedCode || (categoryValue ? getNextAvailableItemCode(categoryValue) : '');
         const nextSuggestedCode = categoryValue ? getNextAvailableItemCode(categoryValue) : '';
+        const categorySelectedValue = categoryOptions.includes(categoryValue) ? categoryValue : (categoryValue ? '__custom__' : '');
+        const locationSelectedValue = locationOptions.includes(locationValue) ? locationValue : (locationValue ? '__custom__' : '');
         editor.style.display = 'block';
         editor.innerHTML = `
           <h3 style="font-size:.95rem;margin-bottom:.8rem;">${existing ? 'Edit item' : 'Add item'}</h3>
@@ -6575,17 +6617,20 @@
             <div class="item-code-form-grid">
               <div class="form-group"><label for="itemCodeValue">Item code</label><div class="item-code-value-stack"><div class="item-code-input-row"><input id="itemCodeValue" data-user-edited="${existing ? '1' : '0'}" data-last-auto-code="${escapeHtml(defaultCode)}" required maxlength="120" autocomplete="off" value="${escapeHtml(defaultCode)}" placeholder="Scan or type code" oninput="this.dataset.userEdited = this.value.trim() ? '1' : '0';"><button type="button" class="btn btn-secondary btn-sm item-code-suggest-btn" ${nextSuggestedCode ? '' : 'disabled'} onclick="const field = document.getElementById('itemCodeValue'); field.value = ${inlineJsArg(nextSuggestedCode)}; field.dataset.userEdited = '0'; field.dataset.lastAutoCode = ${inlineJsArg(nextSuggestedCode)}; field.focus();">Use suggested</button></div><small id="itemCodeSuggestionText" class="item-code-suggestion-text">${categoryValue ? `Next suggested: <strong>${escapeHtml(nextSuggestedCode)}</strong>` : 'Choose a category to generate the next code.'}</small></div></div>
               <div class="form-group"><label for="itemCodeName">Item name</label><input id="itemCodeName" required maxlength="160" value="${escapeHtml(existing?.itemName || '')}" placeholder="What is the item?"></div>
-              <div class="form-group"><label for="itemCodeLocation">Storage location</label><input id="itemCodeLocation" required maxlength="160" list="itemCodeLocationOptions" value="${escapeHtml(locationValue)}" placeholder="e.g. Workshop / Shelf B"><datalist id="itemCodeLocationOptions">${locationOptions.map(location => `<option value="${escapeHtml(location)}"></option>`).join('')}</datalist>${suggestedLocationHtml}</div>
-              <div class="form-group"><label for="itemCodeCategory">Category</label><input id="itemCodeCategory" maxlength="100" list="itemCodeCategoryOptions" value="${escapeHtml(categoryValue)}" placeholder="Tool, Spare part, etc." oninput="syncItemCodeSuggestion()"><datalist id="itemCodeCategoryOptions">${categoryOptions.map(category => `<option value="${escapeHtml(category)}"></option>`).join('')}</datalist>${suggestedCategoryHtml}</div>
+              <div class="form-group"><label for="itemCodeLocationSelect">Storage location</label><div class="item-code-choice-stack"><select id="itemCodeLocationSelect" onchange="setItemCodeChoiceMode('location', this.value)"><option value="">Select location</option>${locationOptions.map(location => `<option value="${escapeHtml(location)}" ${locationSelectedValue === location ? 'selected' : ''}>${escapeHtml(location)}</option>`).join('')}<option value="__custom__" ${locationSelectedValue === '__custom__' ? 'selected' : ''}>Add new location…</option></select><input id="itemCodeLocationCustom" type="text" value="${escapeHtml(locationValue && !locationOptions.includes(locationValue) ? locationValue : '')}" placeholder="New storage location" style="display:${locationSelectedValue === '__custom__' ? 'block' : 'none'};" /></div>${suggestedLocationHtml}</div>
+              <div class="form-group"><label for="itemCodeCategorySelect">Category</label><div class="item-code-choice-stack"><select id="itemCodeCategorySelect" onchange="setItemCodeChoiceMode('category', this.value); syncItemCodeSuggestion();"><option value="">Select category</option>${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${categorySelectedValue === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}<option value="__custom__" ${categorySelectedValue === '__custom__' ? 'selected' : ''}>Add new category…</option></select><input id="itemCodeCategoryCustom" type="text" value="${escapeHtml(categoryValue && !categoryOptions.includes(categoryValue) ? categoryValue : '')}" placeholder="New category" style="display:${categorySelectedValue === '__custom__' ? 'block' : 'none'};" oninput="syncItemCodeSuggestion()" /></div>${suggestedCategoryHtml}</div>
               <div class="form-group item-code-notes"><label for="itemCodeNotes">Notes</label><textarea id="itemCodeNotes" rows="2" maxlength="500" placeholder="Optional details">${escapeHtml(existing?.notes || '')}</textarea></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-secondary btn-sm" onclick="closeItemCodeForm()">Cancel</button><button type="submit" class="btn btn-primary btn-sm">${existing ? 'Save changes' : 'Save item'}</button></div>
           </form>`;
         const codeInput = document.getElementById('itemCodeValue');
-        const categoryInput = document.getElementById('itemCodeCategory');
+        const categorySelect = document.getElementById('itemCodeCategorySelect');
         codeInput?.focus();
-        if (categoryInput && !categoryInput.value.trim()) categoryInput.focus();
-        if (categoryInput && categoryInput.value.trim()) syncItemCodeSuggestion();
+        if (!categorySelect || !categorySelect.value) {
+          const categoryFocusTarget = document.getElementById('itemCodeCategorySelect');
+          categoryFocusTarget?.focus();
+        }
+        syncItemCodeSuggestion();
       }
 
       function closeItemCodeForm() {
@@ -6598,8 +6643,9 @@
         event.preventDefault();
         const itemCode = String(document.getElementById('itemCodeValue')?.value || '').trim();
         const itemName = String(document.getElementById('itemCodeName')?.value || '').trim();
-        const location = String(document.getElementById('itemCodeLocation')?.value || '').trim();
-        if (!itemCode || !itemName || !location) return;
+        const location = getItemCodeChoiceValue('location');
+        const category = getItemCodeChoiceValue('category');
+        if (!itemCode || !itemName || !location || !category) return;
         const records = Array.isArray(db.itemCodes) ? db.itemCodes.slice() : [];
         const duplicate = records.find(item => String(item.itemCode || '').trim().toLowerCase() === itemCode.toLowerCase() && String(item.id) !== String(itemCodeFormId));
         if (duplicate) {
@@ -6612,7 +6658,7 @@
           itemCode,
           itemName,
           location,
-          category: String(document.getElementById('itemCodeCategory')?.value || '').trim(),
+          category,
           notes: String(document.getElementById('itemCodeNotes')?.value || '').trim(),
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser?.name || currentUser?.email || ''
