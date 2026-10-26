@@ -145,6 +145,10 @@
         ".write": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))",
         ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('notifications').val() == true)))"
       },
+      "memberVisits": {
+        ".write": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('memberVisits').val() == true))",
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('memberVisits').val() == true))"
+      },
       ".write": "auth != null && auth.token.email_verified == true && (root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true)",
       "rotaSignups": {
         ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('calendar').val() == true)))",
@@ -210,6 +214,9 @@
             ".validate": "newData.val() == true"
           },
           "clockLogs": {
+            ".validate": "newData.val() == true"
+          },
+          "memberVisits": {
             ".validate": "newData.val() == true"
           },
           "incidents": {

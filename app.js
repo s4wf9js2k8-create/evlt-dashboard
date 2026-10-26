@@ -121,6 +121,7 @@
         { key: 'clock', label: 'Clock In/Out', icon: 'clock', section: 'Main' },
         { key: 'calendar', label: 'Attendance & Hours', icon: 'calendar', section: 'Main' },
         { key: 'clockLogs', label: 'Clock Log Records', icon: 'list-checks', section: 'Main' },
+        { key: 'memberVisits', label: 'Membership Entries', icon: 'scan-line', section: 'Main' },
         { key: 'incidents', label: 'Incident & Defect Log', icon: 'alert-triangle', section: 'Safety & Competency' },
         { key: 'competency', label: 'Qualifications Matrix', icon: 'award', section: 'Safety & Competency' },
         { key: 'volunteers', label: 'Volunteers', icon: 'users', section: 'Operations' },
@@ -205,6 +206,7 @@
         clock: ['clockLogs','volunteers'],
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
+        memberVisits: ['memberVisits'],
         incidents: ['incidents','assets','volunteers'],
         competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles'],
@@ -222,7 +224,7 @@
         help: ['helpGuides'],
         myAccount: ['volunteers','nameChangeRequests']
       };
-      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
       function grantedPageKeys(grants) {
         if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
         return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
@@ -718,7 +720,7 @@
       function normaliseDb() {
         if (!db || typeof db !== 'object') db = {};
         
-        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs']
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs','memberVisits']
           .forEach(key => {
             const val = db[key];
             if (Array.isArray(val)) return;
@@ -2412,6 +2414,7 @@
           return;
         }
         if (view !== 'documents') stopItemCodeCamera();
+        if (view !== 'memberVisits') stopMemberVisitsCamera();
         currentView = view;
         renderSidebar();
 
@@ -2420,6 +2423,7 @@
           case 'clock': renderClock(); break;
           case 'calendar': renderCalendarView(); break;
           case 'clockLogs': renderClockLogsPage(); break;
+          case 'memberVisits': renderMemberVisitsPage(); break;
           case 'incidents': renderIncidents(); break;
           case 'competency': renderCompetencyMatrix(); break;
           case 'volunteers': renderVolunteers(); break;
@@ -6357,6 +6361,10 @@
       let itemCodeCameraStream = null;
       let itemCodeScanRunning = false;
       let itemCodeFormId = null;
+      let memberVisitsCameraStream = null;
+      let memberVisitsScanRunning = false;
+      let lastMemberVisitScan = { code: '', at: 0 };
+      let memberVisitsSelectedDate = getTodayString();
 
       function canManageVolDocs() {
         if (!currentUser) return false;
@@ -6392,6 +6400,173 @@
             <button class="btn ${docsSubView === 'items' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('items')">Item Register</button>
             <button class="btn ${docsSubView === 'volunteer' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('volunteer')">Volunteer Documents</button>
           </div>`;
+      }
+
+      function renderMemberVisitsPage() {
+        stopMemberVisitsCamera();
+        const content = document.getElementById('content');
+        const selectedDate = memberVisitsSelectedDate || getTodayString();
+        const visits = (Array.isArray(db.memberVisits) ? db.memberVisits : [])
+          .filter(visit => visit && visit.date === selectedDate)
+          .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
+        content.innerHTML = `
+          <div class="page-header">
+            <div class="page-title"><h2>Membership Entries</h2><p>Scan a membership card to record a museum visit.</p></div>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="exportMemberVisitsCsv()" ${visits.length ? '' : 'disabled'}><i data-lucide="download"></i> Export Excel CSV</button>
+          </div>
+          <div class="grid-stats">
+            <div class="stat-card"><div class="stat-header"><span>Entries on selected day</span><div class="stat-icon"><i data-lucide="ticket-check"></i></div></div><div class="stat-value">${visits.length}</div></div>
+          </div>
+          <div class="card" style="padding:1rem;margin-bottom:1rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.75rem;">
+              <strong>Scan membership card</strong>
+              <button class="btn btn-secondary btn-sm" type="button" onclick="startMemberVisitsCamera()"><i data-lucide="scan-line"></i> Use camera</button>
+            </div>
+            <form onsubmit="recordMemberVisit(event)" style="display:flex;gap:.5rem;flex-wrap:wrap;">
+              <label for="memberVisitCode" class="sr-only">Membership card number</label>
+              <input id="memberVisitCode" type="text" required maxlength="120" autocomplete="off" placeholder="Scan card or enter number" style="flex:1;min-width:220px;">
+              <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Record entry</button>
+            </form>
+            <p id="memberVisitStatus" role="status" aria-live="polite" style="font-size:.78rem;color:var(--text-muted);margin:.5rem 0 0;">A handheld barcode scanner can type into the field and submit with Enter.</p>
+            <div id="memberVisitCameraPanel" style="display:none;margin-top:.8rem;">
+              <video id="memberVisitCameraVideo" playsinline muted style="display:block;width:100%;max-height:320px;object-fit:contain;background:#17271f;border-radius:6px;"></video>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-top:.4rem;">
+                <p id="memberVisitCameraStatus" role="status" aria-live="polite" style="font-size:.78rem;color:var(--text-muted);">Starting camera…</p>
+                <button type="button" class="btn btn-subtle btn-sm" onclick="stopMemberVisitsCamera()" aria-label="Stop camera scanner">Stop camera</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;margin:0 0 .6rem;">
+            <label for="memberVisitsDate" style="font-size:.8rem;font-weight:600;">Entry date</label>
+            <input id="memberVisitsDate" type="date" value="${escapeHtml(selectedDate)}" onchange="setMemberVisitsDate(this.value)" style="max-width:190px;">
+          </div>
+          <div class="card"><div class="table-container"><table>
+            <thead><tr><th>Card number</th><th>Time</th><th>Recorded by</th></tr></thead>
+            <tbody>${visits.length ? visits.map(visit => `<tr><td><code>${escapeHtml(maskMemberNumber(visit.memberNumber))}</code></td><td>${escapeHtml(visit.time || '-')}</td><td>${escapeHtml(visit.staffName || '-')}</td></tr>`).join('') : `<tr><td colspan="3" style="text-align:center;padding:1.2rem;color:var(--text-muted);">No membership entries for this date.</td></tr>`}</tbody>
+          </table></div></div>`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        document.getElementById('memberVisitCode')?.focus();
+      }
+
+      function maskMemberNumber(value) {
+        const code = String(value || '');
+        return code.length <= 4 ? '*'.repeat(code.length) : `${'*'.repeat(Math.min(8, code.length - 4))}${code.slice(-4)}`;
+      }
+
+      function setMemberVisitsDate(value) {
+        memberVisitsSelectedDate = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : getTodayString();
+        renderMemberVisitsPage();
+      }
+
+      async function recordMemberVisit(event) {
+        event.preventDefault();
+        const input = document.getElementById('memberVisitCode');
+        const code = String(input?.value || '').trim();
+        if (!code) return;
+        const now = Date.now();
+        if (lastMemberVisitScan.code === code && now - lastMemberVisitScan.at < 2000) {
+          const status = document.getElementById('memberVisitStatus');
+          if (status) status.textContent = 'That card was just scanned; duplicate read ignored.';
+          input?.select();
+          return;
+        }
+        lastMemberVisitScan = { code, at: now };
+        const timestamp = new Date(now);
+        const visit = {
+          id: '',
+          memberNumber: code,
+          date: getTodayString(),
+          time: `${String(timestamp.getHours()).padStart(2, '0')}:${String(timestamp.getMinutes()).padStart(2, '0')}:${String(timestamp.getSeconds()).padStart(2, '0')}`,
+          timestamp: now,
+          staffName: currentUser?.name || currentUser?.email || 'Unknown'
+        };
+        try {
+          if (!database || !currentUser || !userHasAccess('memberVisits')) throw new Error('Membership entry access is unavailable.');
+          const ref = database.ref('EVLT_ADMIN_DB/memberVisits').push();
+          visit.id = ref.key;
+          await ref.set(visit);
+          db.memberVisits = [...(Array.isArray(db.memberVisits) ? db.memberVisits : []), visit];
+          memberVisitsSelectedDate = visit.date;
+          if (input) input.value = '';
+          renderMemberVisitsPage();
+          const status = document.getElementById('memberVisitStatus');
+          if (status) status.textContent = `Entry recorded for card ending ${maskMemberNumber(code).slice(-4)}.`;
+        } catch (err) {
+          console.error('Membership entry save failed:', err);
+          lastMemberVisitScan = { code: '', at: 0 };
+          const status = document.getElementById('memberVisitStatus');
+          if (status) status.textContent = 'Could not save this entry. Check the connection or ask an admin to grant Membership Entries access.';
+          return;
+        }
+      }
+
+      function exportMemberVisitsCsv() {
+        const date = memberVisitsSelectedDate || getTodayString();
+        const visits = (Array.isArray(db.memberVisits) ? db.memberVisits : [])
+          .filter(visit => visit && visit.date === date)
+          .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+        if (!visits.length) return;
+        exportArrayToCsv(`membership-entries-${date}.csv`, visits, [
+          { key: 'memberNumber', label: 'Membership Card Number' },
+          { key: 'date', label: 'Entry Date' },
+          { key: 'time', label: 'Entry Time' },
+          { key: 'staffName', label: 'Recorded By' }
+        ]);
+      }
+
+      async function startMemberVisitsCamera() {
+        const panel = document.getElementById('memberVisitCameraPanel');
+        const video = document.getElementById('memberVisitCameraVideo');
+        const status = document.getElementById('memberVisitCameraStatus');
+        if (!panel || !video || !status) return;
+        panel.style.display = 'block';
+        if (!navigator.mediaDevices?.getUserMedia || !('BarcodeDetector' in window)) {
+          status.textContent = 'Camera barcode scanning is not supported in this browser. Use a handheld scanner or enter the number.';
+          return;
+        }
+        try {
+          stopMemberVisitsCamera();
+          const formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf'];
+          const supported = typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : formats;
+          const availableFormats = formats.filter(format => supported.includes(format));
+          if (!availableFormats.length) throw new Error('No supported barcode formats found.');
+          const detector = new BarcodeDetector({ formats: availableFormats });
+          memberVisitsCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+          video.srcObject = memberVisitsCameraStream;
+          await video.play();
+          memberVisitsScanRunning = true;
+          status.textContent = 'Point the camera at the membership barcode.';
+          const processFrame = async () => {
+            if (!memberVisitsScanRunning) return;
+            try {
+              const results = await detector.detect(video);
+              const value = results.find(result => result.rawValue)?.rawValue?.trim();
+              if (value) {
+                stopMemberVisitsCamera();
+                const input = document.getElementById('memberVisitCode');
+                if (input) input.value = value;
+                const form = document.getElementById('memberVisitCode')?.form;
+                if (form) await recordMemberVisit({ preventDefault: () => {} });
+                return;
+              }
+            } catch (err) {
+              console.warn('Membership barcode frame failed:', err);
+            }
+            if (memberVisitsScanRunning) setTimeout(processFrame, 250);
+          };
+          processFrame();
+        } catch (err) {
+          console.error('Could not start membership camera scanner:', err);
+          status.textContent = err?.name === 'NotAllowedError' ? 'Camera permission was denied. Use a handheld scanner or enter the number.' : 'Could not start the camera. Use a handheld scanner or enter the number.';
+        }
+      }
+
+      function stopMemberVisitsCamera() {
+        memberVisitsScanRunning = false;
+        if (memberVisitsCameraStream) memberVisitsCameraStream.getTracks().forEach(track => track.stop());
+        memberVisitsCameraStream = null;
+        const video = document.getElementById('memberVisitCameraVideo');
+        if (video) video.srcObject = null;
       }
 
       function renderDocuments() {
