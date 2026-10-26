@@ -94,8 +94,9 @@
       main { flex: 1; padding: 1.25rem 1.5rem; max-width: 1300px; width: 100%; margin: 0 auto; min-width: 0; overflow-x: hidden; }
       
       .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.35rem; border-bottom: 1px solid var(--border); padding-bottom: 0.9rem; flex-wrap: wrap; }
+      .page-title { min-width: 0; }
       .page-title h2 { font-size: 1.35rem; font-weight: 800; color: var(--text); letter-spacing: -0.03em; line-height: 1.2; }
-      .page-title p { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.28rem; }
+      .page-title p { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.28rem; overflow-wrap: anywhere; }
       
       .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius); font-size: 0.825rem; font-weight: 700; cursor: pointer; border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap; box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04); }
       .btn i { width: 15px; height: 15px; flex-shrink: 0; }
@@ -124,8 +125,8 @@
       .card { background: rgba(255,255,255,0.96); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; width: 100%; }
       .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
       table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; white-space: nowrap; }
-      th { background: #f5f8f6; font-weight: 700; color: var(--text-muted); padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
-      td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border-subtle); color: var(--text); vertical-align: middle; }
+      th { background: #f5f8f6; font-weight: 700; color: var(--text-muted); padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+      td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border-subtle); color: var(--text); vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: normal; }
       tbody tr:last-child td { border-bottom: none; }
       tbody tr:hover { background: rgba(30, 58, 30, 0.02); }
 
@@ -143,7 +144,8 @@
       .modal h3 { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
       .form-group { margin-bottom: 0.75rem; }
       .form-group label { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.2rem; color: var(--text); }
-      .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; outline: none; background: white; transition: border-color 0.15s, box-shadow 0.15s; }
+      .form-group input, .form-group textarea, .form-group select { width: 100%; max-width: 100%; min-width: 0; padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; outline: none; background: white; transition: border-color 0.15s, box-shadow 0.15s; }
+      .form-group textarea { overflow-wrap: anywhere; }
       .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: rgba(30, 58, 30, 0.6); box-shadow: 0 0 0 3px rgba(30, 58, 30, 0.08); }
       .modal-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
 
