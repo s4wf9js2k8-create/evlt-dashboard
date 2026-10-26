@@ -6360,9 +6360,13 @@
       let itemCodeLocationFilter = '';
       let itemCodeCameraStream = null;
       let itemCodeScanRunning = false;
+      let itemCodeReader = null;
+      let itemCodeReaderControls = null;
       let itemCodeFormId = null;
       let memberVisitsCameraStream = null;
       let memberVisitsScanRunning = false;
+      let memberVisitsReader = null;
+      let memberVisitsReaderControls = null;
       let lastMemberVisitScan = { code: '', at: 0 };
       let memberVisitsSelectedDate = getTodayString();
 
@@ -6411,7 +6415,7 @@
           .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
         content.innerHTML = `
           <div class="page-header">
-            <div class="page-title"><h2>Membership Entries</h2><p>Scan a membership card to record a museum visit.</p></div>
+            <div class="page-title"><h2>Membership Entries</h2><p>Scan a membership barcode to record a museum visit.</p></div>
             <button class="btn btn-secondary btn-sm" type="button" onclick="exportMemberVisitsCsv()" ${visits.length ? '' : 'disabled'}><i data-lucide="download"></i> Export Excel CSV</button>
           </div>
           <div class="grid-stats">
@@ -6419,12 +6423,12 @@
           </div>
           <div class="card" style="padding:1rem;margin-bottom:1rem;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.75rem;">
-              <strong>Scan membership card</strong>
+              <strong>Scan membership barcode</strong>
               <button class="btn btn-secondary btn-sm" type="button" onclick="startMemberVisitsCamera()"><i data-lucide="scan-line"></i> Use camera</button>
             </div>
             <form onsubmit="recordMemberVisit(event)" style="display:flex;gap:.5rem;flex-wrap:wrap;">
-              <label for="memberVisitCode" class="sr-only">Membership card number</label>
-              <input id="memberVisitCode" type="text" required maxlength="120" autocomplete="off" placeholder="Scan card or enter number" style="flex:1;min-width:220px;">
+              <label for="memberVisitCode" class="sr-only">Membership barcode</label>
+              <input id="memberVisitCode" name="membership-code-entry" type="text" required maxlength="120" autocomplete="off" enterkeyhint="done" placeholder="Scan barcode or enter membership code" style="flex:1;min-width:220px;font-size:16px;">
               <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Record entry</button>
             </form>
             <p id="memberVisitStatus" role="status" aria-live="polite" style="font-size:.78rem;color:var(--text-muted);margin:.5rem 0 0;">A handheld barcode scanner can type into the field and submit with Enter.</p>
@@ -6445,7 +6449,6 @@
             <tbody>${visits.length ? visits.map(visit => `<tr><td><code>${escapeHtml(maskMemberNumber(visit.memberNumber))}</code></td><td>${escapeHtml(visit.time || '-')}</td><td>${escapeHtml(visit.staffName || '-')}</td></tr>`).join('') : `<tr><td colspan="3" style="text-align:center;padding:1.2rem;color:var(--text-muted);">No membership entries for this date.</td></tr>`}</tbody>
           </table></div></div>`;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-        document.getElementById('memberVisitCode')?.focus();
       }
 
       function maskMemberNumber(value) {
@@ -6520,49 +6523,41 @@
         const status = document.getElementById('memberVisitCameraStatus');
         if (!panel || !video || !status) return;
         panel.style.display = 'block';
-        if (!navigator.mediaDevices?.getUserMedia || !('BarcodeDetector' in window)) {
-          status.textContent = 'Camera barcode scanning is not supported in this browser. Use a handheld scanner or enter the number.';
+        if (!navigator.mediaDevices?.getUserMedia) {
+          status.textContent = 'Camera access is unavailable. Use a handheld scanner or enter the membership code.';
+          return;
+        }
+        if (!window.ZXingBrowser?.BrowserMultiFormatReader) {
+          status.textContent = 'The barcode scanner could not load. Check the internet connection, or use a handheld scanner or enter the code.';
           return;
         }
         try {
           stopMemberVisitsCamera();
-          const formats = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf'];
-          const supported = typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : formats;
-          const availableFormats = formats.filter(format => supported.includes(format));
-          if (!availableFormats.length) throw new Error('No supported barcode formats found.');
-          const detector = new BarcodeDetector({ formats: availableFormats });
-          memberVisitsCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-          video.srcObject = memberVisitsCameraStream;
-          await video.play();
           memberVisitsScanRunning = true;
           status.textContent = 'Point the camera at the membership barcode.';
-          const processFrame = async () => {
-            if (!memberVisitsScanRunning) return;
-            try {
-              const results = await detector.detect(video);
-              const value = results.find(result => result.rawValue)?.rawValue?.trim();
-              if (value) {
-                stopMemberVisitsCamera();
-                const input = document.getElementById('memberVisitCode');
-                if (input) input.value = value;
-                const form = document.getElementById('memberVisitCode')?.form;
-                if (form) await recordMemberVisit({ preventDefault: () => {} });
-                return;
-              }
-            } catch (err) {
-              console.warn('Membership barcode frame failed:', err);
-            }
-            if (memberVisitsScanRunning) setTimeout(processFrame, 250);
-          };
-          processFrame();
+          memberVisitsReader = new ZXingBrowser.BrowserMultiFormatReader();
+          memberVisitsReaderControls = await memberVisitsReader.decodeFromVideoDevice(undefined, video, async (result, error, controls) => {
+            if (controls) memberVisitsReaderControls = controls;
+            if (!memberVisitsScanRunning || !result) return;
+            const value = String(result.getText() || '').trim();
+            if (!value) return;
+            stopMemberVisitsCamera();
+            const input = document.getElementById('memberVisitCode');
+            if (input) input.value = value;
+            await recordMemberVisit({ preventDefault: () => {} });
+          });
         } catch (err) {
           console.error('Could not start membership camera scanner:', err);
-          status.textContent = err?.name === 'NotAllowedError' ? 'Camera permission was denied. Use a handheld scanner or enter the number.' : 'Could not start the camera. Use a handheld scanner or enter the number.';
+          status.textContent = err?.name === 'NotAllowedError' ? 'Camera permission was denied. Use a handheld scanner or enter the code.' : 'Could not start the camera. Check camera permission, or use a handheld scanner or enter the code.';
         }
       }
 
       function stopMemberVisitsCamera() {
         memberVisitsScanRunning = false;
+        if (memberVisitsReaderControls) memberVisitsReaderControls.stop();
+        memberVisitsReaderControls = null;
+        if (memberVisitsReader) memberVisitsReader.reset();
+        memberVisitsReader = null;
         if (memberVisitsCameraStream) memberVisitsCameraStream.getTracks().forEach(track => track.stop());
         memberVisitsCameraStream = null;
         const video = document.getElementById('memberVisitCameraVideo');
@@ -6945,66 +6940,67 @@
           openItemCodeForm();
           return;
         }
-        if (!('BarcodeDetector' in window) && !window.Tesseract) {
-          status.textContent = 'This browser cannot scan barcodes or item-code labels from the camera. Use a scanner in the item-code field or type the code.';
+        if (!window.ZXingBrowser?.BrowserMultiFormatReader && !window.Tesseract) {
+          status.textContent = 'Camera scanning could not load. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
           return;
         }
         try {
           stopItemCodeCamera();
-          const desiredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf'];
-          const supportedFormats = 'BarcodeDetector' in window && typeof BarcodeDetector.getSupportedFormats === 'function' ? await BarcodeDetector.getSupportedFormats() : desiredFormats;
-          const barcodeFormats = desiredFormats.filter(format => supportedFormats.includes(format));
-          const detector = 'BarcodeDetector' in window && barcodeFormats.length ? new BarcodeDetector({ formats: barcodeFormats }) : null;
-          itemCodeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-          video.srcObject = itemCodeCameraStream;
-          await video.play();
           itemCodeScanRunning = true;
-          status.textContent = 'Point the camera at a barcode or a printed item code label.';
+          status.textContent = window.ZXingBrowser?.BrowserMultiFormatReader
+            ? 'Point the camera at a barcode or a printed item code label.'
+            : 'Point the camera at a printed item code label.';
           const canvas = document.createElement('canvas');
+          let ocrBusy = false;
+          const handleCode = code => {
+            if (!itemCodeScanRunning) return;
+            stopItemCodeCamera();
+            panel.style.display = 'none';
+            const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
+            if (existing) {
+              alert('This code is already registered. Review or update its item and location.');
+              openItemCodeForm(existing.id);
+            } else openItemCodeForm(null, code);
+          };
+          if (window.ZXingBrowser?.BrowserMultiFormatReader) {
+            itemCodeReader = new ZXingBrowser.BrowserMultiFormatReader();
+            itemCodeReaderControls = await itemCodeReader.decodeFromVideoDevice(undefined, video, (result, error, controls) => {
+              if (controls) itemCodeReaderControls = controls;
+              const code = String(result?.getText() || '').trim();
+              if (code) handleCode(code);
+            });
+          } else {
+            itemCodeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+            video.srcObject = itemCodeCameraStream;
+            await video.play();
+          }
           const context = canvas.getContext('2d');
           const processScan = async () => {
             if (!itemCodeScanRunning) return;
-            try {
-              if (detector) {
-                const results = await detector.detect(video);
-                if (results.length && results[0].rawValue) {
-                  const code = results[0].rawValue.trim();
-                  stopItemCodeCamera();
-                  panel.style.display = 'none';
-                  const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
-                  if (existing) {
-                    alert('This code is already registered. Review or update its item and location.');
-                    openItemCodeForm(existing.id);
-                  } else openItemCodeForm(null, code);
-                  return;
+            if (window.Tesseract && context && !ocrBusy) {
+              ocrBusy = true;
+              try {
+                const width = video.videoWidth;
+                const height = video.videoHeight;
+                if (width && height) {
+                  canvas.width = width;
+                  canvas.height = height;
+                  context.drawImage(video, 0, 0, width, height);
+                  const ocrResult = await Tesseract.recognize(canvas, 'eng');
+                  const code = findItemCodeCandidatesFromText(ocrResult?.data?.text || '')[0];
+                  if (code) {
+                    handleCode(code);
+                    return;
+                  }
                 }
+              } catch (err) {
+                console.warn('Item label OCR frame failed:', err);
+              } finally {
+                ocrBusy = false;
               }
-              if (window.Tesseract && context) {
-                const width = video.videoWidth || 1280;
-                const height = video.videoHeight || 720;
-                canvas.width = width;
-                canvas.height = height;
-                context.drawImage(video, 0, 0, width, height);
-                const ocrResult = await Tesseract.recognize(canvas, 'eng');
-                const ocrText = ocrResult?.data?.text || '';
-                const codeCandidates = findItemCodeCandidatesFromText(ocrText);
-                if (codeCandidates.length) {
-                  const code = codeCandidates[0];
-                  stopItemCodeCamera();
-                  panel.style.display = 'none';
-                  const existing = (db.itemCodes || []).find(item => String(item.itemCode || '').trim().toLowerCase() === code.toLowerCase());
-                  if (existing) {
-                    alert('This code is already registered. Review or update its item and location.');
-                    openItemCodeForm(existing.id);
-                  } else openItemCodeForm(null, code);
-                  return;
-                }
-              }
-            } catch (err) {
-              console.warn('Item scan frame failed:', err);
             }
-            if (itemCodeScanRunning) setTimeout(processScan, 750);
+            if (itemCodeScanRunning) setTimeout(processScan, 1500);
           };
           processScan();
         } catch (err) {
@@ -7016,6 +7012,10 @@
 
       function stopItemCodeCamera() {
         itemCodeScanRunning = false;
+        if (itemCodeReaderControls) itemCodeReaderControls.stop();
+        itemCodeReaderControls = null;
+        if (itemCodeReader) itemCodeReader.reset();
+        itemCodeReader = null;
         if (itemCodeCameraStream) itemCodeCameraStream.getTracks().forEach(track => track.stop());
         itemCodeCameraStream = null;
         const video = document.getElementById('itemCodeCameraVideo');
