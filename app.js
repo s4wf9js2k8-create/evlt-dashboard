@@ -75,6 +75,7 @@
       let currentUser = null; 
       let tempPhotoBase64 = '';
       let tempMaintPhotoBase64 = '';
+      let tempFleetPhoto = '';
       let editingIndex = null;
       let editingIncidentIndex = null;
       let editingMaintLogIndex = null;
@@ -3735,6 +3736,7 @@
                   const icon = typeIcons[item.type] || '🚞';
                   return `
                     <div class="card" style="padding:1rem; display:flex; flex-direction:column; gap:0.6rem; border-left:4px solid ${item.state === 'In Service' ? '#16a34a' : (item.state === 'Overhaul' ? '#ca8a04' : '#dc2626')};">
+                      ${safeImageUrl(item.photo) ? `<img src="${escapeHtml(safeImageUrl(item.photo))}" alt="${escapeHtml(item.name)}" style="width:100%; height:150px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(item.photo))})">` : ''}
                       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
                           <div style="font-size:1.4rem; margin-bottom:0.2rem;">${icon}</div>
@@ -3788,7 +3790,7 @@
                         return `
                           <tr>
                             <td><strong>${escapeHtml(formatDisplayDate(m.startDate || m.date))}</strong> → ${escapeHtml(formatDisplayDate(m.endDate || m.startDate || m.date))}</td>
-                            <td><strong>${escapeHtml(m.assetName || m.asset || '-')}</strong></td>
+                            <td>${(() => { const fp = getFleetPhoto(m.assetName || m.asset); return fp ? `<img src="${escapeHtml(fp)}" alt="" style="width:36px; height:36px; object-fit:cover; border-radius:6px; border:1px solid var(--border); vertical-align:middle; margin-right:0.4rem; cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(fp)})">` : ''; })()}<strong>${escapeHtml(m.assetName || m.asset || '-')}</strong></td>
                             <td>${escapeHtml(m.workDone || m.description || '-')}</td>
                             <td>${escapeHtml(perfBy)}</td>
                             <td>${escapeHtml(m.updateState || m.updatedState || 'Unchanged')}</td>
@@ -3823,11 +3825,48 @@
         document.getElementById('fleetGauge').value = existing ? existing.gauge : "7 1/4''";
         document.getElementById('fleetState').value = existing ? existing.state : 'In Service';
 
+        tempFleetPhoto = existing ? (existing.photo || '') : '';
+        document.getElementById('fleetPhoto').value = '';
+        updateFleetPhotoPreview();
+
         document.getElementById('fleetModal').style.display = 'flex';
       }
 
-      function saveFleetItem(e) {
+      function updateFleetPhotoPreview() {
+        const prev = document.getElementById('fleetPhotoPreview');
+        const src = safeImageUrl(tempFleetPhoto);
+        prev.src = src || '';
+        prev.style.display = src ? 'block' : 'none';
+        document.getElementById('fleetPhotoRemove').style.display = src ? 'inline-flex' : 'none';
+      }
+
+      function previewFleetPhoto(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        compressImageFile(file, 900, 0.75, data => {
+          tempFleetPhoto = data;
+          updateFleetPhotoPreview();
+        });
+      }
+
+      function removeFleetPhoto() {
+        tempFleetPhoto = '';
+        document.getElementById('fleetPhoto').value = '';
+        updateFleetPhotoPreview();
+      }
+
+      // Photo saved for a loco on the Maintenance & Fleet page (matched by name)
+      function getFleetPhoto(name) {
+        if (!name) return '';
+        const item = (db.fleetItems || []).find(f => f && f.name === name);
+        return item ? safeImageUrl(item.photo) : '';
+      }
+
+      async function saveFleetItem(e) {
         e.preventDefault();
+        const unlock = lockSubmit(e);
+        const photo = await storePhoto(tempFleetPhoto, 'fleet');
+        unlock();
         const indexVal = document.getElementById('fleetEditIndex').value;
         const name = document.getElementById('fleetName').value.trim();
         const type = document.getElementById('fleetType').value;
@@ -3837,9 +3876,9 @@
         if (!db.fleetItems) db.fleetItems = [];
 
         if (indexVal !== '' && db.fleetItems[indexVal]) {
-          db.fleetItems[indexVal] = { name, type, gauge, state };
+          db.fleetItems[indexVal] = { ...db.fleetItems[indexVal], name, type, gauge, state, photo };
         } else {
-          db.fleetItems.push({ name, type, gauge, state });
+          db.fleetItems.push({ name, type, gauge, state, photo });
         }
 
         dbSet('EVLT_ADMIN_DB/fleetItems', db.fleetItems);
@@ -7034,6 +7073,9 @@
 
       function findLocoPhoto(loco) {
         if (!loco) return '';
+        // The photo from the Maintenance & Fleet page is the main source
+        const fleetPhoto = getFleetPhoto(loco);
+        if (fleetPhoto) return fleetPhoto;
         const match = (db.volunteerDocs || []).slice().reverse().find(d => d.type === 'Loco Certification' && d.loco === loco && d.photo);
         return match ? match.photo : '';
       }
@@ -7182,6 +7224,19 @@
         });
       }
 
+      // When a loco is picked, start with the fleet page photo (the user can still choose a different one)
+      function prefillVolDocLocoPhoto() {
+        const type = document.getElementById('volDocType').value;
+        if (type !== 'Loco Certification') return;
+        const fleetPhoto = getFleetPhoto(document.getElementById('volDocLoco').value);
+        const fileInput = document.getElementById('volDocPhotoFile');
+        if (fileInput && fileInput.files && fileInput.files.length) return; // they chose their own photo
+        const prev = document.getElementById('volDocPhotoPreview');
+        tempVolDocPhoto = fleetPhoto || '';
+        prev.src = tempVolDocPhoto;
+        prev.style.display = tempVolDocPhoto ? 'block' : 'none';
+      }
+
       function toggleVolDocTypeFields() {
         const type = document.getElementById('volDocType').value;
         const def = VOL_DOC_TYPES.find(t => t.key === type) || {};
@@ -7224,6 +7279,7 @@
         document.getElementById('volDocRef').value = existing ? (existing.ref || '') : '';
         document.getElementById('volDocNotes').value = existing ? (existing.notes || '') : '';
 
+        document.getElementById('volDocPhotoFile').value = '';
         tempVolDocPhoto = existing ? (existing.photo || '') : '';
         const prev = document.getElementById('volDocPhotoPreview');
         prev.src = tempVolDocPhoto; prev.style.display = tempVolDocPhoto ? 'block' : 'none';
