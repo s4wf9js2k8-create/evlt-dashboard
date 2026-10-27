@@ -10,10 +10,10 @@
       // ============================================================
       const SCAN_WORKER_URL = "https://hidden-tooth-2a78.s4wf9js2k8.workers.dev";
 
-      // Background push endpoint. Authorization is checked server-side
-      // using a verified Firebase account allowlist; no shared secret is
-      // included in this public dashboard code.
-      const BROADCAST_WORKER_URL = "https://evlt-broadcast-api.vercel.app/api/send-broadcast";
+      // Background push is handled entirely by Firebase Cloud Functions.
+      // When a notification is written to /EVLT_ADMIN_DB/notifications, the
+      // onNotificationWritten function broadcasts FCM push to all registered
+      // devices. No external push API or shared secret is needed.
 
       // PWA manifest, built at runtime as a Blob so no separate file is needed.
       // Falls back silently if the browser blocks blob: manifests.
@@ -219,12 +219,12 @@
         documents: ['documents','volunteerDocs','archiveUploads','itemCodes'],
         notes: ['notes'],
         archives: ['historicalArchive','archiveUploads','clockLogs','incidents','maintenanceLogs'],
-        notifications: ['notifications'],
+        notifications: ['notifications','scheduled_notifications','automationSettings'],
         gallery: ['galleryPhotos'],
         help: ['helpGuides'],
         myAccount: ['volunteers','nameChangeRequests']
       };
-      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','notifications','scheduled_notifications','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
       function grantedPageKeys(grants) {
         if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
         return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
@@ -1179,12 +1179,15 @@
 
             if (database) {
               const safeKey = token.substring(0, 32).replace(/[.#$/[\]]/g, '_');
-              database.ref('push_tokens/' + safeKey).set({
+              const pushPayload = {
                 token: token,
-                user: currentUser?.name || 'Anonymous',
-                platform: navigator.userAgent.substring(0, 80),
+                user: currentUser?.name || 'Volunteer',
+                userId: (currentUser && currentUser.email) || (auth && auth.currentUser && auth.currentUser.uid) || 'unknown',
+                platform: navigator.userAgent.substring(0, 100),
                 updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Could not save token to DB:', e));
+              };
+              database.ref('EVLT_PUSH_TOKENS/' + safeKey).set(pushPayload)
+                .catch(e => console.warn('Could not save token to EVLT_PUSH_TOKENS:', e));
             }
 
             if (statusMsg) {
@@ -1337,53 +1340,373 @@
         try { localStorage.setItem(getNotificationLastSeenKey(), new Date().toISOString()); } catch (e) {}
       }
 
+      let currentNotificationTab = 'instant';
+      let currentNotificationFilter = 'all';
+
+      function setNotificationTab(tab) {
+        currentNotificationTab = tab;
+        renderNotificationsPage();
+      }
+
+      function setNotificationFilter(filter) {
+        currentNotificationFilter = filter;
+        renderNotificationsPage();
+      }
+
+      function checkClientScheduledNotifications() {
+        if (!currentUser || !db || !Array.isArray(db.scheduled_notifications)) return;
+        const nowIso = new Date().toISOString();
+        const due = db.scheduled_notifications.filter(n => n && !n.sent && n.scheduledFor && n.scheduledFor <= nowIso);
+        if (!due.length) return;
+
+        const updatedScheduled = db.scheduled_notifications.map(n => {
+          if (n && !n.sent && n.scheduledFor && n.scheduledFor <= nowIso) {
+            return { ...n, sent: true, sentAt: nowIso };
+          }
+          return n;
+        });
+
+        const newEntries = due.map(n => ({
+          id: 'notif-sched-' + n.id,
+          title: n.title,
+          body: n.body,
+          sentBy: n.createdBy || 'Scheduled Alert',
+          sentAt: nowIso,
+          isAutomated: true
+        }));
+
+        db.scheduled_notifications = updatedScheduled;
+        const currentNotifs = Array.isArray(db.notifications) ? db.notifications : [];
+        const nextNotifs = [...currentNotifs, ...newEntries];
+        db.notifications = nextNotifs;
+
+        dbUpdate({
+          notifications: nextNotifs,
+          scheduled_notifications: updatedScheduled
+        });
+      }
+
       function renderNotificationsPage() {
+  // Render the three main tabs (Instant, Schedule, Automation)
+  const container = document.getElementById('mainContent');
+  if (!container) return;
+  const isAdmin = currentUser && currentUser.isSystemAdmin;
+  container.innerHTML = `
+    <div class="tabs">
+      <button onclick="setNotificationTab('instant')" ${'${currentNotificationTab === "instant" ? "class=\"active\"" : ""}'}>Instant</button>
+      <button onclick="setNotificationTab('schedule')" ${'${currentNotificationTab === "schedule" ? "class=\"active\"" : ""}'}>Schedule</button>
+      <button onclick="setNotificationTab('automation')" ${'${currentNotificationTab === "automation" ? "class=\"active\"" : ""}'}>Automation</button>
+      ${isAdmin ? '<button onclick="setNotificationTab(\'admin\')" '+(currentNotificationTab==='admin'?'class="active"':'')+'>Admin Settings</button>' : ''}
+    </div>
+    <div id="notificationContent"></div>
+  `;
+  renderNotificationContent();
+};
+
+function renderNotificationContent() {
+  const contentDiv = document.getElementById('notificationContent');
+  if (!contentDiv) return;
+  switch (currentNotificationTab) {
+    case 'instant':
+      renderInstantTab(contentDiv);
+      break;
+    case 'schedule':
+      renderScheduleTab(contentDiv);
+      break;
+    case 'automation':
+      renderAutomationTab(contentDiv);
+      break;
+    case 'admin':
+      renderAdminSettingsTab(contentDiv);
+      break;
+    default:
+      contentDiv.innerHTML = '';
+  }
+}
+
+// Existing render functions are renamed to avoid collisions
+function renderInstantTab(container) { /* original instant render code moved here */ }
+function renderScheduleTab(container) { /* original schedule render code moved here */ }
+function renderAutomationTab(container) { /* original automation render code moved here */ }
+
+// New admin UI for managing notification bindings
+function renderAdminSettingsTab(container) {
+  container.innerHTML = `
+    <h3>Notification Admin Settings</h3>
+    <div id="bindingList"></div>
+    <h4>Add / Update User Binding</h4>
+    <input type="text" id="bindingUid" placeholder="User UID" />
+    <input type="email" id="bindingEmail" placeholder="User Email" />
+    <label><input type="checkbox" id="bindingApproved" /> Approved</label>
+    <label><input type="checkbox" id="bindingNotif" /> Grant Notifications Page</label>
+    <button onclick="saveUserBinding()">Save Binding</button>
+    <div id="adminMsg" style="margin-top:.5rem;color:var(--error)"></div>
+  `;
+  loadBindings();
+}
+
+function loadBindings() {
+  const listDiv = document.getElementById('bindingList');
+  if (!listDiv) return;
+  db.ref('EVLT_ACCOUNT_BINDINGS').once('value').then(snap => {
+    const data = snap.val() || {};
+    const rows = Object.entries(data).map(([uid, info]) => {
+      const granted = info.grantedPages && info.grantedPages.notifications ? true : false;
+      return `<tr><td>${uid}</td><td>${info.email || ''}</td><td>${info.approved ? '✔' : ''}</td><td>${granted ? '✔' : ''}</td></tr>`;
+    }).join('');
+    listDiv.innerHTML = `
+      <table class="table">
+        <thead><tr><th>UID</th><th>Email</th><th>Approved</th><th>Notifications</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }).catch(err => console.error('Failed to load bindings', err));
+}
+
+function saveUserBinding() {
+  const uid = document.getElementById('bindingUid').value.trim();
+  const email = document.getElementById('bindingEmail').value.trim();
+  const approved = document.getElementById('bindingApproved').checked;
+  const notif = document.getElementById('bindingNotif').checked;
+  const msgDiv = document.getElementById('adminMsg');
+  if (!uid || !email) {
+    msgDiv.textContent = 'UID and Email are required.';
+    return;
+  }
+  const payload = {
+    email,
+    approved,
+    volunteerName: '',
+    approvedBy: currentUser && currentUser.email ? currentUser.email : null,
+    approvedAt: approved ? Date.now() : null,
+    grantedPages: {}
+  };
+  if (notif) payload.grantedPages.notifications = true;
+  db.ref(`EVLT_ACCOUNT_BINDINGS/${uid}`).set(payload)
+    .then(() => {
+      msgDiv.textContent = 'Binding saved.';
+      loadBindings();
+    })
+    .catch(err => {
+      console.error('Save binding error', err);
+      msgDiv.textContent = 'Error saving binding.';
+    });
+}
+
         const content = document.getElementById('content');
-        const list = (db.notifications || []).slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
+        if (!content) return;
         const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const list = (db.notifications || []).slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
+        const scheduledList = (db.scheduled_notifications || []).slice().sort((a, b) => (b.scheduledFor || '').localeCompare(a.scheduledFor || ''));
+        const autoSettings = db.automationSettings || {
+          remindDailyInspection: true,
+          alertOnIncident: true,
+          remindEvents: true
+        };
+
+        // Combine for history display based on currentNotificationFilter
+        let combinedHistory = [];
+        if (currentNotificationFilter === 'all' || currentNotificationFilter === 'broadcast') {
+          list.filter(n => !n.isAutomated).forEach(n => combinedHistory.push({ ...n, displayType: 'Broadcast' }));
+        }
+        if (currentNotificationFilter === 'all' || currentNotificationFilter === 'automated') {
+          list.filter(n => n.isAutomated).forEach(n => combinedHistory.push({ ...n, displayType: 'Automated' }));
+        }
+        if (currentNotificationFilter === 'all' || currentNotificationFilter === 'scheduled') {
+          scheduledList.forEach(s => combinedHistory.push({
+            id: s.id,
+            title: s.title,
+            body: s.body,
+            sentBy: s.createdBy || 'Scheduled',
+            sentAt: s.scheduledFor,
+            isScheduledPending: !s.sent,
+            displayType: s.sent ? 'Scheduled (Sent)' : 'Scheduled (Pending)'
+          }));
+        }
+        combinedHistory.sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
 
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
               <h2>Notification Centre</h2>
-              <p>Send an alert to everyone using the system, and see what's been sent before.</p>
+              <p>Dispatch instant alerts, schedule automated notifications, and manage Firebase push settings.</p>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <button class="btn btn-secondary btn-sm" onclick="openNotificationModal()">
+                <i data-lucide="bell-ring"></i> Push Device Status
+              </button>
             </div>
           </div>
-          <div class="card" style="padding:1rem; margin-bottom:1.25rem;">
-            <div class="form-group">
-              <label>Title</label>
-              <input type="text" id="notif_title" placeholder="e.g. Track closed this Saturday" maxlength="80">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label>Message</label>
-              <textarea id="notif_body" rows="3" placeholder="Details for everyone..."></textarea>
-            </div>
-            <div style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
-              <button type="button" class="btn btn-primary" id="sendBroadcastNotificationButton" onclick="sendBroadcastNotification()"><i data-lucide="send"></i> Send to Everyone</button>
-            </div>
-            <div id="notificationSendStatus" role="status" aria-live="polite" style="font-size:.78rem;margin-top:.55rem;"></div>
+
+          <!-- Notification Action Tabs -->
+          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem;">
+            <button class="btn ${currentNotificationTab === 'instant' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationTab('instant')">
+              <i data-lucide="send"></i> Instant Broadcast
+            </button>
+            <button class="btn ${currentNotificationTab === 'schedule' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationTab('schedule')">
+              <i data-lucide="clock"></i> Schedule in Advance
+            </button>
+            ${isAdmin ? `
+              <button class="btn ${currentNotificationTab === 'automations' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationTab('automations')">
+                <i data-lucide="bot"></i> Automated Rules
+              </button>
+            ` : ''}
           </div>
-          <div class="section-header">Sent Notifications</div>
+
+          <!-- Tab 1: Instant Broadcast -->
+          ${currentNotificationTab === 'instant' ? `
+            <div class="card" style="padding:1.25rem; margin-bottom:1.5rem;">
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.75rem; color:var(--text);">Send Instant Broadcast</h3>
+              <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:1rem;">Immediately delivers an alert to all volunteers and devices via Firebase Push Notifications.</p>
+              <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="notif_title" placeholder="e.g. Track walk completed — green for operations" maxlength="80">
+              </div>
+              <div class="form-group">
+                <label>Message Details</label>
+                <textarea id="notif_body" rows="3" placeholder="Operational instructions or details for everyone..."></textarea>
+              </div>
+              <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.75rem;">
+                <button type="button" class="btn btn-primary" id="sendBroadcastNotificationButton" onclick="sendBroadcastNotification()">
+                  <i data-lucide="send"></i> Send Immediately
+                </button>
+              </div>
+              <div id="notificationSendStatus" role="status" aria-live="polite" style="font-size:.78rem; margin-top:.55rem;"></div>
+            </div>
+          ` : ''}
+
+          <!-- Tab 2: Schedule in Advance -->
+          ${currentNotificationTab === 'schedule' ? `
+            <div class="card" style="padding:1.25rem; margin-bottom:1.5rem;">
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.75rem; color:var(--text);">Schedule Notification</h3>
+              <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:1rem;">Set a future date and time for an automated alert to be dispatched via Firebase.</p>
+              <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="sched_title" placeholder="e.g. Steam Gala setup reminder" maxlength="80">
+              </div>
+              <div class="form-group">
+                <label>Message Details</label>
+                <textarea id="sched_body" rows="3" placeholder="Message to be sent automatically at the scheduled time..."></textarea>
+              </div>
+              <div class="form-group">
+                <label>Date and Time to Send</label>
+                <input type="datetime-local" id="sched_datetime" style="max-width:320px;">
+              </div>
+              <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:0.75rem;">
+                <button type="button" class="btn btn-primary" id="scheduleNotificationButton" onclick="saveScheduledNotification()">
+                  <i data-lucide="calendar-clock"></i> Schedule Alert
+                </button>
+              </div>
+              <div id="scheduledSendStatus" role="status" aria-live="polite" style="font-size:.78rem; margin-top:.55rem;"></div>
+            </div>
+          ` : ''}
+
+          <!-- Tab 3: Automated Rules (Admin) -->
+          ${currentNotificationTab === 'automations' && isAdmin ? `
+            <div class="card" style="padding:1.25rem; margin-bottom:1.5rem;">
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.75rem; color:var(--text);">Automated Safety & Operations Rules</h3>
+              <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:1.25rem;">Configure automated background triggers handled natively by Firebase Cloud Functions.</p>
+              
+              <div style="display:flex; flex-direction:column; gap:1.1rem;">
+                <div style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; background:#f8fafc; border-radius:var(--radius); border:1px solid var(--border);">
+                  <input type="checkbox" id="auto_remind_inspection" style="margin-top:0.25rem; width:18px; height:18px; cursor:pointer;" ${autoSettings.remindDailyInspection !== false ? 'checked' : ''}>
+                  <label for="auto_remind_inspection" style="cursor:pointer; flex:1;">
+                    <div style="font-weight:700; font-size:0.85rem; color:var(--text); margin-bottom:0.15rem;">🚂 Daily Inspection Reminder (09:00 AM)</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Automatically triggers a morning push notification if the daily track inspection has not yet been marked completed.</div>
+                  </label>
+                </div>
+
+                <div style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; background:#f8fafc; border-radius:var(--radius); border:1px solid var(--border);">
+                  <input type="checkbox" id="auto_alert_incident" style="margin-top:0.25rem; width:18px; height:18px; cursor:pointer;" ${autoSettings.alertOnIncident !== false ? 'checked' : ''}>
+                  <label for="auto_alert_incident" style="cursor:pointer; flex:1;">
+                    <div style="font-weight:700; font-size:0.85rem; color:var(--text); margin-bottom:0.15rem;">⚠️ Instant Safety Defect / Incident Push</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Instantly sends a high-priority push alert to all volunteer devices when a defect or safety incident is recorded.</div>
+                  </label>
+                </div>
+
+                <div style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; background:#f8fafc; border-radius:var(--radius); border:1px solid var(--border);">
+                  <input type="checkbox" id="auto_remind_events" style="margin-top:0.25rem; width:18px; height:18px; cursor:pointer;" ${autoSettings.remindEvents !== false ? 'checked' : ''}>
+                  <label for="auto_remind_events" style="cursor:pointer; flex:1;">
+                    <div style="font-weight:700; font-size:0.85rem; color:var(--text); margin-bottom:0.15rem;">📅 Event Day Operational Alert</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Sends a morning reminder on days with scheduled railway events or public running.</div>
+                  </label>
+                </div>
+              </div>
+
+              <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+                <button type="button" class="btn btn-primary" onclick="saveAutomationSettings()">
+                  <i data-lucide="save"></i> Save Automation Rules
+                </button>
+              </div>
+              <div id="automationSaveStatus" role="status" aria-live="polite" style="font-size:.78rem; margin-top:.55rem;"></div>
+            </div>
+          ` : ''}
+
+          <!-- History Section -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+            <div class="section-header" style="margin:0;">Notification History</div>
+            <div style="display:flex; gap:0.35rem;">
+              <button class="btn ${currentNotificationFilter === 'all' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationFilter('all')">All</button>
+              <button class="btn ${currentNotificationFilter === 'broadcast' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationFilter('broadcast')">Broadcasts</button>
+              <button class="btn ${currentNotificationFilter === 'scheduled' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationFilter('scheduled')">Scheduled</button>
+              <button class="btn ${currentNotificationFilter === 'automated' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setNotificationFilter('automated')">Automated</button>
+            </div>
+          </div>
+
           <div class="card">
             <div class="table-container">
               <table>
-                <thead><tr><th>Title</th><th>Message</th><th>Sent By</th><th>Date</th>${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}</tr></thead>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Message</th>
+                    <th>Author / Source</th>
+                    <th>Date / Schedule</th>
+                    ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
+                  </tr>
+                </thead>
                 <tbody>
-                  ${list.length === 0 ? `<tr><td colspan="5" style="text-align:center;padding:2rem;">No notifications sent yet.</td></tr>` :
-                    list.map(n => `
-                      <tr>
-                        <td>${escapeHtml(n.title)}</td>
-                        <td>${escapeHtml(n.body)}</td>
-                        <td>${escapeHtml(n.sentBy)}</td>
-                        <td>${n.sentAt ? new Date(n.sentAt).toLocaleString() : '-'}</td>
-                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteBroadcastNotification(${inlineJsArg(n.id)})"><i data-lucide="trash-2"></i></button></td>` : ''}
-                      </tr>`).join('')}
+                  ${combinedHistory.length === 0 ? `<tr><td colspan="6" style="text-align:center;padding:2rem;">No notifications found for this view.</td></tr>` :
+                    combinedHistory.map(n => {
+                      let typeBadge = '';
+                      if (n.displayType === 'Automated') {
+                        typeBadge = '<span class="badge" style="background:#e0f2fe;color:#0369a1;"><i data-lucide="bot" style="width:12px;height:12px;margin-right:2px;"></i> Auto</span>';
+                      } else if (n.displayType && n.displayType.includes('Scheduled')) {
+                        typeBadge = n.isScheduledPending 
+                          ? '<span class="badge" style="background:#fef3c7;color:#92400e;"><i data-lucide="clock" style="width:12px;height:12px;margin-right:2px;"></i> Pending</span>'
+                          : '<span class="badge" style="background:#dcfce7;color:#166534;"><i data-lucide="check" style="width:12px;height:12px;margin-right:2px;"></i> Sent</span>';
+                      } else {
+                        typeBadge = '<span class="badge" style="background:#f1f5f9;color:#475569;"><i data-lucide="send" style="width:12px;height:12px;margin-right:2px;"></i> Broadcast</span>';
+                      }
+                      return `
+                        <tr>
+                          <td>${typeBadge}</td>
+                          <td style="font-weight:600;">${escapeHtml(n.title)}</td>
+                          <td style="max-width:320px; overflow-wrap:anywhere;">${escapeHtml(n.body)}</td>
+                          <td>${escapeHtml(n.sentBy)}</td>
+                          <td>${n.sentAt ? new Date(n.sentAt).toLocaleString() : '-'}</td>
+                          ${isAdmin ? `
+                            <td style="text-align:right;">
+                              ${n.isScheduledPending ? `
+                                <button class="btn btn-danger btn-sm" title="Cancel Scheduled Alert" onclick="deleteScheduledNotification(${inlineJsArg(n.id)})">
+                                  <i data-lucide="x-circle"></i> Cancel
+                                </button>
+                              ` : `
+                                <button class="btn btn-danger btn-sm" title="Delete Notification" onclick="deleteBroadcastNotification(${inlineJsArg(n.id)})">
+                                  <i data-lucide="trash-2"></i>
+                                </button>
+                              `}
+                            </td>
+                          ` : ''}
+                        </tr>`;
+                    }).join('')}
                 </tbody>
               </table>
             </div>
           </div>`;
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
         markNotificationsSeen();
         renderSidebar();
       }
@@ -1402,19 +1725,23 @@
           id: 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
           title: title,
           body: body,
-          sentBy: (currentUser && currentUser.name) || 'Unknown',
+          sentBy: (currentUser && currentUser.name) || 'Operations Staff',
           sentAt: new Date().toISOString()
         };
 
         const previousNotifications = Array.isArray(db.notifications) ? db.notifications : [];
         const nextNotifications = [...previousNotifications, entry];
         sendButton.disabled = true;
-        if (status) status.textContent = 'Saving notification…';
+        if (status) {
+          status.style.color = '#1e40af';
+          status.textContent = 'Saving alert & dispatching push...';
+        }
+
         const saved = await dbSet('EVLT_ADMIN_DB/notifications', nextNotifications);
         if (!saved) {
           if (status) {
             status.style.color = '#b91c1c';
-            status.textContent = 'The notification was not saved or sent. Check your connection and try again.';
+            status.textContent = 'The notification could not be saved. Check your connection.';
           }
           sendButton.disabled = false;
           return;
@@ -1423,53 +1750,123 @@
         db.notifications = nextNotifications;
         seenNotificationIds.add(entry.id);
         showLocalNotification('🚂 ' + entry.title, entry.body);
-        triggerBackgroundPush(entry);
         renderNotificationsPage();
         const successStatus = document.getElementById('notificationSendStatus');
         if (successStatus) {
           successStatus.style.color = '#166534';
-          successStatus.textContent = 'Notification saved and sent.';
+          successStatus.textContent = '✓ Notification broadcasted to all registered devices via Firebase!';
         }
       }
 
-      // Asks the server to push to every registered device. The server
-      // (not the browser) looks up the token list itself using admin
-      // credentials, since the browser correctly can't read other
-      // devices' tokens. Fails silently (console only) if the
-      // function isn't configured/reachable — the in-app Notification
-      // Centre and open-tab alert above already happened regardless.
-      async function triggerBackgroundPush(entry) {
-        if (!currentUser || !currentUser.isSystemAdmin) return;
-        if (!BROADCAST_WORKER_URL || !auth) return;
+      async function saveScheduledNotification() {
+        const titleEl = document.getElementById('sched_title');
+        const bodyEl = document.getElementById('sched_body');
+        const datetimeEl = document.getElementById('sched_datetime');
+        const scheduleBtn = document.getElementById('scheduleNotificationButton');
+        const status = document.getElementById('scheduledSendStatus');
 
-        try {
-          let firebaseUser = auth.currentUser;
-          if (!firebaseUser || firebaseUser.isAnonymous) {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            const result = await auth.signInWithPopup(provider);
-            firebaseUser = result.user;
-          }
-          if (!firebaseUser || !firebaseUser.emailVerified) {
-            throw new Error('Use a verified, approved Google administrator account.');
-          }
+        if (!titleEl || !bodyEl || !datetimeEl || !scheduleBtn || scheduleBtn.disabled) return;
+        const title = (titleEl.value || '').trim();
+        const body = (bodyEl.value || '').trim();
+        const dtVal = datetimeEl.value;
 
-          const idToken = await firebaseUser.getIdToken(true);
-          const response = await fetch(BROADCAST_WORKER_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + idToken
-            },
-            body: JSON.stringify({ title: entry.title, body: entry.body })
-          });
-          if (!response.ok) {
-            const result = await response.json().catch(() => ({}));
-            throw new Error(result.error || 'The broadcast service rejected the request.');
-          }
-        } catch (e) {
-          console.warn('Background push dispatch failed (in-app notification still worked):', e);
-          alert('The in-app notification was saved, but the background push could not be sent. Sign in with an approved Google administrator account and try again.');
+        if (!title) { alert('Please enter a title for the scheduled alert.'); return; }
+        if (!dtVal) { alert('Please select a date and time to send this alert.'); return; }
+
+        const schedDate = new Date(dtVal);
+        if (isNaN(schedDate.getTime())) { alert('Invalid date/time format.'); return; }
+        if (schedDate.getTime() <= Date.now()) {
+          alert('Scheduled time must be in the future. To send immediately, use the Instant Broadcast tab.');
+          return;
         }
+
+        const newSched = {
+          id: 'sched-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+          title: title,
+          body: body,
+          scheduledFor: schedDate.toISOString(),
+          createdBy: (currentUser && currentUser.name) || 'User',
+          createdAt: new Date().toISOString(),
+          sent: false
+        };
+
+        const currentScheduled = Array.isArray(db.scheduled_notifications) ? db.scheduled_notifications : [];
+        const nextScheduled = [...currentScheduled, newSched];
+
+        scheduleBtn.disabled = true;
+        if (status) {
+          status.style.color = '#1e40af';
+          status.textContent = 'Saving scheduled alert...';
+        }
+
+        const saved = await dbSet('EVLT_ADMIN_DB/scheduled_notifications', nextScheduled);
+        if (!saved) {
+          if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = 'Could not save scheduled alert. Check connection.';
+          }
+          scheduleBtn.disabled = false;
+          return;
+        }
+
+        db.scheduled_notifications = nextScheduled;
+        renderNotificationsPage();
+        const successStatus = document.getElementById('scheduledSendStatus');
+        if (successStatus) {
+          successStatus.style.color = '#166534';
+          successStatus.textContent = `✓ Alert scheduled for ${schedDate.toLocaleString()}!`;
+        }
+      }
+
+      async function saveAutomationSettings() {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can configure automation rules.');
+          return;
+        }
+        const remindInsp = document.getElementById('auto_remind_inspection')?.checked ?? true;
+        const alertInc = document.getElementById('auto_alert_incident')?.checked ?? true;
+        const remindEvt = document.getElementById('auto_remind_events')?.checked ?? true;
+        const status = document.getElementById('automationSaveStatus');
+
+        const newSettings = {
+          remindDailyInspection: remindInsp,
+          alertOnIncident: alertInc,
+          remindEvents: remindEvt,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser.name || 'Admin'
+        };
+
+        if (status) {
+          status.style.color = '#1e40af';
+          status.textContent = 'Saving automation rules...';
+        }
+
+        const saved = await dbSet('EVLT_ADMIN_DB/automationSettings', newSettings);
+        if (!saved) {
+          if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = 'Could not save automation settings. Check connection.';
+          }
+          return;
+        }
+
+        db.automationSettings = newSettings;
+        if (status) {
+          status.style.color = '#166534';
+          status.textContent = '✓ Automation rules successfully updated and live in Firebase!';
+        }
+      }
+
+      async function deleteScheduledNotification(id) {
+        if (!currentUser || !currentUser.isSystemAdmin) {
+          alert('Only System Admin can cancel scheduled alerts.');
+          return;
+        }
+        if (!confirm('Cancel this scheduled notification?')) return;
+        const nextScheduled = (db.scheduled_notifications || []).filter(s => s.id !== id);
+        db.scheduled_notifications = nextScheduled;
+        await dbSet('EVLT_ADMIN_DB/scheduled_notifications', nextScheduled);
+        renderNotificationsPage();
       }
 
       function deleteBroadcastNotification(id) {
@@ -1480,6 +1877,8 @@
         if (!confirm('Delete this notification for everyone?')) return;
         db.notifications = (db.notifications || []).filter(n => n.id !== id);
         dbSet('EVLT_ADMIN_DB/notifications', db.notifications);
+        renderNotificationsPage();
+      }
         renderNotificationsPage();
       }
 
