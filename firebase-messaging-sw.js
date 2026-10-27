@@ -25,15 +25,12 @@ messaging.onBackgroundMessage((payload) => {
 
   const iconUrl = new URL('apple-touch-icon.png', self.location.href).href;
   const title = payload.notification?.title || payload.data?.title || '🚂 EVLT Operations Alert';
-  const body = payload.notification?.body || payload.data?.body || 'Safety or operational alert received.';
   const options = {
-    body: body,
+    body: payload.notification?.body || payload.data?.body || 'Safety or operational alert received.',
     icon: iconUrl,
     badge: iconUrl,
-    tag: payload.data?.notifId ? ('evlt-alert-' + payload.data.notifId) : (payload.data?.tag || 'evlt-alert'),
-    data: payload.data || {},
-    renotify: true,
-    vibrate: [200, 100, 200]
+    tag: payload.data?.tag || 'evlt-alert',
+    data: payload.data || {}
   };
 
   self.registration.showNotification(title, options);
@@ -41,7 +38,7 @@ messaging.onBackgroundMessage((payload) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = self.location.origin + self.location.pathname.replace(/firebase-messaging-sw\.js.*/, '');
+  const targetUrl = self.location.href.replace(/firebase-messaging-sw\.js.*/, '');
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
