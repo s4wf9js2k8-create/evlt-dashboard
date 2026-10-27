@@ -225,7 +225,7 @@
         help: ['helpGuides'],
         myAccount: ['volunteers','nameChangeRequests']
       };
-      const PAGE_LIST_DATA_KEYS = new Set(['actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      const PAGE_LIST_DATA_KEYS = new Set(['customBanners','actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
       function grantedPageKeys(grants) {
         if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
         return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
@@ -721,7 +721,7 @@
       function normaliseDb() {
         if (!db || typeof db !== 'object') db = {};
         
-        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs','memberVisits']
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs','memberVisits','customBanners']
           .forEach(key => {
             const val = db[key];
             if (Array.isArray(val)) return;
@@ -861,6 +861,7 @@
             showLoginError('Could not load the pages assigned to this account. Ask Louie to review its access.');
           });
         });
+        if (userHasAccess('dashboard')) attachCustomBannersListener();
       }
 
       const REMEMBER_KEY = 'evltRememberedUser';
@@ -2414,8 +2415,8 @@
           alert('Access Restricted: You do not have permission to view this page.');
           return;
         }
-        if (view !== 'documents') stopItemCodeCamera();
-        if (view !== 'memberVisits') stopMemberVisitsCamera();
+        try { if (view !== 'documents') stopItemCodeCamera(); } catch (err) { console.warn(err); }
+        try { if (view !== 'memberVisits') stopMemberVisitsCamera(); } catch (err) { console.warn(err); }
         currentView = view;
         renderSidebar();
 
@@ -2461,6 +2462,397 @@
           return `<div style="background: #fef2f2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius); border: 1px solid #fecaca; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;"><i data-lucide="alert-triangle"></i> WARNING: Only ${driverCount} qualified driver(s) currently on site. A minimum of 2 drivers is required for operations.</div>`;
         }
       }
+      // ===== Personalised dashboard banners =====
+      // Each banner belongs to a page. It only shows if the signed-in person has access to that page,
+      // and the "mine" ones are matched to the person's own name. Banners can be dismissed for the
+      // rest of the session; they come back if the content changes.
+      const BANNER_TONES = {
+        red:   { bg: '#fef2f2', fg: '#991b1b', border: '#fecaca' },
+        amber: { bg: '#fffbeb', fg: '#92400e', border: '#fde68a' },
+        blue:  { bg: '#eff6ff', fg: '#1e40af', border: '#bfdbfe' },
+        green: { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0' }
+      };
+
+      function isAssignedToMe(value) {
+        const me = String((currentUser && currentUser.name) || '').trim().toLowerCase();
+        return !!me && String(value || '').trim().toLowerCase() === me;
+      }
+
+      function bannerDaysFromToday(iso) {
+        return Math.round((new Date(iso) - new Date(getTodayString())) / 86400000);
+      }
+
+      function bannerNames(list, getter, max = 3) {
+        const names = list.map(getter).filter(Boolean);
+        return escapeHtml(names.slice(0, max).join(', ')) + (names.length > max ? ` and ${names.length - max} more` : '');
+      }
+
+      function getDashboardBanners() {
+        if (!currentUser || currentUser.isShopKiosk) return [];
+        const banners = [];
+        const today = getTodayString();
+        const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+        const add = (id, page, tone, icon, html, signature) => {
+          if (page !== 'dashboard' && !userHasAccess(page)) return;
+          banners.push({ id, page, tone, icon, html, signature: String(signature) });
+        };
+
+        // Actions: mine first, then everyone else's
+        const openActions = (db.actions || []).filter(a => a && (a.Status || 'Pending') !== 'Completed');
+        const actionTitle = a => a.Title || a.title || 'Untitled';
+        const actionDue = a => { const d = a.DueDate || a.dueDate; return d ? toISODate(d) : ''; };
+        const actionAssignee = a => a.AssignedTo || a.assignedTo || '';
+        const myActions = openActions.filter(a => isAssignedToMe(actionAssignee(a)));
+        const myOverdue = myActions.filter(a => actionDue(a) && actionDue(a) < today);
+        const mySoon = myActions.filter(a => actionDue(a) && actionDue(a) >= today && bannerDaysFromToday(actionDue(a)) <= 3);
+        const otherOverdue = openActions.filter(a => !isAssignedToMe(actionAssignee(a)) && actionDue(a) && actionDue(a) < today);
+        if (myOverdue.length) add('my-overdue-actions', 'actions', 'red', 'clock',
+          `<strong>You have ${plural(myOverdue.length, 'overdue action')}:</strong> ${bannerNames(myOverdue, actionTitle)}`, myOverdue.map(a => a.id || actionTitle(a)).join());
+        if (mySoon.length) add('my-due-soon-actions', 'actions', 'amber', 'list-todo',
+          `<strong>${plural(mySoon.length, 'action')} assigned to you ${mySoon.length === 1 ? 'is' : 'are'} due within 3 days:</strong> ${bannerNames(mySoon, actionTitle)}`, mySoon.map(a => a.id || actionTitle(a)).join());
+        if (otherOverdue.length) add('other-overdue-actions', 'actions', 'red', 'clock',
+          `<strong>${plural(otherOverdue.length, 'overdue action task')}${myOverdue.length ? ' assigned to others' : ''}:</strong> ${bannerNames(otherOverdue, actionTitle)}`, otherOverdue.map(a => a.id || actionTitle(a)).join());
+
+        // Defects / incidents
+        const openIncidents = (db.incidents || []).filter(i => i && String(i.Status || '').toLowerCase() !== 'resolved');
+        const incidentName = i => i.asset || i.Description || 'Defect';
+        const myIncidents = openIncidents.filter(i => isAssignedToMe(i.assignedTo || i.AssignedTo));
+        const redTagged = openIncidents.filter(i => /red/i.test(String(i['Red Tag Status'] || '')) && !/^(no|none|n\/a|-)/i.test(String(i['Red Tag Status'] || '').trim()));
+        if (myIncidents.length) add('my-defects', 'incidents', 'amber', 'alert-triangle',
+          `<strong>${plural(myIncidents.length, 'open defect')} assigned to you:</strong> ${bannerNames(myIncidents, incidentName)}`, myIncidents.map(i => i.id).join());
+        if (redTagged.length) add('red-tagged', 'incidents', 'red', 'alert-octagon',
+          `<strong>${plural(redTagged.length, 'open red-tagged defect')}:</strong> ${bannerNames(redTagged, incidentName)}`, redTagged.map(i => i.id).join());
+
+        // Events happening today / coming up in the next 7 days
+        const events = (db.events || []).filter(Boolean).map(ev => {
+          const start = toISODate(ev.StartDate || ev.startDate);
+          const end = toISODate(ev.EndDate || ev.endDate || ev.StartDate || ev.startDate);
+          return { title: ev.Title || ev.title || 'Event', start, end, id: ev.id };
+        }).filter(ev => ev.start);
+        const eventsToday = events.filter(ev => today >= ev.start && today <= ev.end);
+        const eventsSoon = events.filter(ev => ev.start > today && bannerDaysFromToday(ev.start) <= 7).sort((x, y) => x.start.localeCompare(y.start));
+        if (eventsToday.length) add('events-today', 'events', 'amber', 'calendar-range',
+          `<strong>Event on today:</strong> ${bannerNames(eventsToday, ev => ev.title)}`, eventsToday.map(ev => ev.title).join());
+        if (eventsSoon.length) add('events-soon', 'events', 'blue', 'calendar-clock',
+          `<strong>Coming up:</strong> ${eventsSoon.slice(0, 3).map(ev => `${escapeHtml(ev.title)} (${escapeHtml(formatDisplayDate(ev.start))})`).join(', ')}${eventsSoon.length > 3 ? ` and ${eventsSoon.length - 3} more` : ''}`, eventsSoon.map(ev => ev.title + ev.start).join());
+
+        // Daily safety checks still to do today
+        const daily = db.dailyChecks || {};
+        const trackWalk = (daily.trackWalk && daily.trackWalk.result) || '';
+        const testRun = (daily.testRun && daily.testRun.result) || '';
+        const todo = [];
+        if (!trackWalk) todo.push('track walk');
+        if ((daily.runningTrains || []).length && !testRun) todo.push('test run');
+        if (todo.length) add('daily-checks', 'maintenance', 'amber', 'clipboard-check',
+          `<strong>Still to do today:</strong> ${todo.join(' and ')} not recorded yet`, todo.join());
+        if (trackWalk === 'Fail') add('track-walk-failed', 'maintenance', 'red', 'alert-triangle', `<strong>Today's track walk was recorded as failed.</strong>`, today);
+
+        // Open enquiries and unread notifications
+        const openEnquiries = (db.enquiries || []).filter(q => q && String(q.status || 'Open').toLowerCase() === 'open');
+        if (openEnquiries.length) add('open-enquiries', 'enquiries', 'blue', 'help-circle',
+          `<strong>${plural(openEnquiries.length, 'open enquiry')}</strong> waiting for a reply`, openEnquiries.length);
+        const unread = getUnreadNotificationCount();
+        if (unread > 0) add('unread-notifications', 'notifications', 'blue', 'bell-ring',
+          `<strong>${plural(unread, 'unread notification')}</strong>`, unread);
+
+        return [...getCustomBannersForUser(), ...banners];
+      }
+
+      function bannerDismissKey(b) { return `evlt_banner_${(currentUser && currentUser.name) || 'user'}_${b.id}`; }
+
+      function personalisedBannersHtml() {
+        return getDashboardBanners().filter(b => {
+          try { return sessionStorage.getItem(bannerDismissKey(b)) !== b.signature; } catch (e) { return true; }
+        }).map(b => {
+          const t = BANNER_TONES[b.tone] || BANNER_TONES.blue;
+          const open = b.page !== 'dashboard' && userHasAccess(b.page);
+          return `
+            <div class="dash-banner" style="background:${t.bg}; color:${t.fg}; border:1px solid ${t.border}; padding:0.7rem 0.75rem 0.7rem 1rem; border-radius:var(--radius-lg); font-size:0.85rem; display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem; ${open ? 'cursor:pointer;' : ''}" ${open ? `onclick="navigate('${b.page}')"` : ''}>
+              <i data-lucide="${b.icon}" style="width:18px; height:18px; flex-shrink:0; margin-top:2px;"></i>
+              <div style="flex:1; min-width:0; font-weight:500;">${b.html}${open ? ' &mdash; <u>View</u>' : ''}</div>
+              ${b.dismissible === false ? '' : `<button type="button" title="Dismiss" aria-label="Dismiss" onclick="dismissDashboardBanner(event, ${inlineJsArg(b.id)})" style="background:none; border:none; color:inherit; cursor:pointer; font-size:1.1rem; line-height:1; padding:0 0.25rem; opacity:0.7;">&times;</button>`}
+            </div>`;
+        }).join('');
+      }
+
+      function dismissDashboardBanner(event, id) {
+        event.stopPropagation();
+        const b = getDashboardBanners().find(x => x.id === id);
+        if (b) { try { sessionStorage.setItem(bannerDismissKey(b), b.signature); } catch (e) {} }
+        const el = event.target.closest('.dash-banner');
+        if (el) el.remove();
+      }
+
+      // ===== Admin-created banners =====
+      // The System Admin writes the text, picks who sees it (any of: people with access to chosen pages,
+      // chosen roles, chosen people - all blank means everyone) and the requirements for it to show
+      // (dates, time of day, days of the week and live "conditions" that must ALL be true).
+      const BANNER_ICONS = [
+        { key: 'info', label: 'Information' }, { key: 'megaphone', label: 'Announcement' },
+        { key: 'bell-ring', label: 'Bell' }, { key: 'alert-triangle', label: 'Warning' },
+        { key: 'calendar-range', label: 'Calendar' }, { key: 'clock', label: 'Clock' },
+        { key: 'wrench', label: 'Maintenance' }, { key: 'clipboard-check', label: 'Checklist' },
+        { key: 'flag', label: 'Flag' }, { key: 'train-front', label: 'Train' }
+      ];
+      const BANNER_TONE_LABELS = { blue: 'Blue (information)', amber: 'Amber (reminder)', red: 'Red (urgent)', green: 'Green (good news)' };
+      const BANNER_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const BANNER_CONDITIONS = [
+        { key: 'iAmClockedIn', label: 'I am clocked in', test: () => bannerIsClockedIn(currentUser && currentUser.name) },
+        { key: 'iAmNotClockedIn', label: 'I am NOT clocked in', test: () => !bannerIsClockedIn(currentUser && currentUser.name) },
+        { key: 'fewDrivers', label: 'Fewer than 2 qualified drivers on site', test: () => bannerDriverCount() < 2 },
+        { key: 'overdueActions', label: 'Any action is overdue', test: () => (db.actions || []).some(a => a && (a.Status || 'Pending') !== 'Completed' && (a.DueDate || a.dueDate) && toISODate(a.DueDate || a.dueDate) < getTodayString()) },
+        { key: 'myOverdueActions', label: 'I have an overdue action', test: () => (db.actions || []).some(a => a && (a.Status || 'Pending') !== 'Completed' && isAssignedToMe(a.AssignedTo || a.assignedTo) && (a.DueDate || a.dueDate) && toISODate(a.DueDate || a.dueDate) < getTodayString()) },
+        { key: 'openDefects', label: 'There is an open defect', test: () => (db.incidents || []).some(i => i && String(i.Status || '').toLowerCase() !== 'resolved') },
+        { key: 'redTagged', label: 'There is an open red-tagged defect', test: () => (db.incidents || []).some(i => i && String(i.Status || '').toLowerCase() !== 'resolved' && /red/i.test(String(i['Red Tag Status'] || '')) && !/^(no|none|n\/a|-)/i.test(String(i['Red Tag Status'] || '').trim())) },
+        { key: 'trackWalkMissing', label: "Today's track walk is not recorded", test: () => !((db.dailyChecks || {}).trackWalk || {}).result },
+        { key: 'testRunMissing', label: "Today's test run is not recorded", test: () => !((db.dailyChecks || {}).testRun || {}).result },
+        { key: 'eventToday', label: 'There is an event on today', test: () => (db.events || []).some(ev => { if (!ev) return false; const s = toISODate(ev.StartDate || ev.startDate); const e = toISODate(ev.EndDate || ev.endDate || ev.StartDate || ev.startDate); return s && getTodayString() >= s && getTodayString() <= e; }) },
+        { key: 'openEnquiries', label: 'There is an open enquiry', test: () => (db.enquiries || []).some(q => q && String(q.status || 'Open').toLowerCase() === 'open') },
+        { key: 'myLicenceExpiring', label: 'A licence / certificate is expired or expiring soon', test: () => getVolDocAlerts().length > 0 },
+        { key: 'unreadNotifications', label: 'I have unread notifications', test: () => getUnreadNotificationCount() > 0 }
+      ];
+
+      function bannerIsClockedIn(name) {
+        const n = String(name || '').trim().toLowerCase();
+        return !!n && (db.clockLogs || []).some(l => l && l.status === 'Clocked In' && String(l.name || '').trim().toLowerCase() === n);
+      }
+
+      function bannerDriverCount() {
+        const vols = db.volunteers || [];
+        let count = 0;
+        (db.clockLogs || []).filter(l => l && l.status === 'Clocked In').forEach(log => {
+          const vol = vols.find(v => getVolunteerName(v) === log.name);
+          if (vol && String(vol.Roles || vol.roles || '').includes('Driver')) count++;
+        });
+        return count;
+      }
+
+      function getCustomBannerList() {
+        const list = db.customBanners;
+        return Array.isArray(list) ? list.filter(b => b && b.id) : [];
+      }
+
+      function bannerNowMinutes() { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+      function bannerTimeToMinutes(t) { const p = String(t || '').split(':'); return p.length === 2 ? Number(p[0]) * 60 + Number(p[1]) : null; }
+
+      // Dates, time of day, days of the week and conditions (everything except WHO sees it)
+      function customBannerRequirementsMet(b) {
+        const w = b.when || {};
+        const today = getTodayString();
+        if (w.start && today < w.start) return false;
+        if (w.end && today > w.end) return false;
+        const days = Array.isArray(w.days) ? w.days : [];
+        if (days.length && !days.includes(new Date().getDay())) return false;
+        const from = bannerTimeToMinutes(w.timeFrom), to = bannerTimeToMinutes(w.timeTo), now = bannerNowMinutes();
+        if (from !== null && to !== null) {
+          if (from <= to ? (now < from || now > to) : (now < from && now > to)) return false; // a window past midnight is allowed
+        } else if (from !== null && now < from) return false;
+        else if (to !== null && now > to) return false;
+        const conditions = Array.isArray(w.conditions) ? w.conditions : [];
+        return conditions.every(key => {
+          const c = BANNER_CONDITIONS.find(x => x.key === key);
+          if (!c) return true;
+          try { return !!c.test(); } catch (e) { return false; }
+        });
+      }
+
+      function customBannerAudienceMatches(b) {
+        if (!currentUser) return false;
+        const aud = b.audience || {};
+        const pages = Array.isArray(aud.pages) ? aud.pages : [];
+        const roles = Array.isArray(aud.roles) ? aud.roles : [];
+        const people = Array.isArray(aud.people) ? aud.people : [];
+        if (!pages.length && !roles.length && !people.length) return true; // blank = everyone
+        if (pages.some(p => userHasAccess(p))) return true;
+        const myRoles = String((currentUser.volData && (currentUser.volData.Roles || currentUser.volData.roles)) || '')
+          .split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
+        if (roles.some(r => myRoles.includes(String(r).toLowerCase()))) return true;
+        return people.some(p => isAssignedToMe(p));
+      }
+
+      function describeBannerAudience(b) {
+        const aud = b.audience || {};
+        const parts = [];
+        const pages = (aud.pages || []).map(k => (ACCOUNT_ACCESS_PAGES.find(p => p.key === k) || { label: k }).label);
+        if (pages.length) parts.push('Access to ' + pages.join(' / '));
+        if ((aud.roles || []).length) parts.push('Roles: ' + aud.roles.join(', '));
+        if ((aud.people || []).length) parts.push('People: ' + aud.people.join(', '));
+        return parts.length ? parts.join('; ') : 'Everyone';
+      }
+
+      function describeBannerWhen(b) {
+        const w = b.when || {};
+        const parts = [];
+        if (w.start || w.end) parts.push(`${w.start ? formatDisplayDate(w.start) : 'now'} to ${w.end ? formatDisplayDate(w.end) : 'no end'}`);
+        if ((w.days || []).length) parts.push(w.days.slice().sort().map(d => BANNER_DAY_NAMES[d]).join(', '));
+        if (w.timeFrom || w.timeTo) parts.push(`${w.timeFrom || '00:00'}-${w.timeTo || '23:59'}`);
+        (w.conditions || []).forEach(k => { const c = BANNER_CONDITIONS.find(x => x.key === k); if (c) parts.push(c.label); });
+        return parts.length ? parts.join(' · ') : 'Always';
+      }
+
+      // The custom banners this person should see right now
+      function getCustomBannersForUser() {
+        const isAdmin = !!(currentUser && currentUser.isSystemAdmin);
+        return getCustomBannerList()
+          .filter(b => b.active !== false && String(b.text || '').trim())
+          .filter(b => customBannerRequirementsMet(b))
+          .filter(b => isAdmin || customBannerAudienceMatches(b))
+          .map(b => ({
+            id: 'custom-' + b.id,
+            page: b.linkPage || 'dashboard',
+            tone: BANNER_TONES[b.tone] ? b.tone : 'blue',
+            icon: BANNER_ICONS.some(i => i.key === b.icon) ? b.icon : 'info',
+            html: `${b.title ? `<strong>${escapeHtml(b.title)}</strong><br>` : ''}${escapeHtml(b.text).replace(/\n/g, '<br>')}${isAdmin ? `<div style="font-size:0.68rem; opacity:0.7; margin-top:0.25rem; font-weight:500;">Admin view &mdash; shown to: ${escapeHtml(describeBannerAudience(b))}</div>` : ''}`,
+            signature: String(b.updatedAt || b.createdAt || b.id),
+            dismissible: b.dismissible !== false,
+            custom: true
+          }));
+      }
+
+      function bannerStatus(b) {
+        if (b.active === false) return { label: 'Off', bg: '#f1f5f9', fg: '#64748b' };
+        const w = b.when || {}, today = getTodayString();
+        if (w.end && today > w.end) return { label: 'Ended', bg: '#f1f5f9', fg: '#64748b' };
+        if (w.start && today < w.start) return { label: 'Scheduled', bg: '#eff6ff', fg: '#1e40af' };
+        return customBannerRequirementsMet(b) ? { label: 'Showing now', bg: '#dcfce7', fg: '#166534' } : { label: 'Waiting for requirements', bg: '#fef3c7', fg: '#92400e' };
+      }
+
+      function renderCustomBannerAdmin() {
+        const el = document.getElementById('customBannerAdmin');
+        if (!el) return;
+        const list = getCustomBannerList();
+        el.innerHTML = `
+          <div style="margin-bottom:0.75rem;"><button type="button" class="btn btn-primary btn-sm" onclick="openBannerModal(null)"><i data-lucide="plus"></i> New banner</button></div>
+          ${list.length === 0 ? '<p style="font-size:.8rem;color:var(--text-muted);">No custom banners yet.</p>' : list.map(b => {
+            const t = BANNER_TONES[b.tone] || BANNER_TONES.blue;
+            const st = bannerStatus(b);
+            return `
+              <div style="border:1px solid var(--border); border-left:4px solid ${t.fg}; border-radius:10px; padding:.65rem .8rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:flex-start; flex-wrap:wrap;">
+                <div style="flex:1; min-width:220px;">
+                  <div style="font-weight:700; font-size:.85rem;">${escapeHtml(b.title || String(b.text || '').slice(0, 70))}${!b.title && String(b.text || '').length > 70 ? '…' : ''}</div>
+                  <div style="font-size:.72rem; color:var(--text-muted); line-height:1.5; margin-top:.2rem;"><strong>Who:</strong> ${escapeHtml(describeBannerAudience(b))}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(b))}</div>
+                </div>
+                <span style="background:${st.bg}; color:${st.fg}; font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">${st.label}</span>
+                <div style="display:flex; gap:.3rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBannerActive(${inlineJsArg(b.id)})">${b.active === false ? 'Turn on' : 'Turn off'}</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openBannerModal(${inlineJsArg(b.id)})"><i data-lucide="pencil"></i> Edit</button>
+                  <button type="button" class="btn btn-danger btn-sm" onclick="deleteBanner(${inlineJsArg(b.id)})"><i data-lucide="trash-2"></i></button>
+                </div>
+              </div>`;
+          }).join('')}`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveCustomBanners(list) {
+        if (!currentUser || !currentUser.isSystemAdmin) return Promise.resolve(false);
+        db.customBanners = list;
+        return dbUpdate({ customBanners: list.length ? list : null }).then(ok => {
+          renderCustomBannerAdmin();
+          return ok;
+        });
+      }
+
+      function toggleBannerActive(id) {
+        const list = getCustomBannerList().map(b => b.id === id ? { ...b, active: b.active === false, updatedAt: Date.now() } : b);
+        saveCustomBanners(list);
+      }
+
+      function deleteBanner(id) {
+        if (!confirm('Delete this banner?')) return;
+        saveCustomBanners(getCustomBannerList().filter(b => b.id !== id));
+      }
+
+      function bannerCheckboxGrid(containerId, name, items, selected) {
+        document.getElementById(containerId).innerHTML = items.length ? items.map(it => `
+          <label style="display:flex; align-items:center; gap:.35rem; font-size:.78rem; cursor:pointer;">
+            <input type="checkbox" class="${name}" value="${escapeHtml(it.value)}" ${selected.map(String).includes(String(it.value)) ? 'checked' : ''} style="width:13px; height:13px; margin:0; accent-color:var(--primary);">${escapeHtml(it.label)}
+          </label>`).join('') : '<span style="font-size:.75rem; color:var(--text-muted);">None available.</span>';
+      }
+
+      function bannerChecked(cls) { return [...document.querySelectorAll('.' + cls + ':checked')].map(el => el.value); }
+
+      function openBannerModal(id) {
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        const b = id ? (getCustomBannerList().find(x => x.id === id) || null) : null;
+        const aud = (b && b.audience) || {}, w = (b && b.when) || {};
+        document.getElementById('bannerModalTitle').innerText = b ? 'Edit banner' : 'New banner';
+        document.getElementById('bannerId').value = b ? b.id : '';
+        document.getElementById('bannerTitle').value = b ? (b.title || '') : '';
+        document.getElementById('bannerText').value = b ? (b.text || '') : '';
+        document.getElementById('bannerTone').innerHTML = Object.keys(BANNER_TONE_LABELS).map(k => `<option value="${k}">${BANNER_TONE_LABELS[k]}</option>`).join('');
+        document.getElementById('bannerTone').value = b && BANNER_TONES[b.tone] ? b.tone : 'blue';
+        document.getElementById('bannerIcon').innerHTML = BANNER_ICONS.map(i => `<option value="${i.key}">${i.label}</option>`).join('');
+        document.getElementById('bannerIcon').value = b && b.icon ? b.icon : 'info';
+        document.getElementById('bannerLinkPage').innerHTML = '<option value="">No link</option>' + ALL_PAGES.map(p => `<option value="${p.key}">${escapeHtml(p.label)}</option>`).join('');
+        document.getElementById('bannerLinkPage').value = b ? (b.linkPage || '') : '';
+        document.getElementById('bannerDismissible').checked = b ? b.dismissible !== false : true;
+        document.getElementById('bannerActive').checked = b ? b.active !== false : true;
+
+        bannerCheckboxGrid('bannerAudiencePages', 'banner-aud-page', ALL_PAGES.map(p => ({ value: p.key, label: p.label })), aud.pages || []);
+        bannerCheckboxGrid('bannerAudienceRoles', 'banner-aud-role', getAvailableRoles().map(r => ({ value: r, label: r })), aud.roles || []);
+        bannerCheckboxGrid('bannerAudiencePeople', 'banner-aud-person', (db.volunteers || []).filter(v => !v.disabled).map(v => getVolunteerName(v)).sort().map(n => ({ value: n, label: n })), aud.people || []);
+
+        document.getElementById('bannerStart').value = w.start || '';
+        document.getElementById('bannerEnd').value = w.end || '';
+        document.getElementById('bannerTimeFrom').value = w.timeFrom || '';
+        document.getElementById('bannerTimeTo').value = w.timeTo || '';
+        bannerCheckboxGrid('bannerDays', 'banner-day', BANNER_DAY_NAMES.map((n, i) => ({ value: i, label: n })), w.days || []);
+        bannerCheckboxGrid('bannerConditions', 'banner-cond', BANNER_CONDITIONS.map(c => ({ value: c.key, label: c.label })), w.conditions || []);
+        document.getElementById('bannerModal').style.display = 'flex';
+      }
+
+      function saveBanner(e) {
+        e.preventDefault();
+        if (!currentUser || !currentUser.isSystemAdmin) return;
+        const text = document.getElementById('bannerText').value.trim();
+        if (!text) { alert('Please enter the banner text.'); return; }
+        const start = document.getElementById('bannerStart').value, end = document.getElementById('bannerEnd').value;
+        if (start && end && end < start) { alert('The end date is before the start date.'); return; }
+        const id = document.getElementById('bannerId').value;
+        const now = Date.now();
+        const existing = id ? getCustomBannerList().find(x => x.id === id) : null;
+        const record = {
+          id: id || ('b' + now),
+          title: document.getElementById('bannerTitle').value.trim().slice(0, 80),
+          text: text.slice(0, 500),
+          tone: document.getElementById('bannerTone').value,
+          icon: document.getElementById('bannerIcon').value,
+          linkPage: document.getElementById('bannerLinkPage').value,
+          dismissible: document.getElementById('bannerDismissible').checked,
+          active: document.getElementById('bannerActive').checked,
+          audience: { pages: bannerChecked('banner-aud-page'), roles: bannerChecked('banner-aud-role'), people: bannerChecked('banner-aud-person') },
+          when: {
+            start, end,
+            timeFrom: document.getElementById('bannerTimeFrom').value,
+            timeTo: document.getElementById('bannerTimeTo').value,
+            days: bannerChecked('banner-day').map(Number),
+            conditions: bannerChecked('banner-cond')
+          },
+          createdBy: existing ? (existing.createdBy || '') : (currentUser.name || currentUser.email || ''),
+          createdAt: existing ? (existing.createdAt || now) : now,
+          updatedAt: now
+        };
+        const list = getCustomBannerList();
+        const idx = list.findIndex(x => x.id === record.id);
+        if (idx >= 0) list[idx] = record; else list.push(record);
+        closeModal('bannerModal');
+        saveCustomBanners(list);
+      }
+
+      // Non-admin accounts load the banners on their own. A failure here must never sign anyone out.
+      function attachCustomBannersListener() {
+        if (!database || !currentUser || currentUser.isSystemAdmin || pageDatabaseListeners.customBanners) return;
+        const listener = snapshot => {
+          if (!currentUser) return;
+          db.customBanners = normaliseLoadedDbValue('customBanners', snapshot.val());
+          if (currentView === 'dashboard' && document.getElementById('dashboardWidgets')) renderDashboard();
+        };
+        pageDatabaseListeners.customBanners = listener;
+        database.ref('EVLT_ADMIN_DB/customBanners').on('value', listener, err => {
+          console.warn('Custom banners could not be loaded (database rules may need updating):', err);
+        });
+      }
+
       function renderDashboard() {
         const content = document.getElementById('content');
         const activeClockIns = (db.clockLogs || []).filter(l => l.status === 'Clocked In').length;
@@ -2476,18 +2868,6 @@
         });
 
         const todayStr = getTodayString();
-        const activeEvents = (db.events || []).filter(ev => {
-          const start = ev.StartDate || ev.startDate;
-          const end = ev.EndDate || ev.endDate || start;
-          return todayStr >= start && todayStr <= end;
-        });
-
-        const eventBannerHtml = activeEvents.length > 0 ? `
-          <div style="background: linear-gradient(135deg, #fef08a, #fde047); color: #713f12; padding: 0.85rem 1rem; border-radius: var(--radius-lg); border: 1px solid #facc15; font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm);">
-            <i data-lucide="calendar-range" style="width:20px; height:20px; flex-shrink:0;"></i>
-            <div>Active Event Today: <strong>${escapeHtml(activeEvents.map(e => e.Title || e.title).join(', '))}</strong></div>
-          </div>
-        ` : '';
 
         const renderResultIcon = (res) => {
           if (res === 'Pass') return '<div class="result-badge result-pass"><i data-lucide="check" style="width:14px;height:14px;"></i></div>';
@@ -2496,13 +2876,6 @@
         };
 
         const trackWalkPassed = daily.trackWalk && daily.trackWalk.result === 'Pass';
-
-        const overdueBannerHtml = overdueActions.length > 0 ? `
-          <div style="background:#fef2f2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-lg); border:1px solid #fecaca; font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; cursor:pointer;" onclick="navigate('actions')">
-            <i data-lucide="clock" style="width:18px; height:18px; flex-shrink:0;"></i>
-            <div><strong>${overdueActions.length} overdue action task${overdueActions.length > 1 ? 's' : ''}:</strong> ${escapeHtml(overdueActions.map(a => a.Title || a.title).join(', '))} — <u>View Actions</u></div>
-          </div>
-        ` : '';
 
         setTimeout(autoCloseStaleShifts, 0);
         content.innerHTML = `
@@ -2518,9 +2891,8 @@
 
           <div id="dashboardWidgets">
           <div data-dashboard-widget="alerts">
-            ${overdueBannerHtml}
+            ${personalisedBannersHtml()}
             ${volDocAlertBannerHtml()}
-            ${eventBannerHtml}
             ${getDriverStatusHtml()}
           </div>
 
@@ -6593,14 +6965,22 @@
 
       function stopMemberVisitsCamera() {
         memberVisitsScanRunning = false;
-        if (memberVisitsReaderControls) memberVisitsReaderControls.stop();
+        // Each step is guarded: the scanner library has no reset() in the pinned version, and one failing
+        // step must never stop the rest (or block the page from changing).
+        try { if (memberVisitsReaderControls) memberVisitsReaderControls.stop(); } catch (err) { console.warn('Scanner stop failed:', err); }
         memberVisitsReaderControls = null;
-        if (memberVisitsReader) memberVisitsReader.reset();
+        try { if (memberVisitsReader && typeof memberVisitsReader.reset === 'function') memberVisitsReader.reset(); } catch (err) { console.warn('Scanner reset failed:', err); }
         memberVisitsReader = null;
-        if (memberVisitsCameraStream) memberVisitsCameraStream.getTracks().forEach(track => track.stop());
+        try { if (memberVisitsCameraStream) memberVisitsCameraStream.getTracks().forEach(track => track.stop()); } catch (err) { console.warn('Camera stop failed:', err); }
         memberVisitsCameraStream = null;
         const video = document.getElementById('memberVisitCameraVideo');
-        if (video) video.srcObject = null;
+        if (video) {
+          try {
+            const s = video.srcObject;
+            if (s && s.getTracks) s.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+          } catch (err) { console.warn('Video release failed:', err); }
+        }
       }
 
       function renderDocuments() {
@@ -7051,14 +7431,20 @@
 
       function stopItemCodeCamera() {
         itemCodeScanRunning = false;
-        if (itemCodeReaderControls) itemCodeReaderControls.stop();
+        try { if (itemCodeReaderControls) itemCodeReaderControls.stop(); } catch (err) { console.warn('Scanner stop failed:', err); }
         itemCodeReaderControls = null;
-        if (itemCodeReader) itemCodeReader.reset();
+        try { if (itemCodeReader && typeof itemCodeReader.reset === 'function') itemCodeReader.reset(); } catch (err) { console.warn('Scanner reset failed:', err); }
         itemCodeReader = null;
-        if (itemCodeCameraStream) itemCodeCameraStream.getTracks().forEach(track => track.stop());
+        try { if (itemCodeCameraStream) itemCodeCameraStream.getTracks().forEach(track => track.stop()); } catch (err) { console.warn('Camera stop failed:', err); }
         itemCodeCameraStream = null;
         const video = document.getElementById('itemCodeCameraVideo');
-        if (video) video.srcObject = null;
+        if (video) {
+          try {
+            const s = video.srcObject;
+            if (s && s.getTracks) s.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+          } catch (err) { console.warn('Video release failed:', err); }
+        }
       }
 
       function volDocStatus(d) {
@@ -8048,6 +8434,12 @@
             <div id="dashboardWidgetSettings" aria-live="polite"></div>
           </div>
 
+          <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Dashboard banners</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Create your own banners for the main page. Choose the message, who sees it, and the requirements for it to show (dates, time of day, days of the week, or something that needs to be true, like a track walk not yet done).</p>
+            <div id="customBannerAdmin" aria-live="polite"></div>
+          </div>
+
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
             <div class="card" style="padding:1.25rem;">
               <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Push Notification Token</h3>
@@ -8070,6 +8462,7 @@
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
         renderDashboardWidgetSettings();
+        renderCustomBannerAdmin();
         loadPendingAccountRequests();
         loadApprovedAccountAccess();
       }

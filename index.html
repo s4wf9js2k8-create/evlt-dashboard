@@ -475,6 +475,67 @@
       </div>
     </div>
 
+    <!-- Dashboard Banner Editor (System Admin) -->
+    <div class="modal-overlay" id="bannerModal">
+      <div class="modal" style="max-width: 640px; max-height: 92vh; overflow-y: auto;">
+        <h3 id="bannerModalTitle">New banner</h3>
+        <form onsubmit="saveBanner(event)">
+          <input type="hidden" id="bannerId" value="">
+          <div class="form-group">
+            <label>Heading (optional)</label>
+            <input type="text" id="bannerTitle" maxlength="80" placeholder="e.g. Reminder">
+          </div>
+          <div class="form-group">
+            <label>Banner text</label>
+            <textarea id="bannerText" rows="3" maxlength="500" required placeholder="What should the banner say?"></textarea>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div class="form-group"><label>Colour</label><select id="bannerTone"></select></div>
+            <div class="form-group"><label>Icon</label><select id="bannerIcon"></select></div>
+          </div>
+          <div class="form-group">
+            <label>Tapping the banner opens (optional)</label>
+            <select id="bannerLinkPage"></select>
+          </div>
+
+          <div style="border-top:1px solid var(--border); margin:0.75rem 0; padding-top:0.75rem;">
+            <h4 style="font-size:0.85rem; font-weight:700; margin-bottom:0.2rem;">Who can see it</h4>
+            <p style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.5rem;">Tick anyone who should see it. A person sees it if they match any ticked box. Leave everything blank to show it to everyone.</p>
+            <div class="form-group"><label>People with access to these pages</label>
+              <div id="bannerAudiencePages" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.3rem; max-height:130px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div></div>
+            <div class="form-group"><label>Roles</label>
+              <div id="bannerAudienceRoles" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:0.3rem; max-height:110px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div></div>
+            <div class="form-group"><label>Specific people</label>
+              <div id="bannerAudiencePeople" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:0.3rem; max-height:150px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div></div>
+          </div>
+
+          <div style="border-top:1px solid var(--border); margin:0.75rem 0; padding-top:0.75rem;">
+            <h4 style="font-size:0.85rem; font-weight:700; margin-bottom:0.2rem;">Requirements for it to show</h4>
+            <p style="font-size:0.72rem; color:var(--text-muted); margin-bottom:0.5rem;">Everything you fill in must be true at the same time. Leave blank for no restriction.</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+              <div class="form-group"><label>From date</label><input type="date" id="bannerStart"></div>
+              <div class="form-group"><label>Until date</label><input type="date" id="bannerEnd"></div>
+              <div class="form-group"><label>From time of day</label><input type="time" id="bannerTimeFrom"></div>
+              <div class="form-group"><label>Until time of day</label><input type="time" id="bannerTimeTo"></div>
+            </div>
+            <div class="form-group"><label>Only on these days</label>
+              <div id="bannerDays" style="display:flex; flex-wrap:wrap; gap:0.6rem;"></div></div>
+            <div class="form-group"><label>Only when (all ticked must be true)</label>
+              <div id="bannerConditions" style="display:grid; grid-template-columns:1fr; gap:0.3rem; max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div></div>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-bottom:0.75rem;">
+            <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; cursor:pointer;"><input type="checkbox" id="bannerActive" checked style="width:14px; height:14px; margin:0;"> Banner is on</label>
+            <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; cursor:pointer;"><input type="checkbox" id="bannerDismissible" checked style="width:14px; height:14px; margin:0;"> People can dismiss it</label>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('bannerModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save banner</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Per-feature Edit/Delete Permissions Modal (Admin) -->
     <div class="modal-overlay" id="editPermissionsModal">
       <div class="modal" style="max-width: 560px; max-height: 90vh;">
