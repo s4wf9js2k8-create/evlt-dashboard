@@ -937,7 +937,7 @@
               const title = payload.notification?.title || payload.data?.title || '🚂 EVLT Alert';
               const body = payload.notification?.body || payload.data?.body || 'New operational update.';
               if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, { body: body, icon: '/apple-touch-icon.png' });
+                new Notification(title, { body: body, icon: 'apple-touch-icon.png' });
               }
             });
           }
