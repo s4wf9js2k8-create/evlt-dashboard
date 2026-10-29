@@ -13,7 +13,6 @@
       // Background push endpoint. Authorization is checked server-side
       // using a verified Firebase account allowlist; no shared secret is
       // included in this public dashboard code.
-      const BROADCAST_WORKER_URL = "https://evlt-broadcast-api.vercel.app/api/send-broadcast";
 
       // PWA manifest, built at runtime as a Blob so no separate file is needed.
       // Falls back silently if the browser blocks blob: manifests.
@@ -1179,21 +1178,37 @@
           if (token) {
             localStorage.setItem('evlt_fcm_token', token);
 
+            let tokenSaved = false;
+            let saveError = '';
             if (database) {
               const safeKey = token.substring(0, 32).replace(/[.#$/[\]]/g, '_');
-              database.ref('push_tokens/' + safeKey).set({
-                token: token,
-                user: currentUser?.name || 'Anonymous',
-                platform: navigator.userAgent.substring(0, 80),
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.warn('Could not save token to DB:', e));
+              const uid = (auth && auth.currentUser && auth.currentUser.uid) || '';
+              try {
+                await database.ref('push_tokens/' + safeKey).set({
+                  token: token,
+                  uid: uid,
+                  user: currentUser?.name || 'Anonymous',
+                  platform: navigator.userAgent.substring(0, 80),
+                  updatedAt: new Date().toISOString()
+                });
+                tokenSaved = true;
+              } catch (e) {
+                console.warn('Could not save token to DB:', e);
+                saveError = (e && e.message) ? e.message : String(e);
+              }
             }
 
             if (statusMsg) {
               statusMsg.style.display = 'block';
-              statusMsg.style.background = '#dcfce7';
-              statusMsg.style.color = '#166534';
-              statusMsg.innerText = '✓ Push notifications successfully enabled and token saved!';
+              if (tokenSaved) {
+                statusMsg.style.background = '#dcfce7';
+                statusMsg.style.color = '#166534';
+                statusMsg.innerText = '✓ Push notifications enabled and this device is registered.';
+              } else {
+                statusMsg.style.background = '#fee2e2';
+                statusMsg.style.color = '#991b1b';
+                statusMsg.innerText = 'This device got a push token but it could not be registered with the server, so alerts will not arrive. ' + (saveError ? '(' + saveError + ') ' : '') + 'The database rules may need updating.';
+              }
             }
 
             sendTestNotification();
@@ -1425,7 +1440,6 @@
         db.notifications = nextNotifications;
         seenNotificationIds.add(entry.id);
         showLocalNotification('🚂 ' + entry.title, entry.body);
-        triggerBackgroundPush(entry);
         renderNotificationsPage();
         const successStatus = document.getElementById('notificationSendStatus');
         if (successStatus) {
@@ -1434,45 +1448,8 @@
         }
       }
 
-      // Asks the server to push to every registered device. The server
-      // (not the browser) looks up the token list itself using admin
-      // credentials, since the browser correctly can't read other
-      // devices' tokens. Fails silently (console only) if the
-      // function isn't configured/reachable — the in-app Notification
-      // Centre and open-tab alert above already happened regardless.
-      async function triggerBackgroundPush(entry) {
-        if (!currentUser || !currentUser.isSystemAdmin) return;
-        if (!BROADCAST_WORKER_URL || !auth) return;
-
-        try {
-          let firebaseUser = auth.currentUser;
-          if (!firebaseUser || firebaseUser.isAnonymous) {
-            const provider = new firebase.auth.GoogleAuthProvider();
-            const result = await auth.signInWithPopup(provider);
-            firebaseUser = result.user;
-          }
-          if (!firebaseUser || !firebaseUser.emailVerified) {
-            throw new Error('Use a verified, approved Google administrator account.');
-          }
-
-          const idToken = await firebaseUser.getIdToken(true);
-          const response = await fetch(BROADCAST_WORKER_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + idToken
-            },
-            body: JSON.stringify({ title: entry.title, body: entry.body })
-          });
-          if (!response.ok) {
-            const result = await response.json().catch(() => ({}));
-            throw new Error(result.error || 'The broadcast service rejected the request.');
-          }
-        } catch (e) {
-          console.warn('Background push dispatch failed (in-app notification still worked):', e);
-          alert('The in-app notification was saved, but the background push could not be sent. Sign in with an approved Google administrator account and try again.');
-        }
-      }
+      // Background push to other devices is sent by the Firebase Cloud Function in /functions
+      // (sendNotificationPush), which runs automatically whenever a notification is saved above.
 
       function deleteBroadcastNotification(id) {
         if (!currentUser || !currentUser.isSystemAdmin) {
@@ -2482,19 +2459,69 @@
         return Math.round((new Date(iso) - new Date(getTodayString())) / 86400000);
       }
 
-      function bannerNames(list, getter, max = 3) {
+      function bannerListText(list, getter, max = 3) {
         const names = list.map(getter).filter(Boolean);
-        return escapeHtml(names.slice(0, max).join(', ')) + (names.length > max ? ` and ${names.length - max} more` : '');
+        return names.slice(0, max).join(', ') + (names.length > max ? ` and ${names.length - max} more` : '');
+      }
+
+      // The automatic banners. Wording placeholders: {count}, {s} (plural "s"), {is} (is/are), {list}.
+      // "fixed" ones keep their own look and can only be switched on/off, limited by audience or given requirements.
+      const BUILTIN_BANNERS = [
+        { key: 'my-overdue-actions', label: 'Your overdue actions', page: 'actions', tone: 'red', icon: 'clock', text: 'You have {count} overdue action{s}: {list}' },
+        { key: 'my-due-soon-actions', label: 'Your actions due within 3 days', page: 'actions', tone: 'amber', icon: 'list-todo', text: '{count} action{s} assigned to you {is} due within 3 days: {list}' },
+        { key: 'other-overdue-actions', label: "Other people's overdue actions", page: 'actions', tone: 'red', icon: 'clock', text: '{count} overdue action{s} not assigned to you: {list}' },
+        { key: 'my-defects', label: 'Open defects assigned to you', page: 'incidents', tone: 'amber', icon: 'alert-triangle', text: '{count} open defect{s} assigned to you: {list}' },
+        { key: 'red-tagged', label: 'Open red-tagged defects', page: 'incidents', tone: 'red', icon: 'alert-octagon', text: '{count} open red-tagged defect{s}: {list}' },
+        { key: 'events-today', label: 'Event on today', page: 'events', tone: 'amber', icon: 'calendar-range', text: 'Event on today: {list}' },
+        { key: 'events-soon', label: 'Events coming up (next 7 days)', page: 'events', tone: 'blue', icon: 'calendar-clock', text: 'Coming up: {list}' },
+        { key: 'daily-checks', label: 'Daily checks still to do', page: 'maintenance', tone: 'amber', icon: 'clipboard-check', text: 'Still to do today: {list} not recorded yet' },
+        { key: 'track-walk-failed', label: 'Track walk failed', page: 'maintenance', tone: 'red', icon: 'alert-triangle', text: "Today's track walk was recorded as failed." },
+        { key: 'open-enquiries', label: 'Open enquiries', page: 'enquiries', tone: 'blue', icon: 'help-circle', text: 'Open enquiries waiting for a reply: {count}' },
+        { key: 'unread-notifications', label: 'Unread notifications', page: 'notifications', tone: 'blue', icon: 'bell-ring', text: 'You have {count} unread notification{s}' },
+        { key: 'licence-alerts', label: 'Licence / certificate expiry', page: 'documents', fixed: true },
+        { key: 'driver-status', label: 'Qualified drivers on site', page: 'dashboard', fixed: true }
+      ];
+
+      function getBuiltinSetting(key) {
+        const all = db.bannerSettings;
+        return (all && typeof all === 'object' && all[key] && typeof all[key] === 'object') ? all[key] : {};
+      }
+
+      // On/off, audience and requirements for an automatic banner (the data check is separate)
+      function builtinBannerVisible(key) {
+        const set = getBuiltinSetting(key);
+        if (set.active === false) return false;
+        if (!customBannerRequirementsMet(set)) return false;
+        return !!(currentUser && currentUser.isSystemAdmin) || customBannerAudienceMatches(set);
+      }
+
+      function renderBannerTemplate(text, vars) {
+        const n = Number(vars.count || 0);
+        return escapeHtml(text)
+          .replace(/\{count\}/g, String(n))
+          .replace(/\{s\}/g, n === 1 ? '' : 's')
+          .replace(/\{is\}/g, n === 1 ? 'is' : 'are')
+          .replace(/\{list\}/g, escapeHtml(vars.list || ''));
       }
 
       function getDashboardBanners() {
         if (!currentUser || currentUser.isShopKiosk) return [];
         const banners = [];
         const today = getTodayString();
-        const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-        const add = (id, page, tone, icon, html, signature) => {
-          if (page !== 'dashboard' && !userHasAccess(page)) return;
-          banners.push({ id, page, tone, icon, html, signature: String(signature) });
+        const add = (key, vars, signature) => {
+          const def = BUILTIN_BANNERS.find(x => x.key === key);
+          if (!def || !builtinBannerVisible(key)) return;
+          if (def.page !== 'dashboard' && !userHasAccess(def.page)) return;
+          const set = getBuiltinSetting(key);
+          banners.push({
+            id: key,
+            page: def.page,
+            tone: BANNER_TONES[set.tone] ? set.tone : def.tone,
+            icon: BANNER_ICONS.some(i => i.key === set.icon) ? set.icon : def.icon,
+            html: renderBannerTemplate(String(set.text || '').trim() || def.text, vars),
+            signature: String(signature) + '|' + (set.updatedAt || ''),
+            dismissible: set.dismissible !== false
+          });
         };
 
         // Actions: mine first, then everyone else's
@@ -2502,26 +2529,23 @@
         const actionTitle = a => a.Title || a.title || 'Untitled';
         const actionDue = a => { const d = a.DueDate || a.dueDate; return d ? toISODate(d) : ''; };
         const actionAssignee = a => a.AssignedTo || a.assignedTo || '';
+        const idsOf = (list, getter) => list.map(getter).join();
         const myActions = openActions.filter(a => isAssignedToMe(actionAssignee(a)));
         const myOverdue = myActions.filter(a => actionDue(a) && actionDue(a) < today);
         const mySoon = myActions.filter(a => actionDue(a) && actionDue(a) >= today && bannerDaysFromToday(actionDue(a)) <= 3);
         const otherOverdue = openActions.filter(a => !isAssignedToMe(actionAssignee(a)) && actionDue(a) && actionDue(a) < today);
-        if (myOverdue.length) add('my-overdue-actions', 'actions', 'red', 'clock',
-          `<strong>You have ${plural(myOverdue.length, 'overdue action')}:</strong> ${bannerNames(myOverdue, actionTitle)}`, myOverdue.map(a => a.id || actionTitle(a)).join());
-        if (mySoon.length) add('my-due-soon-actions', 'actions', 'amber', 'list-todo',
-          `<strong>${plural(mySoon.length, 'action')} assigned to you ${mySoon.length === 1 ? 'is' : 'are'} due within 3 days:</strong> ${bannerNames(mySoon, actionTitle)}`, mySoon.map(a => a.id || actionTitle(a)).join());
-        if (otherOverdue.length) add('other-overdue-actions', 'actions', 'red', 'clock',
-          `<strong>${plural(otherOverdue.length, 'overdue action task')}${myOverdue.length ? ' assigned to others' : ''}:</strong> ${bannerNames(otherOverdue, actionTitle)}`, otherOverdue.map(a => a.id || actionTitle(a)).join());
+        const actionKey = a => a.id || actionTitle(a);
+        if (myOverdue.length) add('my-overdue-actions', { count: myOverdue.length, list: bannerListText(myOverdue, actionTitle) }, idsOf(myOverdue, actionKey));
+        if (mySoon.length) add('my-due-soon-actions', { count: mySoon.length, list: bannerListText(mySoon, actionTitle) }, idsOf(mySoon, actionKey));
+        if (otherOverdue.length) add('other-overdue-actions', { count: otherOverdue.length, list: bannerListText(otherOverdue, actionTitle) }, idsOf(otherOverdue, actionKey));
 
         // Defects / incidents
         const openIncidents = (db.incidents || []).filter(i => i && String(i.Status || '').toLowerCase() !== 'resolved');
         const incidentName = i => i.asset || i.Description || 'Defect';
         const myIncidents = openIncidents.filter(i => isAssignedToMe(i.assignedTo || i.AssignedTo));
         const redTagged = openIncidents.filter(i => /red/i.test(String(i['Red Tag Status'] || '')) && !/^(no|none|n\/a|-)/i.test(String(i['Red Tag Status'] || '').trim()));
-        if (myIncidents.length) add('my-defects', 'incidents', 'amber', 'alert-triangle',
-          `<strong>${plural(myIncidents.length, 'open defect')} assigned to you:</strong> ${bannerNames(myIncidents, incidentName)}`, myIncidents.map(i => i.id).join());
-        if (redTagged.length) add('red-tagged', 'incidents', 'red', 'alert-octagon',
-          `<strong>${plural(redTagged.length, 'open red-tagged defect')}:</strong> ${bannerNames(redTagged, incidentName)}`, redTagged.map(i => i.id).join());
+        if (myIncidents.length) add('my-defects', { count: myIncidents.length, list: bannerListText(myIncidents, incidentName) }, idsOf(myIncidents, i => i.id));
+        if (redTagged.length) add('red-tagged', { count: redTagged.length, list: bannerListText(redTagged, incidentName) }, idsOf(redTagged, i => i.id));
 
         // Events happening today / coming up in the next 7 days
         const events = (db.events || []).filter(Boolean).map(ev => {
@@ -2531,10 +2555,8 @@
         }).filter(ev => ev.start);
         const eventsToday = events.filter(ev => today >= ev.start && today <= ev.end);
         const eventsSoon = events.filter(ev => ev.start > today && bannerDaysFromToday(ev.start) <= 7).sort((x, y) => x.start.localeCompare(y.start));
-        if (eventsToday.length) add('events-today', 'events', 'amber', 'calendar-range',
-          `<strong>Event on today:</strong> ${bannerNames(eventsToday, ev => ev.title)}`, eventsToday.map(ev => ev.title).join());
-        if (eventsSoon.length) add('events-soon', 'events', 'blue', 'calendar-clock',
-          `<strong>Coming up:</strong> ${eventsSoon.slice(0, 3).map(ev => `${escapeHtml(ev.title)} (${escapeHtml(formatDisplayDate(ev.start))})`).join(', ')}${eventsSoon.length > 3 ? ` and ${eventsSoon.length - 3} more` : ''}`, eventsSoon.map(ev => ev.title + ev.start).join());
+        if (eventsToday.length) add('events-today', { count: eventsToday.length, list: bannerListText(eventsToday, ev => ev.title) }, idsOf(eventsToday, ev => ev.title));
+        if (eventsSoon.length) add('events-soon', { count: eventsSoon.length, list: bannerListText(eventsSoon, ev => `${ev.title} (${formatDisplayDate(ev.start)})`) }, idsOf(eventsSoon, ev => ev.title + ev.start));
 
         // Daily safety checks still to do today
         const daily = db.dailyChecks || {};
@@ -2543,17 +2565,14 @@
         const todo = [];
         if (!trackWalk) todo.push('track walk');
         if ((daily.runningTrains || []).length && !testRun) todo.push('test run');
-        if (todo.length) add('daily-checks', 'maintenance', 'amber', 'clipboard-check',
-          `<strong>Still to do today:</strong> ${todo.join(' and ')} not recorded yet`, todo.join());
-        if (trackWalk === 'Fail') add('track-walk-failed', 'maintenance', 'red', 'alert-triangle', `<strong>Today's track walk was recorded as failed.</strong>`, today);
+        if (todo.length) add('daily-checks', { count: todo.length, list: todo.join(' and ') }, todo.join());
+        if (trackWalk === 'Fail') add('track-walk-failed', { count: 1, list: '' }, today);
 
         // Open enquiries and unread notifications
         const openEnquiries = (db.enquiries || []).filter(q => q && String(q.status || 'Open').toLowerCase() === 'open');
-        if (openEnquiries.length) add('open-enquiries', 'enquiries', 'blue', 'help-circle',
-          `<strong>${plural(openEnquiries.length, 'open enquiry')}</strong> waiting for a reply`, openEnquiries.length);
+        if (openEnquiries.length) add('open-enquiries', { count: openEnquiries.length, list: '' }, openEnquiries.length);
         const unread = getUnreadNotificationCount();
-        if (unread > 0) add('unread-notifications', 'notifications', 'blue', 'bell-ring',
-          `<strong>${plural(unread, 'unread notification')}</strong>`, unread);
+        if (unread > 0) add('unread-notifications', { count: unread, list: '' }, unread);
 
         return [...getCustomBannersForUser(), ...banners];
       }
@@ -2717,30 +2736,87 @@
         return customBannerRequirementsMet(b) ? { label: 'Showing now', bg: '#dcfce7', fg: '#166534' } : { label: 'Waiting for requirements', bg: '#fef3c7', fg: '#92400e' };
       }
 
+      function bannerAdminRow(opts) {
+        const t = BANNER_TONES[opts.tone] || BANNER_TONES.blue;
+        return `
+          <div style="border:1px solid var(--border); border-left:4px solid ${t.fg}; border-radius:10px; padding:.65rem .8rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:flex-start; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+              <div style="font-weight:700; font-size:.85rem;">${escapeHtml(opts.title)}</div>
+              <div style="font-size:.72rem; color:var(--text-muted); line-height:1.5; margin-top:.2rem;">${opts.detail}</div>
+            </div>
+            <span style="background:${opts.status.bg}; color:${opts.status.fg}; font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">${opts.status.label}</span>
+            <div style="display:flex; gap:.3rem; flex-wrap:wrap;">${opts.buttons}</div>
+          </div>`;
+      }
+
+      function builtinBannerStatus(def) {
+        const set = getBuiltinSetting(def.key);
+        if (set.active === false) return { label: 'Off', bg: '#f1f5f9', fg: '#64748b' };
+        const live = def.key === 'licence-alerts' ? getVolDocAlerts().length > 0 && builtinBannerVisible(def.key)
+          : def.key === 'driver-status' ? builtinBannerVisible(def.key)
+          : getDashboardBanners().some(b => b.id === def.key);
+        return live ? { label: 'Showing now', bg: '#dcfce7', fg: '#166534' } : { label: 'Nothing to show right now', bg: '#fef3c7', fg: '#92400e' };
+      }
+
       function renderCustomBannerAdmin() {
         const el = document.getElementById('customBannerAdmin');
         if (!el) return;
         const list = getCustomBannerList();
+        const customRows = list.length === 0 ? '<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">You have not created any banners yet.</p>' : list.map(b => bannerAdminRow({
+          tone: b.tone,
+          title: b.title || (String(b.text || '').slice(0, 70) + (String(b.text || '').length > 70 ? '…' : '')),
+          detail: `<strong>Who:</strong> ${escapeHtml(describeBannerAudience(b))}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(b))}`,
+          status: bannerStatus(b),
+          buttons: `
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBannerActive(${inlineJsArg(b.id)})">${b.active === false ? 'Turn on' : 'Turn off'}</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openBannerModal(${inlineJsArg(b.id)})"><i data-lucide="pencil"></i> Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="deleteBanner(${inlineJsArg(b.id)})"><i data-lucide="trash-2"></i> Delete</button>`
+        })).join('');
+        const autoRows = BUILTIN_BANNERS.map(def => {
+          const set = getBuiltinSetting(def.key);
+          const customised = Object.keys(set).length > 0;
+          return bannerAdminRow({
+            tone: set.tone || def.tone || 'blue',
+            title: def.label + (customised ? ' (customised)' : ''),
+            detail: `${def.fixed ? '' : `<em>${escapeHtml(String(set.text || '').trim() || def.text)}</em><br>`}<strong>Who:</strong> ${escapeHtml(describeBannerAudience(set))}${def.page !== 'dashboard' ? ` (and has access to ${escapeHtml((ACCOUNT_ACCESS_PAGES.find(p => p.key === def.page) || { label: def.page }).label)})` : ''}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(set))}`,
+            status: builtinBannerStatus(def),
+            buttons: `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBuiltinBanner(${inlineJsArg(def.key)})">${set.active === false ? 'Turn on' : 'Turn off'}</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openBannerModal(${inlineJsArg('builtin:' + def.key)})"><i data-lucide="pencil"></i> Edit</button>
+              ${customised ? `<button type="button" class="btn btn-secondary btn-sm" onclick="resetBuiltinBanner(${inlineJsArg(def.key)})">Reset</button>` : ''}`
+          });
+        }).join('');
         el.innerHTML = `
-          <div style="margin-bottom:0.75rem;"><button type="button" class="btn btn-primary btn-sm" onclick="openBannerModal(null)"><i data-lucide="plus"></i> New banner</button></div>
-          ${list.length === 0 ? '<p style="font-size:.8rem;color:var(--text-muted);">No custom banners yet.</p>' : list.map(b => {
-            const t = BANNER_TONES[b.tone] || BANNER_TONES.blue;
-            const st = bannerStatus(b);
-            return `
-              <div style="border:1px solid var(--border); border-left:4px solid ${t.fg}; border-radius:10px; padding:.65rem .8rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:flex-start; flex-wrap:wrap;">
-                <div style="flex:1; min-width:220px;">
-                  <div style="font-weight:700; font-size:.85rem;">${escapeHtml(b.title || String(b.text || '').slice(0, 70))}${!b.title && String(b.text || '').length > 70 ? '…' : ''}</div>
-                  <div style="font-size:.72rem; color:var(--text-muted); line-height:1.5; margin-top:.2rem;"><strong>Who:</strong> ${escapeHtml(describeBannerAudience(b))}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(b))}</div>
-                </div>
-                <span style="background:${st.bg}; color:${st.fg}; font-size:.65rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap;">${st.label}</span>
-                <div style="display:flex; gap:.3rem;">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBannerActive(${inlineJsArg(b.id)})">${b.active === false ? 'Turn on' : 'Turn off'}</button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="openBannerModal(${inlineJsArg(b.id)})"><i data-lucide="pencil"></i> Edit</button>
-                  <button type="button" class="btn btn-danger btn-sm" onclick="deleteBanner(${inlineJsArg(b.id)})"><i data-lucide="trash-2"></i></button>
-                </div>
-              </div>`;
-          }).join('')}`;
+          <h4 style="font-size:.85rem; font-weight:700; margin-bottom:.5rem;">Your banners</h4>
+          <div style="margin-bottom:.75rem;"><button type="button" class="btn btn-primary btn-sm" onclick="openBannerModal(null)"><i data-lucide="plus"></i> New banner</button></div>
+          ${customRows}
+          <h4 style="font-size:.85rem; font-weight:700; margin:1.25rem 0 .25rem;">Automatic banners</h4>
+          <p style="font-size:.75rem; color:var(--text-muted); margin-bottom:.6rem;">These appear by themselves when there is something to report. You can change the wording, colour, who sees them and when, or turn them off.</p>
+          ${autoRows}`;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+      }
+
+      function saveBannerSettings(map) {
+        if (!currentUser || !currentUser.isSystemAdmin) return Promise.resolve(false);
+        db.bannerSettings = map;
+        return dbUpdate({ bannerSettings: Object.keys(map).length ? map : null }).then(ok => {
+          renderCustomBannerAdmin();
+          return ok;
+        });
+      }
+
+      function toggleBuiltinBanner(key) {
+        const map = { ...(db.bannerSettings || {}) };
+        const cur = getBuiltinSetting(key);
+        map[key] = { ...cur, active: cur.active === false, updatedAt: Date.now() };
+        saveBannerSettings(map);
+      }
+
+      function resetBuiltinBanner(key) {
+        if (!confirm('Reset this banner to its original wording, colour, audience and requirements?')) return;
+        const map = { ...(db.bannerSettings || {}) };
+        delete map[key];
+        saveBannerSettings(map);
       }
 
       function saveCustomBanners(list) {
@@ -2773,11 +2849,24 @@
 
       function openBannerModal(id) {
         if (!currentUser || !currentUser.isSystemAdmin) return;
-        const b = id ? (getCustomBannerList().find(x => x.id === id) || null) : null;
+        const isBuiltin = typeof id === 'string' && id.indexOf('builtin:') === 0;
+        const def = isBuiltin ? BUILTIN_BANNERS.find(x => x.key === id.slice(8)) : null;
+        if (isBuiltin && !def) return;
+        const b = isBuiltin
+          ? { ...getBuiltinSetting(def.key), text: String(getBuiltinSetting(def.key).text || '').trim() || def.text, tone: getBuiltinSetting(def.key).tone || def.tone, icon: getBuiltinSetting(def.key).icon || def.icon }
+          : (id ? (getCustomBannerList().find(x => x.id === id) || null) : null);
         const aud = (b && b.audience) || {}, w = (b && b.when) || {};
-        document.getElementById('bannerModalTitle').innerText = b ? 'Edit banner' : 'New banner';
-        document.getElementById('bannerId').value = b ? b.id : '';
-        document.getElementById('bannerTitle').value = b ? (b.title || '') : '';
+        document.getElementById('bannerKind').value = isBuiltin ? id : '';
+        document.getElementById('bannerModalTitle').innerText = isBuiltin ? 'Edit automatic banner: ' + def.label : (b ? 'Edit banner' : 'New banner');
+        const show = (elId, on) => { document.getElementById(elId).style.display = on ? '' : 'none'; };
+        show('bannerTitleGroup', !isBuiltin);
+        show('bannerTextGroup', !(isBuiltin && def.fixed));
+        show('bannerLookRow', !(isBuiltin && def.fixed));
+        show('bannerLinkGroup', !isBuiltin);
+        show('bannerPlaceholderHint', isBuiltin && !def.fixed);
+        document.getElementById('bannerText').required = !(isBuiltin && def.fixed);
+        document.getElementById('bannerId').value = b && !isBuiltin ? b.id : '';
+        document.getElementById('bannerTitle').value = b && !isBuiltin ? (b.title || '') : '';
         document.getElementById('bannerText').value = b ? (b.text || '') : '';
         document.getElementById('bannerTone').innerHTML = Object.keys(BANNER_TONE_LABELS).map(k => `<option value="${k}">${BANNER_TONE_LABELS[k]}</option>`).join('');
         document.getElementById('bannerTone').value = b && BANNER_TONES[b.tone] ? b.tone : 'blue';
@@ -2804,10 +2893,37 @@
       function saveBanner(e) {
         e.preventDefault();
         if (!currentUser || !currentUser.isSystemAdmin) return;
+        const kind = document.getElementById('bannerKind').value;
+        const builtinDef = kind ? BUILTIN_BANNERS.find(x => x.key === kind.slice(8)) : null;
         const text = document.getElementById('bannerText').value.trim();
-        if (!text) { alert('Please enter the banner text.'); return; }
+        if (!text && !(builtinDef && builtinDef.fixed)) { alert('Please enter the banner text.'); return; }
         const start = document.getElementById('bannerStart').value, end = document.getElementById('bannerEnd').value;
         if (start && end && end < start) { alert('The end date is before the start date.'); return; }
+        if (builtinDef) {
+          const setting = {
+            active: document.getElementById('bannerActive').checked,
+            dismissible: document.getElementById('bannerDismissible').checked,
+            audience: { pages: bannerChecked('banner-aud-page'), roles: bannerChecked('banner-aud-role'), people: bannerChecked('banner-aud-person') },
+            when: {
+              start, end,
+              timeFrom: document.getElementById('bannerTimeFrom').value,
+              timeTo: document.getElementById('bannerTimeTo').value,
+              days: bannerChecked('banner-day').map(Number),
+              conditions: bannerChecked('banner-cond')
+            },
+            updatedAt: Date.now()
+          };
+          if (!builtinDef.fixed) {
+            setting.text = text === builtinDef.text ? '' : text.slice(0, 300);
+            setting.tone = document.getElementById('bannerTone').value;
+            setting.icon = document.getElementById('bannerIcon').value;
+          }
+          const map = { ...(db.bannerSettings || {}) };
+          map[builtinDef.key] = setting;
+          closeModal('bannerModal');
+          saveBannerSettings(map);
+          return;
+        }
         const id = document.getElementById('bannerId').value;
         const now = Date.now();
         const existing = id ? getCustomBannerList().find(x => x.id === id) : null;
@@ -2841,15 +2957,18 @@
 
       // Non-admin accounts load the banners on their own. A failure here must never sign anyone out.
       function attachCustomBannersListener() {
-        if (!database || !currentUser || currentUser.isSystemAdmin || pageDatabaseListeners.customBanners) return;
-        const listener = snapshot => {
-          if (!currentUser) return;
-          db.customBanners = normaliseLoadedDbValue('customBanners', snapshot.val());
-          if (currentView === 'dashboard' && document.getElementById('dashboardWidgets')) renderDashboard();
-        };
-        pageDatabaseListeners.customBanners = listener;
-        database.ref('EVLT_ADMIN_DB/customBanners').on('value', listener, err => {
-          console.warn('Custom banners could not be loaded (database rules may need updating):', err);
+        if (!database || !currentUser || currentUser.isSystemAdmin) return;
+        ['customBanners', 'bannerSettings'].forEach(key => {
+          if (pageDatabaseListeners[key]) return;
+          const listener = snapshot => {
+            if (!currentUser) return;
+            db[key] = normaliseLoadedDbValue(key, snapshot.val());
+            if (currentView === 'dashboard' && document.getElementById('dashboardWidgets')) renderDashboard();
+          };
+          pageDatabaseListeners[key] = listener;
+          database.ref('EVLT_ADMIN_DB/' + key).on('value', listener, err => {
+            console.warn(key + ' could not be loaded (database rules may need updating):', err);
+          });
         });
       }
 
@@ -2892,8 +3011,8 @@
           <div id="dashboardWidgets">
           <div data-dashboard-widget="alerts">
             ${personalisedBannersHtml()}
-            ${volDocAlertBannerHtml()}
-            ${getDriverStatusHtml()}
+            ${currentUser && !currentUser.isShopKiosk && builtinBannerVisible('licence-alerts') ? volDocAlertBannerHtml() : (currentUser && currentUser.isShopKiosk ? volDocAlertBannerHtml() : '')}
+            ${currentUser && currentUser.isShopKiosk ? getDriverStatusHtml() : (builtinBannerVisible('driver-status') ? getDriverStatusHtml() : '')}
           </div>
 
           <div data-dashboard-widget="runningTrains">

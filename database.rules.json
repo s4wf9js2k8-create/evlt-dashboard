@@ -157,6 +157,14 @@
       "trainingTypes": {
         ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true)))",
         ".write": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('competency').val() == true)))"
+      },
+      "customBanners": {
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true))",
+        ".write": "auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true"
+      },
+      "bannerSettings": {
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('dashboard').val() == true))",
+        ".write": "auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true"
       }
     },
     "EVLT_ACCOUNT_REQUESTS": {
@@ -271,6 +279,13 @@
             ".validate": false
           }
         }
+      }
+    },
+    "push_tokens": {
+      ".read": false,
+      "$key": {
+        ".write": "auth != null && auth.token.email_verified == true && (!data.exists() || data.child('uid').val() == auth.uid) && newData.child('uid').val() == auth.uid",
+        ".validate": "newData.hasChildren(['token', 'uid']) && newData.child('token').isString() && newData.child('token').val().length > 10"
       }
     }
   }
