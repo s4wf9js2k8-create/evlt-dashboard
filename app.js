@@ -1397,6 +1397,7 @@
             </div>
             <div id="notificationSendStatus" role="status" aria-live="polite" style="font-size:.78rem;margin-top:.55rem;"></div>
           </div>
+          ${isAdmin ? `<div id="pushStatusBox" style="font-size:.78rem; border:1px solid var(--border); border-radius:var(--radius); padding:.6rem .8rem; margin-bottom:1.25rem; color:var(--text-muted);">Checking the last push attempt…</div>` : ''}
           <div class="section-header">Sent Notifications</div>
           <div class="card">
             <div class="table-container">
@@ -1420,6 +1421,28 @@
 
         markNotificationsSeen();
         renderSidebar();
+        if (isAdmin) loadPushStatus();
+      }
+
+      // Admin only: the Cloud Function writes a short report of its last attempt to push_status/last
+      function loadPushStatus() {
+        const box = document.getElementById('pushStatusBox');
+        if (!box || !database) return;
+        database.ref('push_status/last').once('value').then(snap => {
+          const el = document.getElementById('pushStatusBox');
+          if (!el) return;
+          const r = snap.val();
+          if (!r) { el.innerHTML = '<strong>Last push attempt:</strong> none recorded yet. Send a notification, then reopen this page.'; return; }
+          const results = Array.isArray(r.results) ? r.results : Object.values(r.results || {});
+          const lines = results.length ? results.map(x => x.error
+            ? `&quot;${escapeHtml(x.title)}&quot; failed: ${escapeHtml(x.error)}`
+            : `&quot;${escapeHtml(x.title)}&quot;: ${x.registered} device(s) registered, ${x.targeted} targeted, <strong>${x.sent} sent</strong>, ${x.failed} failed${x.stale ? ', ' + x.stale + ' stale removed' : ''}${x.errors && x.errors.length ? '<br><span style="color:#b91c1c;">' + escapeHtml(Object.values(x.errors).join(' | ')) + '</span>' : ''}`).join('<br>')
+            : `${r.newCount || 0} new notification(s) found in that change (list went ${r.before} to ${r.after}), so nothing was sent.`;
+          el.innerHTML = `<strong>Last push attempt</strong> (${escapeHtml(new Date(r.at).toLocaleString())}):<br>${lines}`;
+        }).catch(() => {
+          const el = document.getElementById('pushStatusBox');
+          if (el) el.innerHTML = '<strong>Last push attempt:</strong> not available yet (publish the database rules with <code>firebase deploy --only functions,database</code>).';
+        });
       }
 
       async function sendBroadcastNotification() {

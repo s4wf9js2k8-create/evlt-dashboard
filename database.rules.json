@@ -287,6 +287,10 @@
         ".write": "auth != null && auth.token.email_verified == true && (!data.exists() || data.child('uid').val() == auth.uid) && newData.child('uid').val() == auth.uid",
         ".validate": "newData.hasChildren(['token', 'uid']) && newData.child('token').isString() && newData.child('token').val().length > 10"
       }
+    },
+    "push_status": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true",
+      ".write": false
     }
   }
 }

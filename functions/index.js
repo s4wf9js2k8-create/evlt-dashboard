@@ -36,19 +36,23 @@ const INVALID_TOKEN_CODES = new Set([
 ]);
 
 async function pushToAllDevices(notification) {
+  const summary = { title: String(notification.title || ''), registered: 0, targeted: 0, sent: 0, failed: 0, stale: 0, errors: [] };
   const tokensRef = getDatabase().ref('push_tokens');
   const snapshot = await tokensRef.once('value');
-  const entries = Object.entries(snapshot.val() || {})
-    .filter(([, item]) => item && typeof item.token === 'string' && item.token.length > 10)
+  const all = Object.entries(snapshot.val() || {})
+    .filter(([, item]) => item && typeof item.token === 'string' && item.token.length > 10);
+  summary.registered = all.length;
+  const entries = all
     // The device that sent it already showed the alert locally. Other devices (even signed in as
     // the same person) still get it. Older entries without a device id fall back to the sender's name.
     .filter(([, item]) => notification.senderDevice
       ? item.deviceId !== notification.senderDevice
       : (!notification.sentBy || item.user !== notification.sentBy));
+  summary.targeted = entries.length;
 
   if (!entries.length) {
-    logger.info('No registered devices to send to.');
-    return;
+    logger.info(`No devices to send to (registered: ${summary.registered}).`);
+    return summary;
   }
 
   const title = '🚂 ' + String(notification.title || 'EVLT Operations');
@@ -58,7 +62,6 @@ async function pushToAllDevices(notification) {
     tag: 'evlt-notif-' + notification.id
   };
 
-  let sent = 0;
   const staleKeys = [];
   for (let i = 0; i < entries.length; i += 500) {
     const chunk = entries.slice(i, i + 500);
@@ -68,17 +71,21 @@ async function pushToAllDevices(notification) {
       data,
       webpush: { headers: { Urgency: 'high', TTL: '86400' } }
     });
-    sent += result.successCount;
+    summary.sent += result.successCount;
+    summary.failed += result.failureCount;
     result.responses.forEach((response, index) => {
-      if (!response.success && response.error && INVALID_TOKEN_CODES.has(response.error.code)) {
-        staleKeys.push(chunk[index][0]);
-      }
+      if (response.success || !response.error) return;
+      const code = response.error.code || 'unknown';
+      if (summary.errors.length < 4) summary.errors.push(`${code}: ${String(response.error.message || '').slice(0, 160)}`);
+      if (INVALID_TOKEN_CODES.has(code)) staleKeys.push(chunk[index][0]);
     });
   }
 
   // Forget devices that uninstalled the app or revoked permission
   await Promise.all(staleKeys.map(key => tokensRef.child(key).remove()));
-  logger.info(`Push "${notification.title}": ${sent} sent, ${staleKeys.length} stale tokens removed.`);
+  summary.stale = staleKeys.length;
+  logger.info(`Push "${notification.title}": ${summary.sent} sent, ${summary.failed} failed, ${summary.stale} stale tokens removed.`);
+  return summary;
 }
 
 export const sendNotificationPush = onValueWritten(
@@ -88,13 +95,31 @@ export const sendNotificationPush = onValueWritten(
     region: 'europe-west1'
   },
   async event => {
+    const beforeList = asList(event.data.before.val());
+    const afterList = asList(event.data.after.val());
     const fresh = pickNewNotifications(event.data.before.val(), event.data.after.val());
+    logger.info(`Notifications changed: ${beforeList.length} -> ${afterList.length}, ${fresh.length} new to send.`);
+
+    const report = {
+      at: new Date().toISOString(),
+      before: beforeList.length,
+      after: afterList.length,
+      newCount: fresh.length,
+      results: []
+    };
     for (const notification of fresh) {
       try {
-        await pushToAllDevices(notification);
+        report.results.push(await pushToAllDevices(notification));
       } catch (err) {
         logger.error('Push failed for notification ' + notification.id, err);
+        report.results.push({ title: String(notification.title || ''), error: String((err && err.message) || err).slice(0, 300) });
       }
+    }
+    // A short report the admin can see in the app (Notification Centre)
+    try {
+      await getDatabase().ref('push_status/last').set(report);
+    } catch (err) {
+      logger.error('Could not save push status report', err);
     }
   }
 );
