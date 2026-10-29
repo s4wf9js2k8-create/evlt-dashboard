@@ -938,7 +938,7 @@
               const title = payload.notification?.title || payload.data?.title || '🚂 EVLT Alert';
               const body = payload.notification?.body || payload.data?.body || 'New operational update.';
               if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, { body: body, icon: 'apple-touch-icon.png' });
+                showLocalNotification(title, body, payload.data?.tag);
               }
             });
           }
@@ -1187,6 +1187,7 @@
                 await database.ref('push_tokens/' + safeKey).set({
                   token: token,
                   uid: uid,
+                  deviceId: getDeviceId(),
                   user: currentUser?.name || 'Anonymous',
                   platform: navigator.userAgent.substring(0, 80),
                   updatedAt: new Date().toISOString()
@@ -1303,9 +1304,24 @@
       let notifBaselineSet = false;
       const seenNotificationIds = new Set();
 
-      function showLocalNotification(title, body) {
+      // A random id for this browser/device, so a notification can skip just the device that sent it
+      // (not every device signed in as the same person).
+      function getDeviceId() {
+        try {
+          let id = localStorage.getItem('evlt_device_id');
+          if (!id) {
+            id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem('evlt_device_id', id);
+          }
+          return id;
+        } catch (e) { return 'dev-unknown'; }
+      }
+
+      // A repeated alert with the same tag replaces the earlier one instead of stacking a duplicate
+      function showLocalNotification(title, body, tag) {
         const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
         const options = { body: body || '', icon: iconUrl, badge: iconUrl };
+        if (tag) options.tag = tag;
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.ready.then(reg => {
             reg.showNotification(title, options);
@@ -1333,8 +1349,9 @@
         list.forEach(n => {
           if (seenNotificationIds.has(n.id)) return;
           seenNotificationIds.add(n.id);
-          if (currentUser && n.sentBy === currentUser.name) return;
-          showLocalNotification('🚂 ' + n.title, n.body);
+          // Skip only the device that sent it (it already showed its own alert when sending)
+          if (n.senderDevice ? n.senderDevice === getDeviceId() : (currentUser && n.sentBy === currentUser.name)) return;
+          showLocalNotification('🚂 ' + n.title, n.body, 'evlt-notif-' + n.id);
         });
       }
 
@@ -1420,6 +1437,7 @@
           title: title,
           body: body,
           sentBy: (currentUser && currentUser.name) || 'Unknown',
+          senderDevice: getDeviceId(),
           sentAt: new Date().toISOString()
         };
 
@@ -1439,7 +1457,7 @@
 
         db.notifications = nextNotifications;
         seenNotificationIds.add(entry.id);
-        showLocalNotification('🚂 ' + entry.title, entry.body);
+        showLocalNotification('🚂 ' + entry.title, entry.body, 'evlt-notif-' + entry.id);
         renderNotificationsPage();
         const successStatus = document.getElementById('notificationSendStatus');
         if (successStatus) {
