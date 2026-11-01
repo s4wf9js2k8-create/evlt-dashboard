@@ -93,23 +93,6 @@
       </main>
     </div>
 
-    <!-- Page Access Control Modal (Admin) -->
-    <div class="modal-overlay" id="accessControlModal">
-      <div class="modal">
-        <h3 id="accessControlTitle">Manage Page Permissions</h3>
-        <form onsubmit="saveUserPermissions(event)">
-          <input type="hidden" id="accessControlUserName" value="">
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Check the pages this user is allowed to access in the sidebar menu.</p>
-          <div id="permissionsCheckboxesList" style="display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border); padding: 0.75rem; border-radius: var(--radius); background: #f8fafc; max-height: 250px; overflow-y: auto;">
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeModal('accessControlModal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Permissions</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <!-- Volunteer Add/Edit Modal -->
     <div class="modal-overlay" id="volunteerModal">
       <div class="modal">
@@ -533,29 +516,6 @@
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" onclick="closeModal('bannerModal')">Cancel</button>
             <button type="submit" class="btn btn-primary">Save banner</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Per-feature Edit/Delete Permissions Modal (Admin) -->
-    <div class="modal-overlay" id="editPermissionsModal">
-      <div class="modal" style="max-width: 560px; max-height: 90vh;">
-        <h3 id="editPermissionsModalTitle">Manage Edit Permissions</h3>
-        <form onsubmit="saveFeatureEditPermissions(event)">
-          <input type="hidden" id="editPermissionsFeatureKey" value="">
-          <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Choose which qualifications and which individual volunteers can add, edit, and delete here. The System Admin can always do this regardless of these settings.</p>
-          <div class="form-group">
-            <label>Qualifications / Roles</label>
-            <div id="editPermissionsRoles" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:0.3rem; max-height:140px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div>
-          </div>
-          <div class="form-group">
-            <label>Individual volunteers</label>
-            <div id="editPermissionsUsers" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:0.3rem; max-height:180px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" onclick="closeModal('editPermissionsModal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Permissions</button>
           </div>
         </form>
       </div>

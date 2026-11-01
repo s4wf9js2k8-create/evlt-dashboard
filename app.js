@@ -114,7 +114,7 @@
         return AVAILABLE_TRAINS.filter(t => !isCoachName(t));
       }
       // Including "Management" role for page access controls
-      const DEFAULT_ROLES = ["Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom", "Eurotunnel"];
+      const DEFAULT_ROLES = ["Standard", "Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom", "Eurotunnel"];
 
       const ALL_PAGES = [
         { key: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard', section: 'Main' },
@@ -233,6 +233,45 @@
         return Object.fromEntries(keys.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key)).map(key => [key, true]));
       }
 
+      function normaliseRolePermissions(rolePermissions) {
+        const pagePermissions = rolePermissions && typeof rolePermissions === 'object' ? rolePermissions : {};
+        return Object.fromEntries(ACCOUNT_ACCESS_PAGES.map(page => {
+          const value = pagePermissions[page.key];
+          if (value === true) return [page.key, { view: true, edit: false }];
+          return [page.key, { view: value?.view === true || value?.edit === true, edit: value?.edit === true }];
+        }));
+      }
+
+      function getRolePermissions(role) {
+        return normaliseRolePermissions((db.rolePageAccess || {})[role]);
+      }
+
+      function getVolunteerRoles(volunteer) {
+        return String(volunteer?.Roles || volunteer?.roles || '')
+          .split(',').map(role => role.trim()).filter(Boolean);
+      }
+
+      function getVolunteerByName(name) {
+        const target = String(name || '').trim().toLowerCase();
+        return (db.volunteers || []).find(volunteer => getVolunteerName(volunteer).trim().toLowerCase() === target) || null;
+      }
+
+      function getRolePermissionProjection(roles) {
+        const granted = new Set();
+        const editable = new Set();
+        (roles || []).forEach(role => {
+          const permissions = getRolePermissions(role);
+          ACCOUNT_ACCESS_PAGES.forEach(page => {
+            if (permissions[page.key].view) granted.add(page.key);
+            if (permissions[page.key].edit) editable.add(page.key);
+          });
+        });
+        return {
+          grantedPages: makeGrantedPages(Array.from(granted)),
+          editablePages: makeGrantedPages(Array.from(editable))
+        };
+      }
+
       const DEFAULT_HELP_GUIDES = window.EVLT_DEFAULT_HELP_GUIDES;
 
       
@@ -242,47 +281,11 @@
         return Array.from(new Set([...DEFAULT_ROLES, ...customRoles]));
       }
 
-      function getFeatureEditPermissions(key) {
-        const perms = (db.editPermissions && db.editPermissions[key]) || {};
-        return { roles: perms.roles || [], users: perms.users || [] };
-      }
-
       function canEditFeature(key) {
         if (!currentUser || currentUser.isShopKiosk) return false;
         if (currentUser.isSystemAdmin) return true;
-        const perms = getFeatureEditPermissions(key);
-        if (perms.users.includes(currentUser.name)) return true;
-        const volRoles = String(currentUser?.volData?.Roles || currentUser?.volData?.roles || '')
-          .split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
-        return perms.roles.some(r => volRoles.includes(r.toLowerCase()));
-      }
-
-      function openEditPermissionsModal(featureKey, title) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can manage edit permissions.');
-        document.getElementById('editPermissionsFeatureKey').value = featureKey;
-        document.getElementById('editPermissionsModalTitle').innerText = title || 'Manage Edit Permissions';
-        const perms = getFeatureEditPermissions(featureKey);
-        const roles = getAvailableRoles();
-        document.getElementById('editPermissionsRoles').innerHTML = roles.length ? roles.map(role => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${escapeHtml(role)}" class="edit-perm-role-cb" ${perms.roles.includes(role) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${escapeHtml(role)}</label>`).join('') : '<p style="font-size:.75rem;color:var(--text-muted);">No qualifications set up yet — add one from the Qualifications page.</p>';
-        const volunteers = db.volunteers || [];
-        document.getElementById('editPermissionsUsers').innerHTML = volunteers.length ? volunteers.map(v => {
-          const name = getVolunteerName(v);
-          return `<label style="display:flex;align-items:center;gap:.35rem;font-size:.78rem;cursor:pointer;"><input type="checkbox" value="${escapeHtml(name)}" class="edit-perm-user-cb" ${perms.users.includes(name) ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--primary);">${escapeHtml(name)}</label>`;
-        }).join('') : '<p style="font-size:.75rem;color:var(--text-muted);">No volunteers added yet.</p>';
-        document.getElementById('editPermissionsModal').style.display = 'flex';
-      }
-
-      function saveFeatureEditPermissions(e) {
-        e.preventDefault();
-        const key = document.getElementById('editPermissionsFeatureKey').value;
-        if (!key) return;
-        const roles = Array.from(document.querySelectorAll('.edit-perm-role-cb:checked')).map(cb => cb.value);
-        const users = Array.from(document.querySelectorAll('.edit-perm-user-cb:checked')).map(cb => cb.value);
-        if (!db.editPermissions) db.editPermissions = {};
-        db.editPermissions[key] = { roles, users };
-        dbUpdate({ editPermissions: db.editPermissions });
-        closeModal('editPermissionsModal');
-        if (key === 'events' && currentView === 'events') renderEventsPage();
+        const pageKey = key === 'events' ? 'events' : key;
+        return currentUser.editablePages && currentUser.editablePages[pageKey] === true;
       }
 
       function getTodayString() {
@@ -1377,7 +1380,7 @@
       function renderNotificationsPage() {
         const content = document.getElementById('content');
         const list = (db.notifications || []).slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('notifications');
 
         content.innerHTML = `
           <div class="page-header">
@@ -1449,6 +1452,7 @@
       }
 
       async function sendBroadcastNotification() {
+        if (!canEditFeature('notifications')) return alert('You do not have permission to send notifications.');
         const titleEl = document.getElementById('notif_title');
         const bodyEl = document.getElementById('notif_body');
         const sendButton = document.getElementById('sendBroadcastNotificationButton');
@@ -1496,8 +1500,8 @@
       // (sendNotificationPush), which runs automatically whenever a notification is saved above.
 
       function deleteBroadcastNotification(id) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can delete notifications.');
+        if (!canEditFeature('notifications')) {
+          alert('You do not have permission to edit notifications.');
           return;
         }
         if (!confirm('Delete this notification for everyone?')) return;
@@ -1985,7 +1989,7 @@
         detachDatabaseListener();
         currentUser = isSystemAdmin
           ? { name: 'System Admin', email, isSystemAdmin: true, isShopKiosk: false }
-          : { name: String(binding.volunteerName), email, isSystemAdmin: false, isShopKiosk: false, volunteerUid: user.uid, grantedPages: grants };
+          : { name: String(binding.volunteerName), email, isSystemAdmin: false, isShopKiosk: false, volunteerUid: user.uid, grantedPages: grants, editablePages: binding.editablePages || {} };
         if (!isSystemAdmin) {
           activeBindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + user.uid);
           activeBindingRef.on('value', snapshot => {
@@ -1996,7 +2000,9 @@
             }
             const nextGrants = makeGrantedPages(grantedPageKeys(updated.grantedPages));
             const currentGrants = makeGrantedPages(grantedPageKeys(currentUser && currentUser.grantedPages));
-            if (JSON.stringify(nextGrants) !== JSON.stringify(currentGrants)) {
+            const nextEditable = makeGrantedPages(grantedPageKeys(updated.editablePages));
+            const currentEditable = makeGrantedPages(grantedPageKeys(currentUser && currentUser.editablePages));
+            if (JSON.stringify(nextGrants) !== JSON.stringify(currentGrants) || JSON.stringify(nextEditable) !== JSON.stringify(currentEditable)) {
               launchApprovedAccount(user, updated, false);
             }
           }, err => {
@@ -2166,17 +2172,6 @@
         }
       }
 
-      function renderPagePermissionCheckboxes(container, grants, className = 'perm-cb') {
-        if (!container) return;
-        const active = new Set(grantedPageKeys(grants));
-        container.innerHTML = ACCOUNT_ACCESS_PAGES.map(page => {
-          const checked = active.has(page.key);
-          return '<label style="display:flex;align-items:center;gap:.5rem;font-size:.78rem;cursor:pointer;">' +
-            '<input type="checkbox" class="' + className + '" value="' + escapeHtml(page.key) + '"' + (checked ? ' checked' : '') + '>' +
-            '<strong>' + escapeHtml(page.label) + '</strong> <span style="font-size:.68rem;color:var(--text-muted);">(' + escapeHtml(page.section) + ')</span></label>';
-        }).join('');
-      }
-
       function loadPendingAccountRequests() {
         const panel = document.getElementById('accountRequestsPanel');
         if (!panel || !currentUser || !currentUser.isSystemAdmin) return;
@@ -2201,16 +2196,11 @@
               return '<option value="' + escapeHtml(name) + '"' + (used ? ' disabled' : '') + '>' + escapeHtml(name) + (used ? ' (already linked)' : '') + '</option>';
             })).join('');
             const safeUid = inlineJsArg(entry.uid);
-            const grantsId = 'requestPermissions_' + entry.uid;
             return '<article class="card" style="padding:1rem;margin:.65rem 0;">' +
               '<strong>' + escapeHtml(entry.request.name) + '</strong><div style="font-size:.82rem;">' + escapeHtml(entry.request.email) + '</div>' +
               '<label for="accountVolunteer_' + escapeHtml(entry.uid) + '" style="display:block;margin-top:.65rem;">Link to volunteer record</label>' +
               '<select id="accountVolunteer_' + escapeHtml(entry.uid) + '" style="width:100%;margin:.35rem 0;">' + options + '</select>' +
-              '<details style="margin:.4rem 0;"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;">Choose the pages this account can open</summary>' +
-              '<div id="' + escapeHtml(grantsId) + '" style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem;border:1px solid var(--border);padding:.6rem;margin-top:.4rem;max-height:220px;overflow:auto;">' +
-              ACCOUNT_ACCESS_PAGES.map(page => '<label style="display:flex;align-items:center;gap:.45rem;font-size:.76rem;">' +
-                '<input type="checkbox" class="request-perm-cb" value="' + escapeHtml(page.key) + '">' + escapeHtml(page.label) + '</label>').join('') +
-              '</div><p style="font-size:.7rem;color:var(--text-muted);margin-top:.35rem;">No pages selected means the account stays blocked until you assign access.</p></details>' +
+              '<p style="font-size:.74rem;color:var(--text-muted);margin:.45rem 0;">Page access and editing will follow this volunteer’s role permissions.</p>' +
               '<div style="display:flex;gap:.5rem;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="approveVolunteerAccount(' + safeUid + ')">Approve and link</button>' +
               '<button class="btn btn-secondary btn-sm" onclick="promotePendingRequestToSystemAdmin(' + safeUid + ')">Grant System Admin</button>' +
               '<button class="btn btn-secondary btn-sm" onclick="rejectVolunteerAccount(' + safeUid + ')">Reject request</button>' +
@@ -2222,35 +2212,7 @@
         });
       }
 
-      function loadApprovedAccountAccess() {
-        const panel = document.getElementById('approvedAccountAccessPanel');
-        if (!panel || !currentUser || !currentUser.isSystemAdmin || !database) return;
-        database.ref('EVLT_ACCOUNT_BINDINGS').once('value').then(snapshot => {
-          if (!document.getElementById('approvedAccountAccessPanel')) return;
-          const bindings = snapshot.val() || {};
-          const accounts = Object.keys(bindings).map(uid => ({ uid, binding: bindings[uid] }))
-            .filter(entry => entry.binding && entry.binding.approved === true && entry.binding.email);
-          if (!accounts.length) {
-            panel.innerHTML = '<p style="font-size:.82rem;color:var(--text-muted);">No approved volunteer accounts yet.</p>';
-            return;
-          }
-          panel.innerHTML = accounts.map(({uid, binding}) => {
-            const pages = grantedPageKeys(binding.grantedPages);
-            const safeUid = inlineJsArg(uid);
-            return '<article class="card" style="padding:.85rem;margin:.55rem 0;display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">' +
-              '<div><strong>' + escapeHtml(binding.volunteerName || 'Volunteer') + '</strong><div style="font-size:.78rem;color:var(--text-muted);">' + escapeHtml(binding.email) + '</div>' +
-              '<div style="font-size:.72rem;margin-top:.2rem;">' + (pages.length ? escapeHtml(pages.map(key => ACCOUNT_ACCESS_PAGES.find(p => p.key === key)?.label || key).join(', ')) : '<span style="color:#b91c1c;">No pages assigned</span>') + '</div></div>' +
-              '<div style="display:flex;gap:.4rem;flex-wrap:wrap;">' +
-              '<button class="btn btn-secondary btn-sm" onclick="openAccessControlModal(' + safeUid + ')">Set pages</button>' +
-              '<button class="btn btn-secondary btn-sm" onclick="editApprovedAccount(' + safeUid + ')">Edit</button>' +
-              '<button class="btn btn-danger btn-sm" onclick="deleteApprovedAccount(' + safeUid + ')">Delete</button>' +
-              '</div></article>';
-          }).join('');
-        }).catch(err => {
-          console.error('Could not load approved account access:', err);
-          panel.textContent = 'Could not load approved accounts. Check your connection and try again.';
-        });
-      }
+      function loadApprovedAccountAccess() { renderPermissionAccountSummary(); }
 
       async function approveVolunteerAccount(uid) {
         if (!currentUser || !currentUser.isSystemAdmin || !database) return;
@@ -2262,9 +2224,14 @@
         const bindings = bindingsSnapshot.val() || {};
         const alreadyLinked = Object.keys(bindings).some(otherUid => otherUid !== uid && bindings[otherUid] && bindings[otherUid].approved === true && String(bindings[otherUid].volunteerName || '').toLowerCase() === volunteerName.toLowerCase());
         if (alreadyLinked) { alert('That volunteer record is already linked to another account.'); loadPendingAccountRequests(); return; }
-        const grantContainer = document.getElementById('requestPermissions_' + uid);
-        const selected = Array.from(grantContainer?.querySelectorAll('.request-perm-cb:checked') || []).map(box => box.value);
-        const binding = { approved: true, email: request.email, volunteerName, approvedBy: SYSTEM_ADMIN_EMAIL, approvedAt: firebase.database.ServerValue.TIMESTAMP, grantedPages: makeGrantedPages(selected) };
+        const roles = getVolunteerRoles(getVolunteerByName(volunteerName));
+        const projection = getRolePermissionProjection(roles);
+        if (!grantedPageKeys(projection.grantedPages).length) {
+          alert('This volunteer’s role has no page access yet. Set role permissions in Admin → Access & Permissions, then approve the account.');
+          return;
+        }
+        const binding = { approved: true, email: request.email, volunteerName, approvedBy: SYSTEM_ADMIN_EMAIL, approvedAt: firebase.database.ServerValue.TIMESTAMP,
+          permissionsVersion: 2, grantedPages: projection.grantedPages, editablePages: projection.editablePages };
         const updates = {};
         updates['EVLT_ACCOUNT_BINDINGS/' + uid] = binding;
         updates['EVLT_ACCOUNT_REQUESTS/' + uid] = null;
@@ -2364,11 +2331,7 @@
       }
 
       function hasMaintenancePermission() {
-        if (!currentUser) return false;
-        if (currentUser.isSystemAdmin) return true;
-        if (!currentUser.volData) return false;
-        const roles = String(currentUser.volData.Roles || currentUser.volData.roles || '').toLowerCase();
-        return roles.includes('maintenance') || roles.includes('management') || roles.includes('admin');
+        return canEditFeature('maintenance');
       }
 
       function userHasAccess(pageKey) {
@@ -3358,6 +3321,7 @@
       }
 
       function openIncidentModal(index = null) {
+        if (!canEditFeature('incidents')) return alert('You do not have permission to edit incident records.');
         editingIncidentIndex = index;
         const existing = (index !== null && db.incidents) ? db.incidents[index] : null;
         tempPhotoBase64 = existing ? (existing.Photo || '') : '';
@@ -3394,6 +3358,7 @@
 
       async function saveIncident(e) {
         e.preventDefault();
+        if (!canEditFeature('incidents')) return alert('You do not have permission to edit incident records.');
         const unlock = lockSubmit(e);
         tempPhotoBase64 = await storePhoto(tempPhotoBase64, 'incidents');
         unlock();
@@ -3606,8 +3571,8 @@
       }
 
       function openEditClockLogModal(id = null) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only the System Admin can add or edit attendance records.');
+        if (!canEditFeature('clockLogs')) {
+          alert('You do not have permission to edit attendance records.');
           return;
         }
 
@@ -3656,8 +3621,8 @@
       function saveClockLogShiftEdit(e) {
         e.preventDefault();
 
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only the System Admin can save attendance changes.');
+        if (!canEditFeature('clockLogs')) {
+          alert('You do not have permission to edit attendance records.');
           return;
         }
 
@@ -3714,8 +3679,8 @@
       }
 
       function deleteClockLog(id) {
-        if (currentUser && !currentUser.isSystemAdmin) {
-          alert('Only the System Admin can delete attendance records.');
+        if (!canEditFeature('clockLogs')) {
+          alert('You do not have permission to edit attendance records.');
           return;
         }
         if (!confirm('Are you sure you want to delete this attendance record?')) return;
@@ -3757,7 +3722,7 @@
       }
 
       function removeRotaSignup(dateStr, name) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can remove someone else\'s signup.');
+        if (!canEditFeature('calendar')) return alert('You do not have permission to edit attendance and hours.');
         db.rotaSignups = (db.rotaSignups || []).filter(r => !(r.date === dateStr && r.name === name));
         dbUpdate({ rotaSignups: db.rotaSignups });
         renderCalendarView();
@@ -3847,7 +3812,7 @@
           `;
         }
 
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('calendar');
 
         content.innerHTML = `
           <div class="page-header">
@@ -3982,7 +3947,7 @@
       function renderClockLogsPage() {
         const content = document.getElementById('content');
         const logs = (db.clockLogs || []).slice().sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('clockLogs');
 
         content.innerHTML = `
           <div class="page-header">
@@ -4195,7 +4160,7 @@
         document.getElementById('volunteerModal').style.display = 'flex';
       }
 
-      function saveVolunteerForm(e) {
+      async function saveVolunteerForm(e) {
         e.preventDefault();
         const indexVal = document.getElementById('volEditIndex').value;
         const name = document.getElementById('volName').value.trim();
@@ -4212,6 +4177,7 @@
         if (!db.volunteers) db.volunteers = [];
 
         const isEdit = indexVal !== '' && db.volunteers[indexVal];
+        const previousName = isEdit ? getVolunteerName(db.volunteers[indexVal]) : '';
         if (isEdit) {
           db.volunteers[indexVal].Name = name;
           db.volunteers[indexVal].Roles = rolesStr;
@@ -4224,7 +4190,25 @@
           });
         }
 
-        dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
+        const saved = await dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
+        if (!saved) return;
+        if (currentUser?.isSystemAdmin && database) {
+          try {
+            if (isEdit) {
+              const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
+              const bindings = bindingsSnapshot.val() || {};
+              const linked = Object.entries(bindings).filter(([, binding]) => binding?.approved === true &&
+                [previousName, name].some(candidate => String(binding.volunteerName || '').trim().toLowerCase() === candidate.toLowerCase()));
+              for (const [uid, binding] of linked) {
+                const projection = getRolePermissionProjection(getVolunteerRoles(db.volunteers[indexVal]));
+                await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).update({ volunteerName: name, grantedPages: projection.grantedPages, editablePages: projection.editablePages });
+              }
+            }
+          } catch (err) {
+            console.error('Could not update account role permissions:', err);
+            alert('The volunteer profile saved, but linked account permissions could not be refreshed. Review Access & Permissions and retry.');
+          }
+        }
         closeModal('volunteerModal');
         renderVolunteers();
       }
@@ -4260,7 +4244,7 @@
         const filteredMaintLogs = maintAssetFilterValue
           ? maintLogs.filter(m => (m.assetName || m.asset || '') === maintAssetFilterValue)
           : maintLogs;
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('maintenance');
         const canMaint = hasMaintenancePermission();
 
         content.innerHTML = `
@@ -4444,8 +4428,8 @@
       }
 
       function deleteFleetItem(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only the System Admin can delete fleet items.');
+        if (!canEditFeature('maintenance')) {
+          alert('You do not have permission to edit maintenance and fleet records.');
           return;
         }
         const item = (db.fleetItems || [])[index];
@@ -4628,8 +4612,8 @@
 
       function openAssetHistoryModal(assetName) {
         currentHistoryAssetName = assetName;
-        const canMaint = hasMaintenancePermission();
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const canMaint = canEditFeature('maintenance');
+        const isAdmin = canEditFeature('maintenance');
         const nameLower = assetName.trim().toLowerCase();
         const history = (db.maintenanceLogs || [])
           .filter(m => (m.assetName || m.asset || '').trim().toLowerCase() === nameLower)
@@ -4679,8 +4663,8 @@
         const content = document.getElementById('content');
         const archives = db.historicalArchive || [];
         const uploads = db.archiveUploads || [];
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
-        const canMaint = hasMaintenancePermission();
+        const isAdmin = canEditFeature('archives');
+        const canMaint = canEditFeature('archives');
 
         let archiveBody = '';
         if (archiveSubView === 'historical') {
@@ -4885,8 +4869,8 @@
       }
 
       function openEditArchiveModal(dateIso) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can edit archive records.');
+        if (!canEditFeature('archives')) {
+          alert('You do not have permission to edit archive records.');
           return;
         }
         const archives = db.historicalArchive || [];
@@ -4916,7 +4900,7 @@
 
       function saveArchiveEdit(e) {
         e.preventDefault();
-        if (!currentUser || !currentUser.isSystemAdmin) { alert('Only System Admin can edit archive records.'); return; }
+        if (!canEditFeature('archives')) { alert('You do not have permission to edit archive records.'); return; }
         const index = parseInt(document.getElementById('editArchiveIndex').value, 10);
         const archive = db.historicalArchive?.[index];
         if (!archive) { alert('Archive record no longer exists.'); return; }
@@ -4962,8 +4946,8 @@
       }
 
       function deleteArchiveDay(dateIso) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can delete archive records.');
+        if (!canEditFeature('archives')) {
+          alert('You do not have permission to edit archive records.');
           return;
         }
         if (!confirm(`Are you sure you want to permanently delete the archive record for ${formatDisplayDate(dateIso)}?`)) return;
@@ -4996,8 +4980,8 @@
       }
 
       function deleteArchiveUpload(id) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only the System Admin can delete uploaded documents.');
+        if (!canEditFeature('archives')) {
+          alert('You do not have permission to edit archive records.');
           return;
         }
         const upload = (db.archiveUploads || []).find(u => u.id === id);
@@ -5011,7 +4995,7 @@
       function renderIncidents() {
         const content = document.getElementById('content');
         const incidents = db.incidents || [];
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('incidents');
         const statusColors = { 'Open': { bg: '#fee2e2', fg: '#991b1b' }, 'In Progress': { bg: '#fef3c7', fg: '#92400e' }, 'Resolved': { bg: '#dcfce7', fg: '#166534' } };
 
         content.innerHTML = `
@@ -5096,8 +5080,8 @@
       }
 
       function deleteIncident(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can delete defect records.');
+        if (!canEditFeature('incidents')) {
+          alert('You do not have permission to edit incident records.');
           return;
         }
         if (!confirm('Are you sure you want to delete this defect record?')) return;
@@ -5110,7 +5094,7 @@
         const content = document.getElementById('content');
         const volunteers = db.volunteers || [];
         const roles = getAvailableRoles();
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('competency');
         const trainingTypes = db.trainingTypes || [];
 
         content.innerHTML = `
@@ -5120,7 +5104,7 @@
               <p>Review volunteer roles, qualifications, training, and renewals.</p>
             </div>
             <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-              ${isAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add Custom Role</button>` : ''}
+              ${currentUser?.isSystemAdmin ? `<button class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add Custom Role</button>` : ''}
             </div>
           </div>
 
@@ -5237,6 +5221,7 @@
       }
 
       function saveTrainingRecord() {
+        if (!canEditFeature('competency')) return alert('You do not have permission to edit training records.');
         const vol = (db.volunteers || [])[editingTrainingVolIndex];
         if (!vol) return;
         const completed = document.getElementById('trainingCompletedDate').value;
@@ -5247,7 +5232,9 @@
         } else {
           vol.training[editingTrainingType] = { completed, expires: expires || '' };
         }
-        dbUpdate({ volunteers: db.volunteers });
+        if (currentUser?.isSystemAdmin) dbUpdate({ volunteers: db.volunteers });
+        else database.ref('EVLT_ADMIN_DB/volunteers/' + editingTrainingVolIndex + '/training').set(vol.training)
+          .catch(err => { console.error('Could not save training record:', err); alert('Could not save the training record. Check your connection and try again.'); });
         closeModal('genericModal');
         renderCompetencyMatrix();
       }
@@ -5274,7 +5261,7 @@
       function renderActionsPage() {
         const content = document.getElementById('content');
         const allActions = db.actions || [];
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('actions');
         const todayIso = getTodayString();
 
         const pending = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && (!a.DueDate || toISODate(a.DueDate||a.dueDate) >= todayIso));
@@ -5355,6 +5342,7 @@
       }
 
       function openActionModal(index = null) {
+        if (!canEditFeature('actions')) return alert('You do not have permission to edit action tasks.');
         const existing = index !== null ? (db.actions || [])[index] : null;
         document.getElementById('actionModalTitle').innerText = existing ? 'Edit Action / Task' : 'Add Action / Task';
         document.getElementById('actionEditIndex').value = index !== null ? index : '';
@@ -5376,6 +5364,7 @@
 
       function saveActionItem(e) {
         e.preventDefault();
+        if (!canEditFeature('actions')) return alert('You do not have permission to edit action tasks.');
         if (!db.actions) db.actions = [];
         const idxVal = document.getElementById('actionEditIndex').value;
         const actionData = {
@@ -5398,7 +5387,7 @@
       }
 
       function canToggleActionStatus() {
-        return currentUser && (currentUser.isSystemAdmin || hasMaintenancePermission());
+        return canEditFeature('actions');
       }
 
       function getNextRecurrenceDate(dueDateIso, recurrence) {
@@ -5468,8 +5457,8 @@
       }
 
       function deleteAction(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can delete action tasks.');
+        if (!canEditFeature('actions')) {
+          alert('You do not have permission to edit action tasks.');
           return;
         }
         if (!confirm('Delete this action task?')) return;
@@ -5502,7 +5491,7 @@
 
       function renderEventsPage() {
         const content = document.getElementById('content');
-        const admin = currentUser && currentUser.isSystemAdmin;
+        const admin = canEditFeature('events');
         const canEdit = canEditFeature('events');
         if (checkExpiredEvents()) dbUpdate({ events: db.events });
         const events = (db.events || []).map((ev, idx) => ({ ev, idx })).sort((a, b) => toISODate(a.ev.StartDate || a.ev.startDate).localeCompare(toISODate(b.ev.StartDate || b.ev.startDate)));
@@ -5544,7 +5533,6 @@
               <p>Special gala days, public operating days, and private bookings.</p>
             </div>
             <div style="display:flex; gap:.5rem;">
-              ${admin ? `<button class="btn btn-secondary btn-sm" onclick="openEditPermissionsModal('events', 'Who can edit Events')"><i data-lucide="shield"></i> Permissions</button>` : ''}
               ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>` : ''}
             </div>
           </div>
@@ -5658,10 +5646,7 @@
         });
       }
       function eurotunnelRoleRequired() {
-        if (currentUser && currentUser.isSystemAdmin) return true;
-        const roles = String(currentUser?.volData?.Roles || currentUser?.volData?.roles || '')
-          .split(',').map(role => role.trim().toLowerCase());
-        return roles.includes('eurotunnel');
+        return userHasAccess('eurotunnel');
       }
 
       function eurotunnelSave(collection, records) {
@@ -5808,7 +5793,7 @@
 
       function renderRailwayLayoutWorkspace() {
         const tracks = db.railwayTracks || [];
-        const admin = currentUser && currentUser.isSystemAdmin;
+        const admin = canEditFeature('dashboard');
         return `<div class="section-group"><div class="section-header">Track Condition</div>${tracks.length ? tracks.map((track, index) => {
           const worst = railwayTrackWorstHealth(track.pieces);
           const color = trackHealthColor(worst);
@@ -6131,7 +6116,7 @@
       }
 
       function deleteRailwayLayout(event, index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete physical track plans.');
+        if (!canEditFeature('dashboard')) return alert('You do not have permission to edit the dashboard railway layout.');
         armDangerousButton(event.currentTarget, 'Confirm delete?', () => {
           const tracks = db.railwayTracks || [];
           const removed = tracks[index];
@@ -6151,7 +6136,7 @@
       function renderEurotunnelPage() {
         const content = document.getElementById('content');
         const allowed = eurotunnelRoleRequired();
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('eurotunnel');
 
         if (!allowed) {
           content.innerHTML = `
@@ -6483,7 +6468,7 @@
       }
 
       function eurotunnelDeleteSequence(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('eurotunnel')) return alert('You do not have permission to edit Eurotunnel records.');
         if (!confirm('Delete this sequence?')) return;
         const sequences = db.eurotunnelSequences || [];
         sequences.splice(index, 1);
@@ -6615,7 +6600,7 @@
       }
 
       function eurotunnelDeleteStock(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('eurotunnel')) return alert('You do not have permission to edit Eurotunnel records.');
         if (!confirm('Remove this loco from stock? It will also be removed from any saved sequences.')) return;
         const stock = db.eurotunnelTrains || [];
         const removedId = stock[index]?.id;
@@ -6768,7 +6753,7 @@
       }
 
       function eurotunnelDeleteStep(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('eurotunnel')) return alert('You do not have permission to edit Eurotunnel records.');
         if (!confirm('Delete this instruction step?')) return;
         const steps = db.eurotunnelTasks || [];
         steps.splice(index, 1);
@@ -6882,7 +6867,7 @@
       }
 
       function eurotunnelDeleteMaintenance(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('eurotunnel')) return alert('You do not have permission to edit Eurotunnel records.');
         if (!confirm('Delete this maintenance log entry?')) return;
         const logs = db.eurotunnelMaintenance || [];
         logs.splice(index, 1);
@@ -6967,10 +6952,7 @@
       let memberVisitsSelectedDate = getTodayString();
 
       function canManageVolDocs() {
-        if (!currentUser) return false;
-        if (currentUser.isSystemAdmin) return true;
-        const roles = String((currentUser.volData && (currentUser.volData.Roles || currentUser.volData.roles)) || '');
-        return /Admin|Management/i.test(roles);
+        return canEditFeature('documents');
       }
 
       function compressImageFile(file, maxDim, quality, cb) {
@@ -7820,7 +7802,7 @@
       }
 
       function openVolunteerDocModal(id = null) {
-        if (!canManageVolDocs()) { alert('Only System Admin or Management can add or edit volunteer documents.'); return; }
+        if (!canManageVolDocs()) { alert('You do not have permission to edit volunteer documents.'); return; }
         const existing = id !== null ? (db.volunteerDocs || []).find(d => d.id === id) : null;
         document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Volunteer Document' : 'Add Volunteer Document';
         document.getElementById('volDocId').value = existing ? existing.id : '';
@@ -7941,7 +7923,8 @@
         const schema = MODULE_SCHEMAS[moduleKey];
         if (!schema) { content.innerHTML = '<p>Unknown module</p>'; return; }
         const records = db[moduleKey] || [];
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const moduleEditPage = ({ suppliers: 'suppliers', enquiries: 'enquiries', documents: 'documents', notes: 'notes' })[moduleKey];
+        const isAdmin = currentUser && currentUser.isSystemAdmin || (moduleEditPage && canEditFeature(moduleEditPage));
 
         content.innerHTML = `
           <div class="page-header">
@@ -8010,8 +7993,9 @@
       }
 
       function deleteGenericItem(moduleKey, index) {
-        if (!currentUser || !currentUser.isSystemAdmin) {
-          alert('Only System Admin can delete records.');
+        const editPage = ({ suppliers: 'suppliers', enquiries: 'enquiries', documents: 'documents', notes: 'notes' })[moduleKey];
+        if (!currentUser?.isSystemAdmin && (!editPage || !canEditFeature(editPage))) {
+          alert('You do not have permission to edit these records.');
           return;
         }
         if (!confirm('Are you sure you want to delete this record?')) return;
@@ -8020,70 +8004,11 @@
         renderGenericModule(moduleKey);
       }
 
-      async function openAccessControlModal(uid) {
-        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
-        try {
-          const snapshot = await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).once('value');
-          const binding = snapshot.val();
-          if (!binding || binding.approved !== true) { alert('This approved account could not be found.'); return; }
-          document.getElementById('accessControlUserName').value = uid;
-          document.getElementById('accessControlTitle').innerText = 'Page Permissions: ' + (binding.email || binding.volunteerName || 'Account');
-          const container = document.getElementById('permissionsCheckboxesList');
-          renderPagePermissionCheckboxes(container, binding.grantedPages);
-          document.getElementById('accessControlModal').style.display = 'flex';
-        } catch (err) {
-          console.error('Could not load account permissions:', err);
-          alert('Could not load this account. Check your connection and try again.');
-        }
-      }
-
-      async function editApprovedAccount(uid) {
-        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
-        const snapshot = await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).once('value');
-        const binding = snapshot.val();
-        if (!binding || binding.approved !== true) {
-          alert('That approved account cannot be edited right now.');
-          return;
-        }
-        const name = prompt('Update the volunteer name for this account:', String(binding.volunteerName || ''));
-        if (name === null) return;
-        const cleaned = name.trim();
-        if (!cleaned) {
-          alert('The volunteer name cannot be empty.');
-          return;
-        }
-        await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid + '/volunteerName').set(cleaned);
-        loadApprovedAccountAccess();
-      }
-
       async function deleteApprovedAccount(uid) {
         if (!currentUser || !currentUser.isSystemAdmin || !database) return;
         if (!confirm('Delete this approved account and revoke its page access?')) return;
         await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove();
         loadApprovedAccountAccess();
-      }
-
-      async function saveUserPermissions(e) {
-        e.preventDefault();
-        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
-        const uid = document.getElementById('accessControlUserName').value;
-        const selected = Array.from(document.querySelectorAll('.perm-cb:checked')).map(cb => cb.value);
-        try {
-          await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid + '/grantedPages').set(makeGrantedPages(selected));
-          closeModal('accessControlModal');
-          loadApprovedAccountAccess();
-        } catch (err) {
-          console.error('Could not save account permissions:', err);
-          alert('Could not save page access. Check your connection and try again.');
-        }
-      }
-
-      function canAccessView(view) {
-        if (!currentUser) return false;
-        if (currentUser.isSystemAdmin) return true;
-        if (currentUser.isShopKiosk) return view === 'clock' || view === 'dashboard';
-        const granted = currentUser.grantedPages || [];
-        return granted.includes(view);
       }
 
       function renderAccessForbidden(view) {
@@ -8337,7 +8262,7 @@
 
       function renderGalleryPage() {
         const content = document.getElementById('content');
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('gallery');
         const photos = (db.galleryPhotos || []).slice().reverse();
 
         content.innerHTML = `
@@ -8369,6 +8294,7 @@
       let tempGalleryPhoto = '';
 
       function openGalleryPhotoModal() {
+        if (!canEditFeature('gallery')) return alert('You do not have permission to edit the photo gallery.');
         editingModuleKey = 'galleryPhoto';
         tempGalleryPhoto = '';
         document.getElementById('genericModalTitle').innerText = 'Add Photo';
@@ -8391,6 +8317,7 @@
       }
 
       async function saveGalleryPhoto() {
+        if (!canEditFeature('gallery')) return alert('You do not have permission to edit the photo gallery.');
         if (!tempGalleryPhoto) { alert('Please choose a photo.'); return; }
         tempGalleryPhoto = await storePhoto(tempGalleryPhoto, 'gallery');
         const caption = document.getElementById('galleryPhotoCaption').value.trim();
@@ -8402,7 +8329,7 @@
       }
 
       function deleteGalleryPhoto(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('gallery')) return alert('You do not have permission to edit the photo gallery.');
         if (!confirm('Delete this photo?')) return;
         const photos = db.galleryPhotos || [];
         photos.splice(index, 1);
@@ -8412,7 +8339,7 @@
 
       function renderHelpPage() {
         const content = document.getElementById('content');
-        const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const isAdmin = canEditFeature('help');
         const guides = db.helpGuides || [];
         const categories = [...new Set(guides.map(g => g.category || 'General'))];
 
@@ -8487,6 +8414,7 @@
       }
 
       function helpOpenGuideModal(index) {
+        if (!canEditFeature('help')) return alert('You do not have permission to edit help guides.');
         editingModuleKey = 'helpGuide';
         editingHelpGuideIndex = index;
         const guides = db.helpGuides || [];
@@ -8506,6 +8434,7 @@
       }
 
       function saveHelpGuide() {
+        if (!canEditFeature('help')) return alert('You do not have permission to edit help guides.');
         const title = document.getElementById('helpGuideTitle').value.trim();
         if (!title) return;
         const data = {
@@ -8527,7 +8456,7 @@
       }
 
       function helpDeleteGuide(index) {
-        if (!currentUser || !currentUser.isSystemAdmin) return alert('Only the System Admin can delete records.');
+        if (!canEditFeature('help')) return alert('You do not have permission to edit help guides.');
         if (!confirm('Delete this help guide?')) return;
         const guides = db.helpGuides || [];
         guides.splice(index, 1);
@@ -8559,8 +8488,8 @@
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
-              <h2>System Settings & Permissions</h2>
-              <p>Configure administrative access, notification push tokens, and data synchronisation.</p>
+              <h2>System Settings</h2>
+              <p>Manage administration, dashboard settings, and access in one place.</p>
             </div>
           </div>
 
@@ -8608,9 +8537,14 @@
           </div>
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
-            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Approved accounts — page access</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Choose exactly which dashboard pages each approved email account can access. Firebase also enforces these permissions on the data.</p>
-            <div id="approvedAccountAccessPanel" aria-live="polite">Loading approved accounts…</div>
+            <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.35rem;">Access &amp; Permissions</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.85rem;">Choose which pages each role can view and edit. People inherit access from the roles on their volunteer profile; editing always includes viewing. Firebase also enforces edit access on dashboard data.</p>
+            <div id="rolePermissionSettings" aria-live="polite"></div>
+            <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:.8rem;">
+              <h4 style="font-size:.82rem;margin-bottom:.35rem;">Approved accounts</h4>
+              <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:.45rem;">This is a read-only summary. Change a person’s role on their volunteer profile.</p>
+              <div id="permissionAccountsPanel" aria-live="polite">Loading accounts…</div>
+            </div>
           </div>
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
@@ -8648,8 +8582,14 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
         renderDashboardWidgetSettings();
         renderCustomBannerAdmin();
+        renderRolePermissionSettings();
+        ensureRolePermissionsInitialized().then(() => renderRolePermissionSettings()).catch(err => {
+          console.error('Could not initialize role permissions:', err);
+          const target = document.getElementById('rolePermissionSettings');
+          if (target) target.insertAdjacentHTML('beforeend', '<p style="font-size:.75rem;color:#b91c1c;">Could not load existing permissions. Refresh the page and try again.</p>');
+        });
         loadPendingAccountRequests();
-        loadApprovedAccountAccess();
+        renderPermissionAccountSummary();
       }
 
       function exportAppHtml() {
@@ -8695,13 +8635,161 @@
         }
       }
 
-      function openModal(id) {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'flex';
+      function renderRolePermissionSettings(selectedRole) {
+        const container = document.getElementById('rolePermissionSettings');
+        if (!container) return;
+        const roles = getAvailableRoles();
+        if (!roles.length) {
+          container.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem;">Add a role from the Qualifications page before setting page access.</p>';
+          return;
+        }
+        const role = roles.includes(selectedRole) ? selectedRole : roles[0];
+        const permissions = getRolePermissions(role);
+        container.innerHTML = `
+          <div style="display:flex;align-items:end;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem;">
+            <div style="flex:1;min-width:200px;"><label for="permissionRoleSelect" style="display:block;font-size:.75rem;font-weight:700;margin-bottom:.3rem;">Role</label>
+              <select id="permissionRoleSelect" onchange="renderRolePermissionSettings(this.value)" style="width:100%;">${roles.map(item => `<option value="${escapeHtml(item)}" ${item === role ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}</select>
+            </div>
+            <span style="font-size:.72rem;color:var(--text-muted);">Accounts inherit permissions from their linked volunteer role.</span>
+          </div>
+          ${rolePermissionsNeedMigration ? '<p style="font-size:.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.55rem .7rem;margin-bottom:.7rem;">Existing account permissions are shown on their linked roles. Review the matrix and save to apply the role based system.</p>' : ''}
+          <div style="overflow:auto;border:1px solid var(--border);border-radius:10px;">
+            <table style="width:100%;border-collapse:collapse;min-width:480px;">
+              <thead><tr style="background:#f8fafc;text-align:left;"><th style="padding:.55rem .7rem;font-size:.72rem;">Page</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can view</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can edit</th></tr></thead>
+              <tbody>${ACCOUNT_ACCESS_PAGES.map(page => `<tr style="border-top:1px solid var(--border-subtle);">
+                <td style="padding:.48rem .7rem;font-size:.78rem;">${escapeHtml(page.label)} <span style="font-size:.68rem;color:var(--text-muted);">${escapeHtml(page.section)}</span></td>
+                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-view" data-page="${page.key}" aria-label="${escapeHtml(role)} can view ${escapeHtml(page.label)}" ${permissions[page.key].view ? 'checked' : ''} onchange="syncRoleEditToggle(this)"></td>
+                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-edit" data-page="${page.key}" aria-label="${escapeHtml(role)} can edit ${escapeHtml(page.label)}" ${permissions[page.key].edit ? 'checked' : ''} onchange="syncRoleViewToggle(this)"></td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:.75rem;"><button type="button" class="btn btn-primary btn-sm" onclick="saveRolePermissionSettings()"><i data-lucide="save"></i> Save role permissions</button></div>
+          <div id="rolePermissionSaveStatus" role="status" aria-live="polite" style="font-size:.75rem;color:var(--text-muted);margin-top:.45rem;"></div>`;
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function closeModal(id) {
-        const el = document.getElementById(id);
-        if (el) el.style.display = 'none';
+      function syncRoleEditToggle(editToggle) {
+        if (!editToggle.checked) return;
+        const viewToggle = document.querySelector('.role-page-view[data-page="' + editToggle.dataset.page + '"]');
+        if (viewToggle) viewToggle.checked = true;
       }
-    
+
+      function syncRoleViewToggle(viewToggle) {
+        if (viewToggle.checked) return;
+        const editToggle = document.querySelector('.role-page-edit[data-page="' + viewToggle.dataset.page + '"]');
+        if (editToggle) editToggle.checked = false;
+      }
+
+      async function saveRolePermissionSettings() {
+        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
+        const role = document.getElementById('permissionRoleSelect')?.value;
+        if (!role) return;
+        const status = document.getElementById('rolePermissionSaveStatus');
+        const rolePageAccess = { ...(db.rolePageAccess || {}) };
+        rolePageAccess[role] = Object.fromEntries(ACCOUNT_ACCESS_PAGES.map(page => {
+          const view = document.querySelector('.role-page-view[data-page="' + page.key + '"]')?.checked === true;
+          const edit = document.querySelector('.role-page-edit[data-page="' + page.key + '"]')?.checked === true;
+          return [page.key, { view: view || edit, edit }];
+        }));
+
+        try {
+          const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
+          const bindings = bindingsSnapshot.val() || {};
+          const updates = { 'EVLT_ADMIN_DB/rolePageAccess': rolePageAccess };
+          Object.entries(bindings).forEach(([uid, binding]) => {
+            if (!binding || binding.approved !== true) return;
+            const volunteer = getVolunteerByName(binding.volunteerName);
+            const roles = getVolunteerRoles(volunteer);
+            const permissions = getRolePermissionProjectionWithPolicy(roles, rolePageAccess);
+            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/grantedPages'] = permissions.grantedPages;
+            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/editablePages'] = permissions.editablePages;
+            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/permissionsVersion'] = 2;
+          });
+          await database.ref().update(updates);
+          db.rolePageAccess = rolePageAccess;
+          rolePermissionsNeedMigration = false;
+          renderRolePermissionSettings(role);
+          renderPermissionAccountSummary();
+          const savedStatus = document.getElementById('rolePermissionSaveStatus');
+          if (savedStatus) savedStatus.textContent = 'Permissions saved. Linked accounts now use their role settings.';
+        } catch (err) {
+          console.error('Could not save role permissions:', err);
+          if (status) status.textContent = 'Could not save permissions. Check your connection and try again.';
+          alert('Could not save role permissions. Check your connection and try again.');
+        }
+      }
+
+      function getRolePermissionProjectionWithPolicy(roles, rolePageAccess) {
+        const previous = db.rolePageAccess;
+        db.rolePageAccess = rolePageAccess;
+        const projection = getRolePermissionProjection(roles);
+        db.rolePageAccess = previous;
+        return projection;
+      }
+
+      function renderPermissionAccountSummary() {
+        const panel = document.getElementById('permissionAccountsPanel');
+        if (!panel || !currentUser?.isSystemAdmin || !database) return;
+        database.ref('EVLT_ACCOUNT_BINDINGS').once('value').then(snapshot => {
+          if (!document.getElementById('permissionAccountsPanel')) return;
+          const bindings = snapshot.val() || {};
+          const accounts = Object.entries(bindings).filter(([, binding]) => binding && binding.approved === true && binding.email);
+          panel.innerHTML = accounts.length ? accounts.map(([uid, binding]) => {
+            const roles = getVolunteerRoles(getVolunteerByName(binding.volunteerName));
+            const pages = grantedPageKeys(binding.grantedPages).map(key => ACCOUNT_ACCESS_PAGES.find(page => page.key === key)?.label || key);
+            const editable = grantedPageKeys(binding.editablePages).map(key => ACCOUNT_ACCESS_PAGES.find(page => page.key === key)?.label || key);
+            return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;padding:.65rem 0;border-top:1px solid var(--border-subtle);">
+              <div><strong style="font-size:.8rem;">${escapeHtml(binding.volunteerName || 'Volunteer')}</strong><div style="font-size:.72rem;color:var(--text-muted);">${escapeHtml(binding.email)} · ${escapeHtml(roles.join(', ') || 'No role assigned')}</div>
+                <div style="font-size:.7rem;margin-top:.2rem;">View: ${escapeHtml(pages.join(', ') || 'None')}<br>Edit: ${escapeHtml(editable.join(', ') || 'None')}</div></div>
+              <button class="btn btn-danger btn-sm" onclick="deleteApprovedAccount('${inlineJsArg(uid)}')">Revoke account</button>
+            </div>`;
+          }).join('') : '<p style="font-size:.8rem;color:var(--text-muted);">No approved volunteer accounts yet.</p>';
+        }).catch(err => {
+          console.error('Could not load permission account summary:', err);
+          panel.textContent = 'Could not load approved accounts. Check your connection and try again.';
+        });
+      }
+
+      let rolePermissionInitPromise = null;
+      let rolePermissionsNeedMigration = false;
+      async function ensureRolePermissionsInitialized() {
+        if (!currentUser?.isSystemAdmin || !database || (db.rolePageAccess && Object.keys(db.rolePageAccess).length)) return;
+        if (rolePermissionInitPromise) return rolePermissionInitPromise;
+        rolePermissionInitPromise = (async () => {
+          const snapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
+          const bindings = snapshot.val() || {};
+          const rolePageAccess = {};
+          Object.values(bindings).forEach(binding => {
+            if (!binding || binding.approved !== true) return;
+            const volunteer = getVolunteerByName(binding.volunteerName);
+            getVolunteerRoles(volunteer).forEach(role => {
+              if (!rolePageAccess[role]) rolePageAccess[role] = {};
+              grantedPageKeys(binding.grantedPages).forEach(page => {
+                rolePageAccess[role][page] = { ...(rolePageAccess[role][page] || {}), view: true };
+              });
+            });
+          });
+          Object.entries(db.editPermissions || {}).forEach(([page, perms]) => {
+            (perms?.roles || []).forEach(role => {
+              rolePageAccess[role] ||= {};
+              rolePageAccess[role][page] = { view: true, edit: true };
+            });
+            (perms?.users || []).forEach(name => {
+              getVolunteerRoles(getVolunteerByName(name)).forEach(role => {
+                rolePageAccess[role] ||= {};
+                rolePageAccess[role][page] = { view: true, edit: true };
+              });
+            });
+          });
+          for (const role of getAvailableRoles()) {
+            rolePageAccess[role] ||= {};
+            ACCOUNT_ACCESS_PAGES.forEach(page => {
+              if (!rolePageAccess[role][page.key]) rolePageAccess[role][page.key] = { view: false, edit: false };
+            });
+          }
+          db.rolePageAccess = rolePageAccess;
+          rolePermissionsNeedMigration = true;
+          return rolePageAccess;
+        })().finally(() => { rolePermissionInitPromise = null; });
+        return rolePermissionInitPromise;
+      }
