@@ -1837,9 +1837,12 @@
             setLoginNotice('Account created. Check your email and click the verification link, then sign in here. Louie must approve the account before it opens volunteer records.', false);
             return;
           }
-          await auth.signInWithEmailAndPassword(email, password);
+          const credential = await auth.signInWithEmailAndPassword(email, password);
           clearFailedLogins();
           setLoginNotice('Signed in. Checking your email verification and approval…', false);
+          // Do not rely only on onAuthStateChanged to finish the login flow:
+          // explicitly route the credential returned by Firebase as well.
+          if (credential && credential.user) await routeAuthenticatedUser(credential.user);
         } catch (err) {
           console.error('Email sign-in failed:', err);
           registerFailedLogin();
@@ -2057,6 +2060,19 @@
       }
 
       let authRouteSequence = 0;
+
+      // Firebase reads can remain pending on a poor mobile connection. Put a
+      // finite limit on each login check so the sign-in page never spins forever.
+      function withLoginCheckTimeout(operation, step, timeoutMs = 15000) {
+        let timer;
+        return Promise.race([
+          Promise.resolve(operation),
+          new Promise((_, reject) => {
+            timer = window.setTimeout(() => reject(new Error('Timed out while ' + step + '.')), timeoutMs);
+          })
+        ]).finally(() => window.clearTimeout(timer));
+      }
+
       async function routeAuthenticatedUser(user) {
         const routeId = ++authRouteSequence;
         if (pendingBindingRef) pendingBindingRef.off();
@@ -2073,8 +2089,9 @@
           return;
         }
         try {
-          await user.reload();
-          await user.getIdToken(true);
+          setLoginNotice('Checking your email verification…', false);
+          await withLoginCheckTimeout(user.reload(), 'refreshing your email verification');
+          await withLoginCheckTimeout(user.getIdToken(true), 'refreshing your secure sign-in token');
           if (routeId !== authRouteSequence) return;
           if (!user.emailVerified) {
             showLoginPage();
@@ -2095,8 +2112,9 @@
             return;
           }
 
+          setLoginNotice('Email verified. Checking your account approval…', false);
           const bindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + user.uid);
-          const bindingSnapshot = await bindingRef.once('value');
+          const bindingSnapshot = await withLoginCheckTimeout(bindingRef.once('value'), 'checking your account approval');
           if (routeId !== authRouteSequence) return;
           const binding = bindingSnapshot.val();
           if (binding && binding.approved === true && binding.email === user.email && binding.volunteerName) {
@@ -2105,7 +2123,7 @@
           }
 
           const requestRef = database.ref('EVLT_ACCOUNT_REQUESTS/' + user.uid);
-          const requestSnapshot = await requestRef.once('value');
+          const requestSnapshot = await withLoginCheckTimeout(requestRef.once('value'), 'checking your access request');
           if (routeId !== authRouteSequence) return;
           if (!requestSnapshot.exists()) {
             let displayName = String(user.displayName || '').trim();
@@ -2114,7 +2132,10 @@
               showMissingProfileNameForm();
               return;
             }
-            await requestRef.set({ email: user.email, name: displayName, createdAt: firebase.database.ServerValue.TIMESTAMP });
+            await withLoginCheckTimeout(
+              requestRef.set({ email: user.email, name: displayName, createdAt: firebase.database.ServerValue.TIMESTAMP }),
+              'submitting your access request'
+            );
           }
 
           currentUser = null;
@@ -2137,7 +2158,8 @@
           currentUser = null;
           detachDatabaseListener();
           showLoginPage();
-          setLoginNotice('Could not verify your account status. Check your connection and try again.');
+          const detail = err && /Timed out while/.test(err.message || '') ? ' The check took too long, so it was stopped.' : '';
+          setLoginNotice('Could not verify your account status.' + detail + ' Check your connection and try again.');
         }
       }
 
