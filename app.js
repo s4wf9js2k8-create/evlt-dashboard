@@ -202,7 +202,7 @@
       const ACCOUNT_ACCESS_PAGES = ALL_PAGES.concat([{ key: 'myAccount', label: 'My Account', icon: 'user-cog', section: 'Session' },
         { key: 'help', label: 'Help & Tutorials', icon: 'life-buoy', section: 'Session' }]);
       const PAGE_DATA_KEYS = {
-        dashboard: ['clockLogs','incidents','maintenanceLogs','dailyChecks','actions','events','fleetItems','volunteers','dashboardConfig'],
+        dashboard: ['clockLogs','incidents','maintenanceLogs','dailyChecks','actions','events','fleetItems','volunteers'],
         clock: ['clockLogs','volunteers'],
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
