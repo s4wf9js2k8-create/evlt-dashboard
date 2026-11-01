@@ -853,11 +853,14 @@
           };
           pageDatabaseListeners[key] = listener;
           database.ref('EVLT_ADMIN_DB/' + key).on('value', listener, err => {
-            console.error('Page data access failed:', key, err);
+            if (!currentUser) return;
+            const errorCode = err && err.code ? String(err.code) : 'unknown';
+            console.error('Page data access failed:', { key, code: errorCode, message: err && err.message });
             currentUser = null;
             detachDatabaseListener();
             showLoginPage();
-            showLoginError('Could not load the pages assigned to this account. Ask Louie to review its access.');
+            const safeKey = String(key).replace(/[^a-zA-Z0-9_-]/g, '');
+            showLoginError('Access check failed for "' + safeKey + '" (' + errorCode + '). Ask Louie to check this page permission.');
           });
         });
         if (userHasAccess('dashboard')) attachCustomBannersListener();
