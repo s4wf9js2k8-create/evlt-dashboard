@@ -14,26 +14,6 @@
       // using a verified Firebase account allowlist; no shared secret is
       // included in this public dashboard code.
 
-      // PWA manifest, built at runtime as a Blob so no separate file is needed.
-      // Falls back silently if the browser blocks blob: manifests.
-      try {
-        const webManifest = {
-          name: 'EVLT Operations Platform',
-          short_name: 'EVLT Ops',
-          start_url: '.',
-          display: 'standalone',
-          background_color: '#1e3a1e',
-          theme_color: '#1e3a1e',
-          icons: [
-            { src: 'apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
-          ]
-        };
-        const manifestBlob = new Blob([JSON.stringify(webManifest)], { type: 'application/manifest+json' });
-        const manifestLink = document.getElementById('webManifestLink');
-        if (manifestLink) manifestLink.href = URL.createObjectURL(manifestBlob);
-      } catch (e) {
-        console.warn('Could not attach web app manifest:', e);
-      }
 
       const firebaseConfig = {
         apiKey: "AIzaSyAX79ysaODygo5BqzbVLN6fYWMxPXg-AMY",
@@ -209,7 +189,7 @@
         memberVisits: ['memberVisits'],
         incidents: ['incidents','assets','volunteers'],
         competency: ['volunteers','trainingTypes'],
-        volunteers: ['volunteers','customRoles'],
+        volunteers: ['volunteers','customRoles','removedRoles','volunteerDocs'],
         actions: ['actions','volunteers'],
         maintenance: ['fleetItems','maintenanceLogs','assets'],
         events: ['events','volunteers','clockLogs'],
@@ -224,7 +204,7 @@
         help: ['helpGuides'],
         myAccount: ['volunteers','nameChangeRequests']
       };
-      const PAGE_LIST_DATA_KEYS = new Set(['customBanners','actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
+      const PAGE_LIST_DATA_KEYS = new Set(['customBanners','actions','archiveUploads','assets','clockLogs','documents','enquiries','events','fleetItems','galleryPhotos','helpGuides','customRoles','removedRoles','trainingTypes','historicalArchive','incidents','itemCodes','maintenanceLogs','memberVisits','notes','rotaSignups','stock','suppliers','volunteerDocs','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance','eurotunnelTrackSections','railwayTracks','railwayTrackSections','volunteers']);
       function grantedPageKeys(grants) {
         if (Array.isArray(grants)) return grants.filter(key => ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
         return Object.keys(grants || {}).filter(key => grants[key] === true && ACCOUNT_ACCESS_PAGES.some(page => page.key === key));
@@ -278,7 +258,8 @@
 
       function getAvailableRoles() {
         const customRoles = db.customRoles || [];
-        return Array.from(new Set([...DEFAULT_ROLES, ...customRoles]));
+        const removedRoles = new Set(db.removedRoles || []);
+        return Array.from(new Set([...DEFAULT_ROLES, ...customRoles])).filter(role => !removedRoles.has(role));
       }
 
       function canEditFeature(key) {
@@ -679,8 +660,14 @@
         dbUpdate(resetUpdates);
       }
 
+      function openModal(modalId) {
+        const el = document.getElementById(modalId);
+        if (el) el.style.display = 'flex';
+      }
+
       function closeModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
+        const el = document.getElementById(modalId);
+        if (el) el.style.display = 'none';
       }
 
       let database, auth;
@@ -723,7 +710,7 @@
       function normaliseDb() {
         if (!db || typeof db !== 'object') db = {};
         
-        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','nameChangeRequests','archiveUploads','volunteerDocs','memberVisits','customBanners']
+        ['incidents','volunteers','maintenanceLogs','fleetItems','actions','events','assets','stock','suppliers','enquiries','documents','notes','notifications','historicalArchive','clockLogs','customRoles','removedRoles','nameChangeRequests','archiveUploads','volunteerDocs','memberVisits','customBanners']
           .forEach(key => {
             const val = db[key];
             if (Array.isArray(val)) return;
@@ -1250,30 +1237,7 @@
           }
           return;
         }
-        const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
-        const title = '🚂 EVLT Operations Alert';
-        const options = {
-          body: 'Test alert: Push notifications are active and ready on this device!',
-          icon: iconUrl,
-          badge: iconUrl,
-          data: { url: window.location.href }
-        };
-
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification(title, options);
-          }).catch(() => {
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(title, options);
-            }
-          });
-        } else if ('Notification' in window && Notification.permission === 'granted') {
-          try {
-            new Notification(title, options);
-          } catch (e) {
-            console.warn('Direct notification error:', e);
-          }
-        }
+        showLocalNotification('🚂 EVLT Operations Alert', 'Test alert: Push notifications are active and ready on this device!', 'evlt-test-alert');
 
         const statusMsg = document.getElementById('notifStatusMsg');
         if (statusMsg) {
@@ -1326,18 +1290,19 @@
       // A repeated alert with the same tag replaces the earlier one instead of stacking a duplicate
       function showLocalNotification(title, body, tag) {
         const iconUrl = new URL('apple-touch-icon.png', window.location.href).href;
-        const options = { body: body || '', icon: iconUrl, badge: iconUrl };
+        const badgeUrl = new URL('notification-badge.png', window.location.href).href;
+        const options = { body: body || '', icon: iconUrl, badge: badgeUrl, vibrate: [200, 100, 200] };
         if (tag) options.tag = tag;
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.ready.then(reg => {
-            reg.showNotification(title, options);
-          }).catch(() => {
-            if ('Notification' in window && Notification.permission === 'granted') {
-              try { new Notification(title, options); } catch (e) {}
-            }
-          });
-        } else if ('Notification' in window && Notification.permission === 'granted') {
-          try { new Notification(title, options); } catch (e) {}
+        // Phones (Android Chrome and iPhone) only allow notifications shown through the service worker
+        const fallback = () => {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try { new Notification(title, options); } catch (e) {}
+          }
+        };
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then(reg => (reg ? reg.showNotification(title, options) : fallback())).catch(fallback);
+        } else {
+          fallback();
         }
       }
 
@@ -4030,19 +3995,91 @@
         return total;
       }
 
+      // One licence row inside a volunteer's card (compact version of volDocRowHtml)
+      function volDocCompactRowHtml(d, canManage) {
+        const typeDef = VOL_DOC_TYPES.find(t => t.key === d.type) || { icon: 'file-badge' };
+        const isLoco = d.type === 'Loco Certification';
+        const status = volDocStatus(d);
+        const title = isLoco ? (d.loco || 'Locomotive') : (d.type === 'Other' && d.title ? d.title : d.type);
+        const photo = safeImageUrl(d.photo || (isLoco ? findLocoPhoto(d.loco) : ''));
+        const dates = [`${isLoco ? 'Licensed' : 'Issued'} ${formatVolDocDate(d.issued)}`, d.expires ? `Expires ${formatVolDocDate(d.expires)}` : ''].filter(Boolean).join(' · ');
+        return `
+          <div class="vol-doc-row">
+            ${photo
+              ? `<img class="vol-doc-thumb" src="${escapeHtml(photo)}" alt="" onclick="viewVolDocPhoto(${d.id})">`
+              : `<div class="vol-doc-thumb vol-doc-icon"><i data-lucide="${typeDef.icon || 'file-badge'}"></i></div>`}
+            <div class="vol-doc-main">
+              <div class="vol-doc-title">${isLoco ? '🚂 ' : ''}${escapeHtml(title)}</div>
+              <div class="vol-doc-meta">${escapeHtml(dates)}${d.issuer ? ' · Signed off by ' + escapeHtml(d.issuer) : ''}</div>
+            </div>
+            <span class="vol-doc-status" style="background:${status.bg}; color:${status.fg};">${status.label}</span>
+            ${canManage ? `<div class="vol-doc-actions">
+              <button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(${d.id})" title="Edit"><i data-lucide="pencil"></i></button>
+              <button class="btn btn-danger btn-sm" onclick="deleteVolunteerDoc(${d.id})" title="Delete"><i data-lucide="trash-2"></i></button>
+            </div>` : ''}
+          </div>`;
+      }
+
+      function volunteerCardHtml(v, idx, isAdmin, canManageDocs) {
+        const name = getVolunteerName(v);
+        const roles = getVolunteerRoles(v);
+        const roleList = roles.length ? roles : ['Standard'];
+        const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase() || '?';
+        const ytd = getVolYtdHours(name);
+        const dbs = v['DBS Status'] || 'Cleared';
+        const docs = (db.volunteerDocs || []).filter(d => d.volunteer === name);
+        const locoDocs = docs.filter(d => d.type === 'Loco Certification').sort((x, y) => (x.loco || '').localeCompare(y.loco || ''));
+        const otherDocs = docs.filter(d => d.type !== 'Loco Certification').sort((x, y) => (x.type || '').localeCompare(y.type || ''));
+        const overall = volDocsOverall(docs);
+        const section = (title, rows) => rows.length ? `
+          <div class="vol-doc-section">
+            <div class="vol-doc-heading">${title} (${rows.length})</div>
+            ${rows.map(d => volDocCompactRowHtml(d, canManageDocs)).join('')}
+          </div>` : '';
+        return `
+          <article class="vol-card" data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml(roleList.join(' ').toLowerCase())}">
+            <header class="vol-card-head">
+              <div class="vol-avatar" aria-hidden="true">${escapeHtml(initials)}</div>
+              <div class="vol-id">
+                <h3 class="vol-name">${escapeHtml(name)}</h3>
+                <div class="vol-chips">${roleList.map(role => `<span class="vol-chip">${escapeHtml(role)}</span>`).join('')}</div>
+              </div>
+            </header>
+            <div class="vol-stats">
+              <div><span class="vol-stat-label">YTD hours</span><span class="vol-stat-value">${ytd > 0 ? ytd.toFixed(1) + ' h' : '0 h'}</span></div>
+              <div><span class="vol-stat-label">DBS</span><span class="vol-pill" style="background:${dbs === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${dbs === 'Cleared' ? '#166534' : '#92400e'};">${escapeHtml(dbs)}</span></div>
+              <div><span class="vol-stat-label">Licence</span><span class="vol-pill" style="background:${overall.bg}; color:${overall.fg};">${overall.label}</span></div>
+            </div>
+            <div class="vol-docs">
+              ${docs.length
+                ? section('Locomotive certifications', locoDocs) + section('Other qualifications', otherDocs)
+                : '<div class="vol-doc-empty">No licence or qualification records yet.</div>'}
+            </div>
+            ${(canManageDocs || isAdmin) ? `<footer class="vol-card-foot">
+              ${canManageDocs ? `<button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(null, ${inlineJsArg(name)})"><i data-lucide="plus"></i> Add certification</button>` : ''}
+              ${isAdmin ? `<span class="vol-foot-spacer"></span>
+                <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})" title="Delete volunteer"><i data-lucide="trash-2"></i></button>` : ''}
+            </footer>` : ''}
+          </article>`;
+      }
+
       function renderVolunteers() {
         const content = document.getElementById('content');
         const volunteers = db.volunteers || [];
         const isAdmin = currentUser && currentUser.isSystemAdmin;
+        const canManageDocs = canManageVolDocs();
         const totalVolunteers = volunteers.length;
         const clearedDbs = volunteers.filter(v => String(v['DBS Status'] || 'Cleared').toLowerCase() === 'cleared').length;
         const totalYtdHours = volunteers.reduce((sum, volunteer) => sum + getVolYtdHours(getVolunteerName(volunteer)), 0);
+        const licenceAlerts = getVolDocAlerts().length;
+        const searchValue = document.getElementById('volSearchInput') ? document.getElementById('volSearchInput').value : '';
 
         content.innerHTML = `
           <div class="page-header" style="align-items:flex-start;">
             <div class="page-title">
               <h2>Volunteer Directory</h2>
-              <p>Manage volunteer profiles, roles, and DBS status.</p>
+              <p>Each volunteer's profile, roles, DBS status, licence and qualifications in one card.</p>
             </div>
             ${isAdmin ? `
               <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
@@ -4053,8 +4090,8 @@
             ` : ''}
           </div>
 
-          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.85rem; margin-bottom:1rem;">
-            <div class="card" style="padding:1rem; background:linear-gradient(135deg, rgba(59,130,246,0.08), rgba(99,102,241,0.02)); border:1px solid var(--border);">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0.85rem; margin-bottom:1rem;">
+            <div class="card" style="padding:1rem; border:1px solid var(--border);">
               <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Volunteers</div>
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalVolunteers}</div>
             </div>
@@ -4066,72 +4103,37 @@
               <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">YTD hours</div>
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalYtdHours.toFixed(1)}h</div>
             </div>
-          </div>
-
-          <div class="card" style="padding:0.85rem; margin-bottom:1rem; border:1px solid var(--border); background:rgba(255,255,255,0.65);">
-            <input type="search" id="volSearchInput" placeholder="Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.8rem 0.9rem; border:1px solid var(--border); border-radius:12px; font-size:0.9rem; background:#fff; outline:none; box-shadow: inset 0 1px 2px rgba(15,23,42,0.04);">
-          </div>
-
-          <div class="card">
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Volunteer</th>
-                    <th>Roles / Qualifications</th>
-                    <th>YTD Hours</th>
-                    <th>DBS Status</th>
-                    ${isAdmin ? '<th style="text-align:right;">Actions</th>' : ''}
-                  </tr>
-                </thead>
-                <tbody id="volTableBody">
-                  ${volunteers.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No volunteers registered.</td></tr>' :
-                    volunteers.map((v, idx) => {
-                      const name = getVolunteerName(v);
-                      const ytd = getVolYtdHours(name);
-                      const roleText = v.Roles || v.roles || 'Standard';
-                      return `
-                        <tr data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml(roleText.toLowerCase())}">
-                          <td>
-                            <div style="display:flex; align-items:center; gap:0.75rem;">
-                              <div style="width:2.25rem; height:2.25rem; border-radius:50%; background:linear-gradient(135deg, #dbeafe, #e0e7ff); color:#1d4ed8; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.8rem;">${escapeHtml(name.charAt(0).toUpperCase() || 'V')}</div>
-                              <div>
-                                <div style="font-weight:700;">${escapeHtml(name)}</div>
-                                <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(roleText.split(',')[0] || 'Volunteer')}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td style="font-size:0.78rem; color:var(--text-muted);">${escapeHtml(roleText)}</td>
-                          <td>
-                            ${ytd > 0
-                              ? `<span style="background:var(--primary-light); color:var(--primary); padding:2px 7px; border-radius:8px; font-weight:700; font-size:0.75rem;">${ytd.toFixed(1)} hrs</span>`
-                              : `<span style="color:var(--text-muted); font-size:0.75rem;">0 hrs</span>`}
-                          </td>
-                          <td><span style="display:inline-flex; align-items:center; justify-content:center; min-width:82px; background:${v['DBS Status'] === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${v['DBS Status'] === 'Cleared' ? '#166534' : '#92400e'}; padding:4px 8px; border-radius:999px; font-weight:700; font-size:0.7rem;">${v['DBS Status'] || 'Cleared'}</span></td>
-                          ${isAdmin ? `
-                            <td style="text-align:right;">
-                              <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
-                              <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})"><i data-lucide="trash-2"></i></button>
-                            </td>
-                          ` : ''}
-                        </tr>
-                      `;
-                    }).join('')}
-                </tbody>
-              </table>
+            <div class="card" style="padding:1rem; border:1px solid var(--border);">
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Licences to renew</div>
+              <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem; color:${licenceAlerts ? '#b45309' : '#166534'};">${licenceAlerts}</div>
             </div>
           </div>
+
+          <div class="card" style="padding:0.85rem; margin-bottom:1rem; border:1px solid var(--border);">
+            <input type="search" id="volSearchInput" value="${escapeHtml(searchValue)}" placeholder="Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.8rem 0.9rem; border:1px solid var(--border); border-radius:var(--radius);">
+          </div>
+
+          ${volunteers.length === 0
+            ? '<div class="card" style="padding:2rem; text-align:center; color:var(--text-muted);">No volunteers registered.</div>'
+            : `<div class="vol-grid" id="volGrid">${volunteers.map((v, idx) => volunteerCardHtml(v, idx, isAdmin, canManageDocs)).join('')}</div>
+               <p id="volNoMatches" style="display:none; text-align:center; color:var(--text-muted); font-size:.85rem; padding:1.5rem;">No volunteers match that search.</p>`}
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        if (searchValue) filterVolunteersTable();
       }
 
       function filterVolunteersTable() {
-        const q = (document.getElementById('volSearchInput')?.value || '').toLowerCase();
-        document.querySelectorAll('#volTableBody tr[data-volname]').forEach(row => {
-          const name = row.getAttribute('data-volname') || '';
-          const roles = row.getAttribute('data-volroles') || '';
-          row.style.display = (!q || name.includes(q) || roles.includes(q)) ? '' : 'none';
+        const q = (document.getElementById('volSearchInput')?.value || '').trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#volGrid .vol-card').forEach(card => {
+          const name = card.getAttribute('data-volname') || '';
+          const roles = card.getAttribute('data-volroles') || '';
+          const match = !q || name.includes(q) || roles.includes(q);
+          card.style.display = match ? '' : 'none';
+          if (match) shown++;
         });
+        const none = document.getElementById('volNoMatches');
+        if (none) none.style.display = shown === 0 && q ? 'block' : 'none';
       }
 
       function openVolunteerModal(index = null) {
@@ -5248,12 +5250,23 @@
         e.preventDefault();
         const newRole = document.getElementById('newRoleName').value.trim();
         if (!newRole) return;
+        // A comma would split the role in two, and the other characters cannot be used in database keys
+        if (/[,.#$\/\[\]]/.test(newRole)) {
+          alert('Role names cannot contain commas, full stops or the characters # $ / [ ]');
+          return;
+        }
         if (!db.customRoles) db.customRoles = [];
-        if (!db.customRoles.includes(newRole)) db.customRoles.push(newRole);
+        const removedRoles = (db.removedRoles || []).filter(role => role !== newRole);
+        const alreadyAvailable = DEFAULT_ROLES.includes(newRole) || db.customRoles.includes(newRole);
+        if (!alreadyAvailable) db.customRoles.push(newRole);
+        const bringingBack = removedRoles.length !== (db.removedRoles || []).length;
+        db.removedRoles = removedRoles;
 
-        dbSet('EVLT_ADMIN_DB/customRoles', db.customRoles);
+        dbUpdate({ customRoles: db.customRoles, removedRoles: removedRoles.length ? removedRoles : null });
         closeModal('addRoleModal');
-        renderCompetencyMatrix();
+        if (currentView === 'settings') renderRolePermissionSettings(newRole);
+        else renderCompetencyMatrix();
+        if (alreadyAvailable && !bringingBack) alert('That role already exists.');
       }
 
       let actionsFilter = 'pending';
@@ -7688,6 +7701,17 @@
             ${actions || ''}
           </div>`;
 
+        // Licences and qualifications now sit on each volunteer's card
+        if (canManage && userHasAccess('volunteers')) {
+          content.innerHTML = header('Volunteer Documents', "Licences and qualifications now live on each volunteer's card.") + `
+            <div class="card" style="padding:1.5rem; max-width:560px;">
+              <p style="font-size:.85rem; color:var(--text-muted); margin-bottom:1rem;">Open the Volunteers page to see every volunteer's licence, certifications and qualifications on their own card, and to add or update them there.</p>
+              <button class="btn btn-primary btn-sm" onclick="navigate('volunteers')"><i data-lucide="users"></i> Open Volunteers</button>
+            </div>`;
+          if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+          return;
+        }
+
         // Volunteers (non-managers) go straight to their own licence; managers pick a volunteer first.
         const viewing = canManage ? volDocSelected : ownName;
 
@@ -7801,7 +7825,7 @@
         document.getElementById('volDocPhotoLabel').innerText = def.locoBased ? 'Photo of the Locomotive' : 'Certificate Scan / Photo (optional)';
       }
 
-      function openVolunteerDocModal(id = null) {
+      function openVolunteerDocModal(id = null, volunteerName = null) {
         if (!canManageVolDocs()) { alert('You do not have permission to edit volunteer documents.'); return; }
         const existing = id !== null ? (db.volunteerDocs || []).find(d => d.id === id) : null;
         document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Volunteer Document' : 'Add Volunteer Document';
@@ -7810,10 +7834,10 @@
         const vols = (db.volunteers || []).filter(v => !v.disabled);
         document.getElementById('volDocVolunteer').innerHTML = '<option value="">-- Select Volunteer --</option>' +
           vols.map(v => { const n = getVolunteerName(v); return `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`; }).join('');
-        document.getElementById('volDocVolunteer').value = existing ? existing.volunteer : (volDocSelected || '');
+        document.getElementById('volDocVolunteer').value = existing ? existing.volunteer : (volunteerName || volDocSelected || '');
         // the licence is already open for one volunteer, so lock the field to them
-        document.getElementById('volDocVolunteer').disabled = !!(existing || volDocSelected);
-        document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Certification' : (volDocSelected ? `Add to ${volDocSelected}'s Licence` : 'Add Certification');
+        document.getElementById('volDocVolunteer').disabled = !!(existing || volunteerName || volDocSelected);
+        document.getElementById('volDocModalTitle').innerText = existing ? 'Edit Certification' : ((volunteerName || volDocSelected) ? `Add to ${volunteerName || volDocSelected}'s Licence` : 'Add Certification');
 
         document.getElementById('volDocType').innerHTML = VOL_DOC_TYPES.map(t => `<option value="${t.key}">${t.key}</option>`).join('');
         document.getElementById('volDocType').value = existing ? existing.type : 'Loco Certification';
@@ -7871,7 +7895,7 @@
         if (idx >= 0) db.volunteerDocs[idx] = record; else db.volunteerDocs.push(record);
         dbUpdate({ volunteerDocs: db.volunteerDocs });
         closeModal('volDocModal');
-        renderVolunteerDocs();
+        refreshVolDocViews();
       }
 
       function deleteVolunteerDoc(id) {
@@ -7879,7 +7903,13 @@
         if (!confirm('Delete this volunteer document?')) return;
         db.volunteerDocs = (db.volunteerDocs || []).filter(d => d.id !== id);
         dbUpdate({ volunteerDocs: db.volunteerDocs });
-        renderVolunteerDocs();
+        refreshVolDocViews();
+      }
+
+      // Licence records can now be changed from a volunteer's card or from the Documents page
+      function refreshVolDocViews() {
+        if (currentView === 'volunteers') renderVolunteers();
+        else renderVolunteerDocs();
       }
 
       // Documents that are expired or expire within 60 days (managers see everyone, volunteers see their own)
@@ -7900,9 +7930,9 @@
         const expired = alerts.filter(a => a.status === 'Expired');
         const label = a => `${escapeHtml(a.d.volunteer)} - ${escapeHtml(a.d.type === 'Loco Certification' ? 'Loco: ' + a.d.loco : (a.d.title || a.d.type))} (${a.status === 'Expired' ? 'expired' : 'expires'} ${formatVolDocDate(a.d.expires)})`;
         const colours = expired.length ? 'background:#fef2f2; color:#991b1b; border:1px solid #fecaca;' : 'background:#fffbeb; color:#92400e; border:1px solid #fde68a;';
-        const canOpen = userHasAccess('documents');
+        const canOpen = userHasAccess('documents') || userHasAccess('volunteers');
         return `
-          <div style="${colours} padding:0.75rem 1rem; border-radius:var(--radius-lg); font-weight:600; font-size:0.85rem; display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem; ${canOpen ? 'cursor:pointer;' : ''}" ${canOpen ? `onclick="docsSubView='volunteer'; navigate('documents')"` : ''}>
+          <div style="${colours} padding:0.75rem 1rem; border-radius:var(--radius-lg); font-weight:600; font-size:0.85rem; display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem; ${canOpen ? 'cursor:pointer;' : ''}" ${canOpen ? `onclick="${userHasAccess('volunteers') ? "navigate('volunteers')" : "docsSubView='volunteer'; navigate('documents')"}"` : ''}>
             <i data-lucide="badge-alert" style="width:18px; height:18px; flex-shrink:0; margin-top:2px;"></i>
             <div><strong>${expired.length ? expired.length + ' expired' : ''}${expired.length && alerts.length > expired.length ? ' and ' : ''}${alerts.length > expired.length ? (alerts.length - expired.length) + ' expiring soon' : ''} licence${alerts.length > 1 ? 's' : ''} / certificate${alerts.length > 1 ? 's' : ''}:</strong>
               ${alerts.slice(0, 5).map(label).join('; ')}${alerts.length > 5 ? ` and ${alerts.length - 5} more` : ''}${canOpen ? ' - <u>View Documents</u>' : ''}</div>
@@ -8640,7 +8670,8 @@
         if (!container) return;
         const roles = getAvailableRoles();
         if (!roles.length) {
-          container.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem;">Add a role from the Qualifications page before setting page access.</p>';
+          container.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem;margin-bottom:.6rem;">There are no roles yet. Add one to set page access.</p><button type="button" class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add role</button>';
+          if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
           return;
         }
         const role = roles.includes(selectedRole) ? selectedRole : roles[0];
@@ -8650,7 +8681,11 @@
             <div style="flex:1;min-width:200px;"><label for="permissionRoleSelect" style="display:block;font-size:.75rem;font-weight:700;margin-bottom:.3rem;">Role</label>
               <select id="permissionRoleSelect" onchange="renderRolePermissionSettings(this.value)" style="width:100%;">${roles.map(item => `<option value="${escapeHtml(item)}" ${item === role ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}</select>
             </div>
-            <span style="font-size:.72rem;color:var(--text-muted);">Accounts inherit permissions from their linked volunteer role.</span>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add role</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="deleteRole(${inlineJsArg(role)})"><i data-lucide="trash-2"></i> Delete role</button>
+            </div>
+            <span style="font-size:.72rem;color:var(--text-muted);flex-basis:100%;">Accounts inherit permissions from their linked volunteer role.</span>
           </div>
           ${rolePermissionsNeedMigration ? '<p style="font-size:.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.55rem .7rem;margin-bottom:.7rem;">Existing account permissions are shown on their linked roles. Review the matrix and save to apply the role based system.</p>' : ''}
           <div style="overflow:auto;border:1px solid var(--border);border-radius:10px;">
@@ -8680,6 +8715,70 @@
         if (editToggle) editToggle.checked = false;
       }
 
+      async function buildAccountPermissionUpdates(rolePageAccess, volunteers) {
+        const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
+        const bindings = bindingsSnapshot.val() || {};
+        const list = volunteers || db.volunteers || [];
+        const updates = {};
+        Object.entries(bindings).forEach(([uid, binding]) => {
+          if (!binding || binding.approved !== true) return;
+          const target = String(binding.volunteerName || '').trim().toLowerCase();
+          const volunteer = list.find(v => getVolunteerName(v).trim().toLowerCase() === target) || null;
+          const permissions = getRolePermissionProjectionWithPolicy(getVolunteerRoles(volunteer), rolePageAccess);
+          updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/grantedPages'] = permissions.grantedPages;
+          updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/editablePages'] = permissions.editablePages;
+          updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/permissionsVersion'] = 2;
+        });
+        return updates;
+      }
+
+      async function deleteRole(role) {
+        if (!currentUser || !currentUser.isSystemAdmin || !database || !role) return;
+        if (role === 'Standard') {
+          alert('"Standard" is what volunteers fall back to when they have no other role, so it cannot be deleted.');
+          return;
+        }
+        if (rolePermissionsNeedMigration) {
+          alert('Press "Save role permissions" once first so everyone\'s current access is carried over. Then you can delete roles.');
+          return;
+        }
+        const holders = (db.volunteers || []).filter(v => getVolunteerRoles(v).includes(role));
+        const names = holders.slice(0, 5).map(getVolunteerName).join(', ') + (holders.length > 5 ? ' and ' + (holders.length - 5) + ' more' : '');
+        const message = 'Delete the role "' + role + '"?' +
+          (holders.length ? '\n\nIt will be removed from ' + holders.length + ' volunteer' + (holders.length === 1 ? '' : 's') + ' (' + names + '), and their account access will be recalculated from the roles they have left.' : '') +
+          '\n\nThis cannot be undone.';
+        if (!confirm(message)) return;
+
+        const volunteers = (db.volunteers || []).map(v => {
+          const roles = getVolunteerRoles(v);
+          if (!roles.includes(role)) return v;
+          return { ...v, Roles: roles.filter(r => r !== role).join(', ') || 'Standard' };
+        });
+        const rolePageAccess = { ...(db.rolePageAccess || {}) };
+        delete rolePageAccess[role];
+        const customRoles = (db.customRoles || []).filter(r => r !== role);
+        const isBuiltIn = DEFAULT_ROLES.includes(role);
+        const removedRoles = isBuiltIn ? Array.from(new Set([...(db.removedRoles || []), role])) : (db.removedRoles || []);
+
+        try {
+          const updates = await buildAccountPermissionUpdates(rolePageAccess, volunteers);
+          updates['EVLT_ADMIN_DB/volunteers'] = volunteers;
+          updates['EVLT_ADMIN_DB/rolePageAccess'] = Object.keys(rolePageAccess).length ? rolePageAccess : null;
+          updates['EVLT_ADMIN_DB/customRoles'] = customRoles.length ? customRoles : null;
+          updates['EVLT_ADMIN_DB/removedRoles'] = removedRoles.length ? removedRoles : null;
+          await database.ref().update(updates);
+          db.volunteers = volunteers;
+          db.rolePageAccess = rolePageAccess;
+          db.customRoles = customRoles;
+          db.removedRoles = removedRoles;
+          renderRolePermissionSettings();
+          renderPermissionAccountSummary();
+        } catch (err) {
+          console.error('Could not delete role:', err);
+          alert('Could not delete the role. Check your connection and try again.');
+        }
+      }
+
       async function saveRolePermissionSettings() {
         if (!currentUser || !currentUser.isSystemAdmin || !database) return;
         const role = document.getElementById('permissionRoleSelect')?.value;
@@ -8693,18 +8792,8 @@
         }));
 
         try {
-          const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
-          const bindings = bindingsSnapshot.val() || {};
-          const updates = { 'EVLT_ADMIN_DB/rolePageAccess': rolePageAccess };
-          Object.entries(bindings).forEach(([uid, binding]) => {
-            if (!binding || binding.approved !== true) return;
-            const volunteer = getVolunteerByName(binding.volunteerName);
-            const roles = getVolunteerRoles(volunteer);
-            const permissions = getRolePermissionProjectionWithPolicy(roles, rolePageAccess);
-            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/grantedPages'] = permissions.grantedPages;
-            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/editablePages'] = permissions.editablePages;
-            updates['EVLT_ACCOUNT_BINDINGS/' + uid + '/permissionsVersion'] = 2;
-          });
+          const updates = await buildAccountPermissionUpdates(rolePageAccess);
+          updates['EVLT_ADMIN_DB/rolePageAccess'] = rolePageAccess;
           await database.ref().update(updates);
           db.rolePageAccess = rolePageAccess;
           rolePermissionsNeedMigration = false;

@@ -29,3 +29,9 @@ System Admins manage page access and editing from **Admin → Access & Permissio
 The first time the permissions page is opened on an existing database, current account grants are shown against each linked volunteer role. Review the role matrix and choose **Save role permissions** to apply it. This migration is not written until an admin saves the matrix. Existing write access remains in place until that save; afterward, Firebase enforces the new edit permissions.
 
 Deploy the updated Realtime Database rules with the application before using role based editing. The rules enforce edit access independently of the controls shown in the interface.
+
+## Volunteer cards, roles and licences
+
+The Volunteers page shows one card per volunteer, with their roles, DBS status, hours and licence/qualification records. System Admins can add and delete roles from **Admin → Access & Permissions** (deleting a role removes it from volunteers and recalculates linked account access). Anyone with Edit access to Documents can add or update licence records from a volunteer's card.
+
+Deploy order: publish the database rules first (`firebase deploy --only database`), then upload the app files. The Volunteers page now reads `volunteerDocs` and `removedRoles`, and a signed-in volunteer would be signed out if the matching rules were not live yet.

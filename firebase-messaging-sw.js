@@ -21,7 +21,9 @@ self.addEventListener('push', (event) => {
   const title = data.title || note.title || '🚂 EVLT Operations';
   const body = data.body || note.body || 'You have a new alert.';
   const iconUrl = new URL('apple-touch-icon.png', self.location.href).href;
-  const options = { body: body, icon: iconUrl, badge: iconUrl, data: data };
+  // Android shows only the shape of the badge in the status bar, so it must be a plain single-colour image
+  const badgeUrl = new URL('notification-badge.png', self.location.href).href;
+  const options = { body: body, icon: iconUrl, badge: badgeUrl, vibrate: [200, 100, 200], data: data };
   if (data.tag) options.tag = data.tag;
 
   // Always show something: iOS cancels push permission for sites that receive a push without showing one.
