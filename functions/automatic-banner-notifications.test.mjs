@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { getNotificationBanners, resolveNotificationBanner, bannerEligible } from './banner-notifications.js';
+const now = new Date('2026-11-03T10:00:00Z');
+const account = { uid: 'a', volunteerName: 'Test Person', grantedPages: { dashboard: true, actions: true, maintenance: true, notifications: true } };
+const data = { bannerSettings: { 'my-overdue-actions': { notification: { mode: 'daily' }, text: '{count} task{s}: {list}' } }, actions: [{ Title: 'Inspect track', AssignedTo: 'Test Person', DueDate: '2026-11-01' }] };
+assert.equal(getNotificationBanners(data).length, 1);
+let banner = resolveNotificationBanner(getNotificationBanners(data)[0], account, data, now);
+assert.equal(banner.text, '1 task: Inspect track');
+assert.equal(bannerEligible(banner, account, data, now), true);
+assert.equal(resolveNotificationBanner(getNotificationBanners(data)[0], { ...account, volunteerName: 'Other Person' }, data, now), null);
+assert.equal(resolveNotificationBanner(getNotificationBanners(data)[0], { ...account, grantedPages: { dashboard: true } }, data, now), null);
+assert.equal(resolveNotificationBanner(getNotificationBanners(data)[0], account, { ...data, actions: [] }, now), null);
+const unreadData = { bannerSettings: { 'unread-notifications': { notification: { mode: 'daily' } } }, notifications: [{ id: 'new', sentAt: '2026-11-03T09:00:00Z' }, { id: 'own-reminder', bannerId: 'builtin:unread-notifications', sentAt: '2026-11-03T09:30:00Z' }] };
+const unread = getNotificationBanners(unreadData)[0];
+assert.equal(resolveNotificationBanner(unread, account, unreadData, now).text, 'You have 1 unread notification');
+assert.equal(resolveNotificationBanner(unread, account, { ...unreadData, notificationReadTimes: { a: '2026-11-03T09:15:00Z' } }, now), null);
+assert.equal(resolveNotificationBanner(unread, account, { ...unreadData, notifications: [{ unreadReminder: true, sentAt: '2026-11-03T09:00:00Z' }] }, now), null);
+const checksData = { bannerSettings: { 'daily-checks': { notification: { mode: 'once' } } }, dailyChecks: { lastCheckDate: '2026-11-03', trackWalk: { result: 'Pass' }, runningTrains: [], testRun: {} } };
+assert.equal(resolveNotificationBanner(getNotificationBanners(checksData)[0], account, checksData, now), null);
+checksData.dailyChecks.runningTrains = ['train'];
+assert.match(resolveNotificationBanner(getNotificationBanners(checksData)[0], account, checksData, now).text, /test run/);
+const driverData = { bannerSettings: { 'driver-status': { notification: { mode: 'daily' } } } };
+assert.match(resolveNotificationBanner(getNotificationBanners(driverData)[0], account, driverData, now).text, /0 qualified drivers/);
+assert.equal(getNotificationBanners({ bannerSettings: { 'my-overdue-actions': { active: false, notification: { mode: 'daily' } } } }).length, 0);
+console.log('Automatic banner content, recipients, conditions, saved read times and reminder-loop checks passed.');
+
