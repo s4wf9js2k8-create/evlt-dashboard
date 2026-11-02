@@ -196,7 +196,7 @@
         eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
         suppliers: ['suppliers'],
         enquiries: ['enquiries'],
-        documents: ['documents','volunteerDocs','archiveUploads','itemCodes'],
+        documents: ['documents','volunteerDocs','archiveUploads','itemCodes','loftMaps'],
         notes: ['notes'],
         archives: ['historicalArchive','archiveUploads','clockLogs','incidents','maintenanceLogs'],
         notifications: ['notifications'],
@@ -7045,13 +7045,20 @@
         reader.readAsDataURL(file);
       }
 
-      function setDocsSubView(view) { docsSubView = view; renderDocuments(); }
+      function setDocsSubView(view) {
+        if (docsSubView === 'lofts' && loftDraft && view !== 'lofts') {
+          if (loftSaving || !confirm('Discard your unsaved layout changes?')) return;
+          loftDraft = null; loftDrawing = false;
+        }
+        docsSubView = view; renderDocuments();
+      }
 
       function docsTabsHtml() {
         return `
           <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn ${docsSubView === 'general' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('general')">General Documents</button>
             <button class="btn ${docsSubView === 'items' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('items')">Item Register</button>
+            <button class="btn ${docsSubView === 'lofts' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('lofts')">Loft Map</button>
             <button class="btn ${docsSubView === 'volunteer' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('volunteer')">Volunteer Documents</button>
           </div>`;
       }
@@ -7226,6 +7233,7 @@
         if (docsSubView !== 'items') stopItemCodeCamera();
         if (docsSubView === 'volunteer') return renderVolunteerDocs();
         if (docsSubView === 'items') return renderItemCodeRegister();
+        if (docsSubView === 'lofts') return renderLoftMap();
         renderGenericModule('documents');
       }
 
@@ -7238,7 +7246,7 @@
       function renderItemCodeRegister() {
         stopItemCodeCamera();
         const content = document.getElementById('content');
-        const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
+        const records = (Array.isArray(db.itemCodes) ? db.itemCodes : []).map(item => ({ ...item, location: getItemStorageLocation(item) }));
         const query = itemCodeSearch.trim().toLowerCase();
         const key = itemCodeSort === 'code' ? 'itemCode' : itemCodeSort === 'name' ? 'itemName' : 'location';
         const categoryOptions = [...new Set(records.map(item => String(item.category || '').trim()).filter(Boolean))].sort();
@@ -7305,7 +7313,7 @@
             <thead><tr><th>Item code</th><th>Item</th><th>Location</th><th>Category</th><th>Notes</th><th></th></tr></thead>
             <tbody>${sorted.length ? sorted.map(item => `
               <tr><td><code>${escapeHtml(item.itemCode)}</code></td><td><strong>${escapeHtml(item.itemName || '-')}</strong></td>
-                <td>${escapeHtml(item.location || 'Unassigned')}</td><td>${escapeHtml(item.category || '-')}</td><td>${escapeHtml(item.notes || '-')}</td>
+                <td>${getItemLoftLink(item) ? `<button type="button" class="loft-location-link" onclick="showItemOnLoftMap(${inlineJsArg(item.id)})">${escapeHtml(item.location)} — map</button>` : escapeHtml(item.location || 'Unassigned')}</td><td>${escapeHtml(item.category || '-')}</td><td>${escapeHtml(item.notes || '-')}</td>
                 <td><div style="display:flex;gap:.35rem;justify-content:flex-end;"><button type="button" class="btn btn-secondary btn-sm" onclick="openItemCodeForm(${inlineJsArg(item.id)})" aria-label="Edit ${escapeHtml(item.itemCode)}" title="Edit"><i data-lucide="pencil"></i></button><button type="button" class="btn btn-danger btn-sm" onclick="deleteItemCode(${inlineJsArg(item.id)})" aria-label="Delete ${escapeHtml(item.itemCode)}" title="Delete"><i data-lucide="trash-2"></i></button></div></td>
               </tr>`).join('') : `<tr><td colspan="6" class="item-register-empty">${records.length ? 'No items match the current filters.' : 'No items registered yet. Scan a code or add the first item.'}</td></tr>`}</tbody>
           </table></div></div>`;
@@ -7373,7 +7381,7 @@
       }
 
       function getItemCodeRecommendationData(category = '', location = '') {
-        const records = Array.isArray(db.itemCodes) ? db.itemCodes : [];
+        const records = (Array.isArray(db.itemCodes) ? db.itemCodes : []).map(item => ({ ...item, location: getItemStorageLocation(item) }));
         const categoryKey = normaliseItemCodeCategory(category);
         const locationKey = normaliseItemCodeCategory(location);
         const locationCounts = {};
@@ -7471,10 +7479,10 @@
         if (!editor) return;
         const existing = id === null ? null : (db.itemCodes || []).find(item => String(item.id) === String(id));
         const categoryValue = existing?.category || '';
-        const locationValue = existing?.location || '';
+        const locationValue = existing ? getItemStorageLocation(existing) : '';
         const recommendationData = getItemCodeRecommendationData(categoryValue, locationValue);
         const categoryOptions = [...new Set((db.itemCodes || []).map(item => item.category).filter(Boolean))].sort();
-        const locationOptions = [...new Set((db.itemCodes || []).map(item => item.location).filter(Boolean))].sort();
+        const locationOptions = [...new Set((db.itemCodes || []).map(getItemStorageLocation).filter(Boolean))].sort();
         const suggestedLocationHtml = recommendationData.suggestedLocations.length ? `<div class="item-code-recommendations"><span>Suggested locations</span><div class="item-code-recommendation-list">${recommendationData.suggestedLocations.slice(0, 4).map(item => `<button type="button" class="item-code-suggestion-tag" onclick="applyItemCodeSuggestion('location', ${inlineJsArg(item.name)})">${escapeHtml(item.name)}</button>`).join('')}</div></div>` : '';
         const suggestedCategoryHtml = recommendationData.suggestedCategories.length ? `<div class="item-code-recommendations"><span>Suggested categories</span><div class="item-code-recommendation-list">${recommendationData.suggestedCategories.slice(0, 4).map(item => `<button type="button" class="item-code-suggestion-tag" onclick="applyItemCodeSuggestion('category', ${inlineJsArg(item.name)})">${escapeHtml(item.name)}</button>`).join('')}</div></div>` : '';
         const defaultCode = existing?.itemCode || scannedCode || (categoryValue ? getNextAvailableItemCode(categoryValue) : '');
@@ -7490,6 +7498,7 @@
               <div class="form-group"><label for="itemCodeName">Item name</label><input id="itemCodeName" required maxlength="160" value="${escapeHtml(existing?.itemName || '')}" placeholder="What is the item?"></div>
               <div class="form-group"><label for="itemCodeLocationSelect">Storage location</label><div class="item-code-choice-stack"><select id="itemCodeLocationSelect" onchange="setItemCodeChoiceMode('location', this.value)"><option value="">Select location</option>${locationOptions.map(location => `<option value="${escapeHtml(location)}" ${locationSelectedValue === location ? 'selected' : ''}>${escapeHtml(location)}</option>`).join('')}<option value="__custom__" ${locationSelectedValue === '__custom__' ? 'selected' : ''}>Add new location…</option></select><input id="itemCodeLocationCustom" type="text" value="${escapeHtml(locationValue && !locationOptions.includes(locationValue) ? locationValue : '')}" placeholder="New storage location" style="display:${locationSelectedValue === '__custom__' ? 'block' : 'none'};" /></div>${suggestedLocationHtml}</div>
               <div class="form-group"><label for="itemCodeCategorySelect">Category</label><div class="item-code-choice-stack"><select id="itemCodeCategorySelect" onchange="setItemCodeChoiceMode('category', this.value); syncItemCodeSuggestion();"><option value="">Select category</option>${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${categorySelectedValue === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}<option value="__custom__" ${categorySelectedValue === '__custom__' ? 'selected' : ''}>Add new category…</option></select><input id="itemCodeCategoryCustom" type="text" value="${escapeHtml(categoryValue && !categoryOptions.includes(categoryValue) ? categoryValue : '')}" placeholder="New category" style="display:${categorySelectedValue === '__custom__' ? 'block' : 'none'};" oninput="syncItemCodeSuggestion()" /></div>${suggestedCategoryHtml}</div>
+              <div class="form-group item-code-notes"><label for="itemLoftZone">Loft map section</label><select id="itemLoftZone" onchange="itemLoftSelectionChanged()">${itemLoftZoneOptions(existing?.loftMapId && existing?.loftSectionId ? existing.loftMapId + '|' + existing.loftSectionId : '')}</select><small style="color:var(--text-muted);">Choose a saved section to link this item to its position on the map. An admin can add sections in Loft Map.</small></div>
               <div class="form-group item-code-notes"><label for="itemCodeNotes">Notes</label><textarea id="itemCodeNotes" rows="2" maxlength="500" placeholder="Optional details">${escapeHtml(existing?.notes || '')}</textarea></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-secondary btn-sm" onclick="closeItemCodeForm()">Cancel</button><button type="submit" class="btn btn-primary btn-sm">${existing ? 'Save changes' : 'Save item'}</button></div>
@@ -7502,6 +7511,7 @@
           categoryFocusTarget?.focus();
         }
         syncItemCodeSuggestion();
+        itemLoftSelectionChanged();
       }
 
       function closeItemCodeForm() {
@@ -7514,7 +7524,8 @@
         event.preventDefault();
         const itemCode = String(document.getElementById('itemCodeValue')?.value || '').trim();
         const itemName = String(document.getElementById('itemCodeName')?.value || '').trim();
-        const location = getItemCodeChoiceValue('location');
+        const mapLink = selectedItemLoftZone();
+        const location = mapLink?.label || getItemCodeChoiceValue('location');
         const category = getItemCodeChoiceValue('category');
         if (!itemCode || !itemName || !location || !category) return;
         const records = Array.isArray(db.itemCodes) ? db.itemCodes.slice() : [];
@@ -7529,6 +7540,8 @@
           itemCode,
           itemName,
           location,
+          loftMapId: mapLink?.mapId || '',
+          loftSectionId: mapLink?.sectionId || '',
           category,
           notes: String(document.getElementById('itemCodeNotes')?.value || '').trim(),
           updatedAt: new Date().toISOString(),
