@@ -8071,64 +8071,48 @@
       }
 
       async function deleteApprovedAccount(uid) {
+        const firebaseUser = auth && auth.currentUser;
+        if (!firebaseUser || !currentUser || !currentUser.isSystemAdmin || !database) {
+          alert('Revoke failed: you must be signed in as a System Admin.');
+          return false;
+        }
+        const targetUid = String(uid || '').trim();
+        if (!targetUid) {
+          alert('Revoke failed: the selected account has no Firebase UID.');
+          return false;
+        }
+        if (!confirm("Revoke this account's EVLT Operations access? This removes its approval but does not delete the Firebase Authentication login or historical Trust records.")) return false;
+
+        const panel = document.getElementById('permissionAccountsPanel');
+        const button = panel && Array.from(panel.querySelectorAll('button')).find(el =>
+          (el.getAttribute('onclick') || '').includes(targetUid)
+        );
+        if (button) { button.disabled = true; button.textContent = 'Revoking access…'; }
+
         try {
-          const firebaseUser = auth && auth.currentUser;
-          if (!firebaseUser || !currentUser || !currentUser.isSystemAdmin || !database) {
-            alert('Revoke failed: you must be signed in as a System Admin.');
-            return false;
-          }
-          const targetUid = String(uid || '').trim();
-          if (!targetUid) {
-            alert('Revoke failed: the selected account has no Firebase UID.');
-            return false;
-          }
-          if (!confirm("Revoke this account's EVLT Operations access? This removes its approval but does not delete the Firebase Authentication login or historical Trust records.")) return false;
+          // A successful Realtime Database remove() resolves only after Firebase
+          // accepts the write. Do not follow it with a read: the parent account
+          // list has separate read rules and can leave the UI stuck at "Verifying".
+          await database.ref('EVLT_ACCOUNT_BINDINGS/' + targetUid).remove();
 
-          const panel = document.getElementById('permissionAccountsPanel');
-          const button = panel && Array.from(panel.querySelectorAll('button')).find(el =>
-            (el.getAttribute('onclick') || '').includes(targetUid)
-          );
-          if (button) { button.disabled = true; button.textContent = 'Connecting to Firebase…'; }
+          // Remove this row locally. This avoids a second parent-level read and
+          // keeps the UI accurate even if the account-list read is restricted.
+          const accountRow = button && button.parentElement;
+          if (accountRow) accountRow.remove();
 
-          let timeoutId;
-          const firebaseStep = (promise, label) => Promise.race([
-            promise,
-            new Promise((_, reject) => {
-              timeoutId = window.setTimeout(() => reject(new Error('Timed out while ' + label + '. Firebase did not respond. Check the connection and database rules.')), 10000);
-            })
-          ]).finally(() => { if (timeoutId) { window.clearTimeout(timeoutId); timeoutId = null; } });
+          // Clear a matching pending request in the background. It is not needed
+          // to revoke access, and must not delay confirmation of the successful revoke.
+          database.ref('EVLT_ACCOUNT_REQUESTS/' + targetUid).remove().catch(err => {
+            console.warn('Account access revoked, but pending request cleanup failed:', err);
+          });
 
-          try {
-            if (button) button.textContent = 'Revoking access…';
-            // Do not perform a separate admin-UID read first: it can stall and
-            // prevents the actual revoke write from ever being attempted.
-            await firebaseStep(database.ref('EVLT_ACCOUNT_BINDINGS/' + targetUid).remove(), 'removing the approved account binding');
-            if (button) button.textContent = 'Verifying removal…';
-            const check = await firebaseStep(database.ref('EVLT_ACCOUNT_BINDINGS/' + targetUid).once('value'), 'verifying account removal');
-            if (check.exists()) throw new Error('Firebase still contains this approved account binding.');
-
-            // A pending request is optional cleanup; it must not undo a successful revoke.
-            let requestNote = '';
-            try {
-              await firebaseStep(database.ref('EVLT_ACCOUNT_REQUESTS/' + targetUid).remove(), 'clearing the pending request');
-            } catch (cleanupError) {
-              console.warn('Binding removed; pending request cleanup failed:', cleanupError);
-              requestNote = ' The pending sign-up request could not be removed.';
-            }
-
-            renderPermissionAccountSummary();
-            alert('Verified: this account no longer has EVLT Operations approval.' + requestNote + ' Its Firebase Authentication login still exists.');
-            return true;
-          } catch (err) {
-            console.error('Account revocation failed:', err);
-            const code = err && err.code ? String(err.code) : 'REQUEST_FAILED';
-            alert('Revoke account failed (' + code + '): ' + (err && err.message ? err.message : 'Unknown Firebase error.'));
-            if (button) { button.disabled = false; button.textContent = 'Revoke account'; }
-            return false;
-          }
-        } catch (unexpected) {
-          console.error('Unexpected revoke handler error:', unexpected);
-          alert('The Revoke account button encountered an error: ' + (unexpected && unexpected.message ? unexpected.message : String(unexpected)));
+          alert('Access revoked successfully. The approved EVLT Operations account binding has been removed. The Firebase Authentication login and historical Trust records have not been deleted.');
+          return true;
+        } catch (err) {
+          console.error('Account revocation failed:', err);
+          const code = err && err.code ? String(err.code) : 'REQUEST_FAILED';
+          alert('Revoke account failed (' + code + '): ' + (err && err.message ? err.message : 'Unknown Firebase error.'));
+          if (button) { button.disabled = false; button.textContent = 'Revoke account'; }
           return false;
         }
       }
