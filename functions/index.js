@@ -238,19 +238,21 @@ export const forceRevokeAccount = onCall(
  
 // Server checks keep banner alerts running when every browser is closed.
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { asList as bannerList, bannerEligible, deliveryId } from './banner-notifications.js';
+import { asList as bannerList, bannerEligible, deliveryId, getNotificationBanners, resolveNotificationBanner } from './banner-notifications.js';
 
 export const sendScheduledBannerNotifications = onSchedule(
   { schedule: 'every 5 minutes', timeZone: 'Europe/London', region: 'europe-west1', timeoutSeconds: 300, maxInstances: 1, retryCount: 2 },
   async () => {
     const database = getDatabase();
-    const [dataSnap, bindingsSnap, adminsSnap] = await Promise.all([
+    const [dataSnap, bindingsSnap, adminsSnap, readTimesSnap] = await Promise.all([
       database.ref('EVLT_ADMIN_DB').get(),
       database.ref('EVLT_ACCOUNT_BINDINGS').get(),
-      database.ref('EVLT_SYSTEM_ADMIN_UIDS').get()
+      database.ref('EVLT_SYSTEM_ADMIN_UIDS').get(),
+      database.ref('EVLT_NOTIFICATION_READS').get()
     ]);
     const data = dataSnap.val() || {};
-    const banners = bannerList(data.customBanners).filter(b => b.id && b.active !== false && ['once', 'daily'].includes(b.notification?.mode));
+    data.notificationReadTimes = readTimesSnap.val() || {};
+    const banners = getNotificationBanners(data);
     if (!banners.length) return;
     const accounts = Object.fromEntries(Object.entries(bindingsSnap.val() || {}).filter(([, b]) => b?.approved === true));
     for (const [uid, enabled] of Object.entries(adminsSnap.val() || {})) {
@@ -263,9 +265,11 @@ export const sendScheduledBannerNotifications = onSchedule(
     }
     const now = new Date();
     let delivered = 0;
-    for (const banner of banners) {
-      for (const [uid, account] of Object.entries(accounts)) {
-        if (!bannerEligible(banner, account, data, now)) continue;
+    for (const configuredBanner of banners) {
+      for (const [uid, binding] of Object.entries(accounts)) {
+        const account = { ...binding, uid };
+        const banner = resolveNotificationBanner(configuredBanner, account, data, now);
+        if (!banner || !bannerEligible(banner, account, data, now)) continue;
         const id = deliveryId(banner.id, uid, banner.notification.mode, now);
         const state = database.ref('banner_notification_state/' + id);
         const claim = await state.transaction(previous => {
@@ -291,6 +295,7 @@ export const sendScheduledBannerNotifications = onSchedule(
             sentBy: 'Automatic banner',
             recipientUids: [uid],
             bannerId: banner.id,
+            unreadReminder: banner.builtinKey === 'unread-notifications' || (banner.when?.conditions || []).includes('unreadNotifications'),
             linkPage: banner.linkPage || 'dashboard'
           };
           await database.ref('EVLT_ADMIN_DB/notifications').transaction(value => {
