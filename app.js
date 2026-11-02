@@ -8036,7 +8036,7 @@
 
       async function deleteApprovedAccount(uid) {
         if (!currentUser || !currentUser.isSystemAdmin || !database) {
-          alert('Only a signed-in System Admin can revoke an approved account.');
+          alert('Only a signed-in System Admin can remove an approved account.');
           return false;
         }
         const account = String(uid || '').trim();
@@ -8044,26 +8044,42 @@
           alert('The account ID is missing. Refresh the page and try again.');
           return false;
         }
-        if (!confirm("Revoke this account's EVLT Operations access? This removes its approval and page permissions, but does not delete its Firebase Authentication login or volunteer record.")) return false;
+        if (!confirm("Remove this person's EVLT Operations account approval and sign-up request? This does NOT erase historical Trust records or delete their Firebase Authentication login.")) return false;
 
-        const buttons = Array.from(document.querySelectorAll('#permissionAccountsPanel button'));
-        buttons.forEach(button => { button.disabled = true; button.dataset.originalText = button.textContent; button.textContent = 'Revoking…'; });
+        const button = Array.from(document.querySelectorAll('#permissionAccountsPanel button'))
+          .find(el => (el.getAttribute('onclick') || '').includes(account));
+        const originalText = button ? button.textContent : 'Revoke account';
+        if (button) { button.disabled = true; button.textContent = 'Removing…'; }
+
+        let timeoutId;
         try {
-          await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).remove();
-          const verification = await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).once('value');
-          if (verification.exists()) throw new Error('The account binding is still present after the revoke request.');
-          alert('Account access has been revoked successfully.');
+          const removal = (async () => {
+            await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).remove();
+            await database.ref('EVLT_ACCOUNT_REQUESTS/' + account).remove();
+            const check = await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).once('value');
+            if (check.exists()) throw new Error('Firebase returned success, but the account approval is still present.');
+          })();
+          await Promise.race([
+            removal,
+            new Promise((_, reject) => {
+              timeoutId = window.setTimeout(() => reject(new Error('Firebase did not respond within 12 seconds. The removal may still be processing; refresh the list before trying again.')), 12000);
+            })
+          ]);
+          alert('The EVLT account approval and sign-up request have been removed.');
           loadApprovedAccountAccess();
+          if (typeof loadPendingAccountRequests === 'function') loadPendingAccountRequests();
           return true;
         } catch (err) {
-          console.error('Could not revoke approved account:', err);
+          console.error('Could not remove approved account:', err);
           const code = err && err.code ? String(err.code) : 'UNKNOWN';
           const detail = code === 'PERMISSION_DENIED'
-            ? 'Firebase rejected the deletion. The live EVLT_ACCOUNT_BINDINGS write rule must allow your signed-in System Admin UID.'
-            : (err && err.message ? err.message : 'Please check your connection and try again.');
-          alert('Could not revoke this account (' + code + '). ' + detail);
-          buttons.forEach(button => { button.disabled = false; button.textContent = button.dataset.originalText || 'Revoke account'; });
+            ? 'Firebase denied the write. Check that your signed-in UID is listed under EVLT_SYSTEM_ADMIN_UIDS in the live Realtime Database.'
+            : (err && err.message ? err.message : 'Check your connection and try again.');
+          alert('Account removal did not complete (' + code + '). ' + detail);
+          if (button) { button.disabled = false; button.textContent = originalText; }
           return false;
+        } finally {
+          if (timeoutId) window.clearTimeout(timeoutId);
         }
       }
 
