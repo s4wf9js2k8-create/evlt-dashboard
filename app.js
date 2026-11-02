@@ -4218,39 +4218,42 @@
       async function deleteVolunteer(index) {
         if (!currentUser || !currentUser.isSystemAdmin || !database) {
           alert('Only the System Admin can delete volunteer profiles.');
-          return;
+          return false;
         }
         const vol = (db.volunteers || [])[index];
-        if (!vol) return;
+        if (!vol) {
+          alert('This volunteer is no longer in the current list. Refresh the page and try again.');
+          return false;
+        }
         const volName = getVolunteerName(vol);
         const normalizedName = String(volName || '').trim().toLowerCase();
         if (!normalizedName) {
           alert('This volunteer record has no name. No data was changed.');
-          return;
+          return false;
         }
-        if (!confirm('Permanently remove the volunteer profile for "' + volName + '"? This also removes their qualification/document records, account approval and pending access request. Historical attendance, clock logs, maintenance records, incidents and other Trust operational history will be retained. Their Firebase Authentication login is NOT deleted.')) return;
+        if (!confirm('Permanently remove the volunteer profile for "' + volName + '"? Personal qualification/document records and account access will be removed. Historical attendance, clock logs, maintenance records and incident reports will be retained. Firebase Authentication login is not deleted.')) return false;
 
+        const deleteButtons = Array.from(document.querySelectorAll('#content button')).filter(button =>
+          (button.getAttribute('onclick') || '').includes('deleteVolunteer(')
+        );
+        deleteButtons.forEach(button => { button.disabled = true; });
         try {
-          // Identify linked accounts by the volunteer name recorded in the approved binding.
           const [bindingsSnapshot, requestsSnapshot] = await Promise.all([
             database.ref('EVLT_ACCOUNT_BINDINGS').once('value'),
             database.ref('EVLT_ACCOUNT_REQUESTS').once('value')
           ]);
           const bindings = bindingsSnapshot.val() || {};
           const requests = requestsSnapshot.val() || {};
+          const email = String(vol.Email || vol.email || '').trim().toLowerCase();
           const linkedUids = Object.entries(bindings)
             .filter(([, binding]) => binding && String(binding.volunteerName || '').trim().toLowerCase() === normalizedName)
             .map(([uid]) => uid);
           const requestUids = Object.entries(requests)
             .filter(([, request]) => request && (
               String(request.name || '').trim().toLowerCase() === normalizedName ||
-              String(request.email || '').trim().toLowerCase() === String(vol.Email || vol.email || '').trim().toLowerCase()
+              (email && String(request.email || '').trim().toLowerCase() === email)
             ))
             .map(([uid]) => uid);
-
-          // Revoke account access before deleting the volunteer profile.
-          for (const uid of linkedUids) await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove();
-          for (const uid of requestUids) await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove();
 
           const remainingVolunteers = (db.volunteers || []).filter((item, itemIndex) => itemIndex !== index);
           const remainingDocs = (db.volunteerDocs || []).filter(doc =>
@@ -4259,30 +4262,42 @@
           const remainingPermissions = { ...(db.userPermissions || {}) };
           delete remainingPermissions[volName];
 
-          const saved = await dbUpdate({
+          // Write directly beneath EVLT_ADMIN_DB, then read the live database back.
+          // Do not show success based only on a local state update.
+          await database.ref('EVLT_ADMIN_DB').update({
             volunteers: remainingVolunteers,
             volunteerDocs: remainingDocs,
             userPermissions: remainingPermissions
           });
-          if (!saved) {
-            alert('The account approval may have been revoked, but the volunteer profile could not be saved as deleted. Refresh the page and check the record before retrying.');
-            return;
+
+          const verifySnapshot = await database.ref('EVLT_ADMIN_DB/volunteers').once('value');
+          const savedVolunteers = verifySnapshot.val() || [];
+          const stillExists = (Array.isArray(savedVolunteers) ? savedVolunteers : Object.values(savedVolunteers))
+            .some(item => String(getVolunteerName(item) || '').trim().toLowerCase() === normalizedName);
+          if (stillExists) {
+            throw new Error('VERIFICATION_FAILED: Firebase still returns this volunteer profile after the save.');
           }
 
-          db.volunteers = remainingVolunteers;
+          // Remove associated access only after the profile deletion is verified.
+          for (const uid of linkedUids) await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove();
+          for (const uid of requestUids) await database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove();
+
+          db.volunteers = Array.isArray(savedVolunteers) ? savedVolunteers : Object.values(savedVolunteers);
           db.volunteerDocs = remainingDocs;
           db.userPermissions = remainingPermissions;
-          alert('Volunteer profile and linked account access removed. Historical Trust records have been retained. The Firebase Authentication login still exists and must be deleted separately by an authorised server-side admin process.');
           renderVolunteers();
+          alert('Verified: the volunteer profile is no longer in Firebase. Personal qualification/document records and linked account access were removed. Historical Trust records were retained. The Firebase Authentication login still exists.');
+          return true;
         } catch (err) {
-          console.error('Volunteer profile removal failed:', err);
+          console.error('Volunteer profile deletion failed:', err);
           const code = err && err.code ? String(err.code) : 'UNKNOWN';
-          const detail = code === 'PERMISSION_DENIED'
-            ? 'Firebase denied one of the account or profile deletions. No further deletion steps were attempted.'
-            : (err && err.message ? err.message : 'Check your connection and try again.');
-          alert('Could not fully remove this volunteer (' + code + '). ' + detail);
+          const detail = err && err.message ? err.message : 'Check the Firebase connection and try again.';
+          alert('Deletion NOT verified (' + code + '). ' + detail + ' No success has been reported. Refresh the page and check the Volunteers list before retrying.');
+          deleteButtons.forEach(button => { button.disabled = false; });
+          return false;
         }
       }
+
       let maintAssetFilterValue = '';
 
       function renderMaintenancePage() {
