@@ -8035,10 +8035,36 @@
       }
 
       async function deleteApprovedAccount(uid) {
-        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
-        if (!confirm('Delete this approved account and revoke its page access?')) return;
-        await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove();
-        loadApprovedAccountAccess();
+        if (!currentUser || !currentUser.isSystemAdmin || !database) {
+          alert('Only a signed-in System Admin can revoke an approved account.');
+          return false;
+        }
+        const account = String(uid || '').trim();
+        if (!account) {
+          alert('The account ID is missing. Refresh the page and try again.');
+          return false;
+        }
+        if (!confirm("Revoke this account's EVLT Operations access? This removes its approval and page permissions, but does not delete its Firebase Authentication login or volunteer record.")) return false;
+
+        const buttons = Array.from(document.querySelectorAll('#permissionAccountsPanel button'));
+        buttons.forEach(button => { button.disabled = true; button.dataset.originalText = button.textContent; button.textContent = 'Revoking…'; });
+        try {
+          await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).remove();
+          const verification = await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).once('value');
+          if (verification.exists()) throw new Error('The account binding is still present after the revoke request.');
+          alert('Account access has been revoked successfully.');
+          loadApprovedAccountAccess();
+          return true;
+        } catch (err) {
+          console.error('Could not revoke approved account:', err);
+          const code = err && err.code ? String(err.code) : 'UNKNOWN';
+          const detail = code === 'PERMISSION_DENIED'
+            ? 'Firebase rejected the deletion. The live EVLT_ACCOUNT_BINDINGS write rule must allow your signed-in System Admin UID.'
+            : (err && err.message ? err.message : 'Please check your connection and try again.');
+          alert('Could not revoke this account (' + code + '). ' + detail);
+          buttons.forEach(button => { button.disabled = false; button.textContent = button.dataset.originalText || 'Revoke account'; });
+          return false;
+        }
       }
 
       function renderAccessForbidden(view) {
