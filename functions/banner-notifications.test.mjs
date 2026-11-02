@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { bannerEligible, londonTime, deliveryId } from './banner-notifications.js';
+const now = new Date('2026-11-03T10:00:00Z');
+const banner = { id: 'test', text: 'Reminder', notification: { mode: 'daily' }, when: {}, audience: {} };
+const account = { volunteerName: 'Test Person', grantedPages: { dashboard: true, maintenance: true } };
+const data = { volunteers: [{ Name: 'Test Person', Roles: 'Driver, Standard' }] };
+assert.equal(bannerEligible(banner, account, data, now), true);
+assert.equal(bannerEligible({ ...banner, active: false }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, notification: { mode: 'off' } }, account, data, now), false);
+assert.equal(bannerEligible(banner, { ...account, grantedPages: {} }, data, now), false);
+assert.equal(bannerEligible({ ...banner, audience: { people: ['Someone Else'] } }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, audience: { roles: ['Driver'] } }, account, data, now), true);
+assert.equal(bannerEligible({ ...banner, audience: { pages: ['maintenance'] } }, account, data, now), true);
+assert.equal(bannerEligible({ ...banner, when: { start: '2026-11-04' } }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, when: { days: [0] } }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, when: { timeFrom: '22:00', timeTo: '02:00' } }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, when: { timeFrom: '22:00', timeTo: '02:00' } }, account, data, new Date('2026-11-03T23:00:00Z')), true);
+assert.equal(londonTime(new Date('2026-07-01T09:00:00Z')).minute, 600);
+assert.equal(londonTime(now).minute, 600);
+assert.equal(bannerEligible({ ...banner, when: { conditions: ['myOverdueActions'] } }, account, { ...data, actions: [{ AssignedTo: 'Test Person', DueDate: '01/11/2026' }] }, now), true);
+assert.equal(bannerEligible({ ...banner, when: { conditions: ['myOverdueActions'] } }, account, { ...data, actions: [{ AssignedTo: 'Someone Else', DueDate: '01/11/2026' }] }, now), false);
+assert.equal(bannerEligible({ ...banner, when: { conditions: ['unreadNotifications'] } }, account, data, now), false);
+assert.equal(bannerEligible({ ...banner, when: { conditions: ['trackWalkMissing'] } }, account, { ...data, dailyChecks: { lastCheckDate: '2026-11-02', trackWalk: { result: 'Pass' } } }, now), true);
+assert.equal(deliveryId('b', 'u', 'once', now), deliveryId('b', 'u', 'once', new Date('2026-11-04')));
+assert.notEqual(deliveryId('b', 'u', 'daily', now), deliveryId('b', 'u', 'daily', new Date('2026-11-04')));
+assert.notEqual(deliveryId('b', 'u', 'once', now), deliveryId('b', 'other', 'once', now));
+console.log('Banner timing, audience, conditions and duplicate-prevention checks passed.');
+
