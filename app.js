@@ -1271,6 +1271,14 @@
       // notification for anyone with the app open at the time.
       // ============================================================
 
+      function notificationIsForCurrentUser(notification) {
+        return !Array.isArray(notification.recipientUids) || notification.recipientUids.includes(auth?.currentUser?.uid);
+      }
+
+      function getVisibleNotifications() {
+        return (db.notifications || []).filter(notificationIsForCurrentUser);
+      }
+
       let notifBaselineSet = false;
       const seenNotificationIds = new Set();
 
@@ -1311,7 +1319,7 @@
       // every message ever sent) and never notifies you about your own
       // broadcasts.
       function processIncomingNotifications() {
-        const list = db.notifications || [];
+        const list = getVisibleNotifications();
         if (!notifBaselineSet) {
           list.forEach(n => seenNotificationIds.add(n.id));
           notifBaselineSet = true;
@@ -1331,7 +1339,7 @@
       }
 
       function getUnreadNotificationCount() {
-        const list = db.notifications || [];
+        const list = getVisibleNotifications();
         if (!list.length) return 0;
         const lastSeen = localStorage.getItem(getNotificationLastSeenKey());
         if (!lastSeen) return list.length;
@@ -1344,7 +1352,7 @@
 
       function renderNotificationsPage() {
         const content = document.getElementById('content');
-        const list = (db.notifications || []).slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
+        const list = getVisibleNotifications().slice().sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
         const isAdmin = canEditFeature('notifications');
 
         content.innerHTML = `
@@ -2759,7 +2767,7 @@
         const customRows = list.length === 0 ? '<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">You have not created any banners yet.</p>' : list.map(b => bannerAdminRow({
           tone: b.tone,
           title: b.title || (String(b.text || '').slice(0, 70) + (String(b.text || '').length > 70 ? '…' : '')),
-          detail: `<strong>Who:</strong> ${escapeHtml(describeBannerAudience(b))}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(b))}`,
+          detail: `<strong>Who:</strong> ${escapeHtml(describeBannerAudience(b))}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(b))}<br><strong>Notification:</strong> ${b.notification?.mode === 'once' ? 'Once per person' : b.notification?.mode === 'daily' ? 'Once per day per person' : 'Off'}`,
           status: bannerStatus(b),
           buttons: `
             <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBannerActive(${inlineJsArg(b.id)})">${b.active === false ? 'Turn on' : 'Turn off'}</button>
@@ -2854,6 +2862,8 @@
         document.getElementById('bannerModalTitle').innerText = isBuiltin ? 'Edit automatic banner: ' + def.label : (b ? 'Edit banner' : 'New banner');
         const show = (elId, on) => { document.getElementById(elId).style.display = on ? '' : 'none'; };
         show('bannerTitleGroup', !isBuiltin);
+        show('bannerNotificationGroup', !isBuiltin);
+        document.getElementById('bannerNotificationMode').value = !isBuiltin && b?.notification?.mode ? b.notification.mode : 'off';
         show('bannerTextGroup', !(isBuiltin && def.fixed));
         show('bannerLookRow', !(isBuiltin && def.fixed));
         show('bannerLinkGroup', !isBuiltin);
@@ -2918,11 +2928,17 @@
           saveBannerSettings(map);
           return;
         }
+        const notificationMode = document.getElementById('bannerNotificationMode').value;
+        if (notificationMode !== 'off' && bannerChecked('banner-cond').includes('unreadNotifications')) {
+          alert('Automatic notifications cannot use “I have unread notifications”: read status is stored on each device. Untick that condition or switch notifications off.');
+          return;
+        }
         const id = document.getElementById('bannerId').value;
         const now = Date.now();
         const existing = id ? getCustomBannerList().find(x => x.id === id) : null;
         const record = {
           id: id || ('b' + now),
+          notification: { mode: notificationMode },
           title: document.getElementById('bannerTitle').value.trim().slice(0, 80),
           text: text.slice(0, 500),
           tone: document.getElementById('bannerTone').value,
