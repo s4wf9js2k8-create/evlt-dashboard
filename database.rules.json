@@ -371,6 +371,13 @@
     "push_status": {
       ".read": "auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true",
       ".write": false
+    },
+    "EVLT_NOTIFICATION_READS": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid && auth.token.email_verified == true",
+        ".write": "auth != null && auth.uid == $uid && auth.token.email_verified == true",
+        ".validate": "newData.isString() && newData.val().length == 24"
+      }
     }
   }
 }
