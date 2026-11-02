@@ -510,6 +510,16 @@
               <div id="bannerConditions" style="display:grid; grid-template-columns:1fr; gap:0.3rem; max-height:190px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem;"></div></div>
           </div>
 
+          <div class="form-group" id="bannerNotificationGroup" style="border-top:1px solid var(--border);padding-top:.75rem;">
+            <label for="bannerNotificationMode">Automatic notification</label>
+            <select id="bannerNotificationMode">
+              <option value="off">Off — banner only</option>
+              <option value="once">Send once per person when requirements are met</option>
+              <option value="daily">Send once per day per person while requirements are met</option>
+            </select>
+            <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">Uses this banner’s title, message and selected audience. Checks every 5 minutes, even with the app closed, using UK time. Appears in Notification Centre for people with access and sends a device alert where push is enabled. “Once” is for the lifetime of this banner; editing or switching it back on does not send it again. The unread-notifications condition cannot trigger an automatic notification.</p>
+          </div>
+
           <div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-bottom:0.75rem;">
             <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; cursor:pointer;"><input type="checkbox" id="bannerActive" checked style="width:14px; height:14px; margin:0;"> Banner is on</label>
             <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; cursor:pointer;"><input type="checkbox" id="bannerDismissible" checked style="width:14px; height:14px; margin:0;"> People can dismiss it</label>
@@ -903,7 +913,7 @@
     </div>
     <script src="help-guides.js"></script>
     <script src="https://unpkg.com/@zxing/browser@0.2.1"></script>
-    <script src="app.js?v=revoke-without-messaging-12"></script>
+    <script src="app.js?v=banner-notifications-13"></script>
   </body>
 </html>
 
