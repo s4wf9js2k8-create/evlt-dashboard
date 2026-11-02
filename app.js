@@ -8892,7 +8892,7 @@
             return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;padding:.65rem 0;border-top:1px solid var(--border-subtle);">
               <div><strong style="font-size:.8rem;">${escapeHtml(binding.volunteerName || 'Volunteer')}</strong><div style="font-size:.72rem;color:var(--text-muted);">${escapeHtml(binding.email)} · ${escapeHtml(roles.join(', ') || 'No role assigned')}</div>
                 <div style="font-size:.7rem;margin-top:.2rem;">View: ${escapeHtml(pages.join(', ') || 'None')}<br>Edit: ${escapeHtml(editable.join(', ') || 'None')}</div></div>
-              <button class="btn btn-danger btn-sm" onclick="deleteApprovedAccount('${inlineJsArg(uid)}')">Revoke account</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteApprovedAccount(${inlineJsArg(uid)})">Revoke account</button>
             </div>`;
           }).join('') : '<p style="font-size:.8rem;color:var(--text-muted);">No approved volunteer accounts yet.</p>';
         }).catch(err => {
