@@ -52,13 +52,15 @@ function loftOutlineAction(action) {
   else if (action === 'cancel') loftDrawing = false;
   renderLoftMap();
 }
-function loftAddSection() {
+function loftAddSection(kind = 'box') {
   if (!loftDraft || !currentUser?.isSystemAdmin || loftDrawing || loftSaving) return;
   let rect = null;
-  for (const size of [18, 10, 4]) {
-    for (let y = 5; y <= 95 - size && !rect; y += 3) for (let x = 5; x <= 95 - size && !rect; x += 3) {
-      const candidate = { x, y, w: size, h: size };
-      const overlaps = loftSections(loftDraft).some(s => x < s.x + s.w && x + size > s.x && y < s.y + s.h && y + size > s.y);
+  const preset = LOFT_SECTION_PRESETS.find(p => p.id === kind) || LOFT_SECTION_PRESETS[0];
+  for (const scale of [1, .65, .35]) {
+    const w = Math.max(3,preset.w * scale), h = Math.max(3,preset.h * scale);
+    for (let y = 5; y <= 95 - h && !rect; y += 3) for (let x = 5; x <= 95 - w && !rect; x += 3) {
+      const candidate = { x, y, w, h };
+      const overlaps = loftSections(loftDraft).some(s => x < s.x + s.w && x + w > s.x && y < s.y + s.h && y + h > s.y);
       if (!overlaps && LoftGeometry.rectFits(candidate, loftDraft.outline)) rect = candidate;
     }
     if (rect) break;
@@ -66,9 +68,9 @@ function loftAddSection() {
   if (!rect) return loftSetStatus('There is no clear space for another section. Resize or move an existing section, or change the outline.');
   const sections = loftSections(loftDraft);
   let number = sections.length + 1;
-  while (sections.some(s => s.name === 'Section ' + number)) number++;
-  const section = { ...rect, id: loftId('section'), name: 'Section ' + number, color: '#c7e2d5' };
-  loftDraft.sections = [...sections, section]; loftSelectedSectionId = section.id; loftStatus = 'Section added. Drag it into position, resize it using the corner, and give it a name.'; renderLoftMap();
+  while (sections.some(s => s.name === preset.name + ' ' + number)) number++;
+  const section = { ...rect, id: loftId('section'), name: preset.name + ' ' + number, color: preset.color };
+  loftDraft.sections = [...sections, section]; loftSelectedSectionId = section.id; loftStatus = 'Section added. Tap its button below the map, then use the arrows and size buttons to position it.'; renderLoftMap();
 }
 function loftUpdateSection(field, value) {
   if (!loftDraft || !currentUser?.isSystemAdmin || loftSaving) return;
@@ -183,15 +185,15 @@ function renderLoftMap() {
   const choices = editing && !maps.some(m => m.id === map.id) ? [...maps, map] : maps;
   document.getElementById('content').innerHTML = `${docsTabsHtml()}
     <div class="page-header"><div class="page-title"><h2>Loft storage map</h2><p>Find where items belong, or choose a section to see its contents.</p></div>${isAdmin ? '<button type="button" class="btn btn-primary btn-sm" onclick="loftBeginEdit(true)">Add loft</button>' : ''}</div>
-    <div class="loft-toolbar">${choices.length ? `<label for="loftMapSelect">Loft</label><select id="loftMapSelect" onchange="loftSelectMap(this.value)" ${editing ? 'disabled' : ''}>${choices.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === map?.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}</select>` : ''}
+    <div class="loft-toolbar ${editing ? 'loft-edit-toolbar' : ''}">${choices.length ? `<label for="loftMapSelect">Loft</label><select id="loftMapSelect" onchange="loftSelectMap(this.value)" ${editing ? 'disabled' : ''}>${choices.map(m => `<option value="${escapeHtml(m.id)}" ${m.id === map?.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}</select>` : ''}
       <input id="loftItemSearch" class="loft-search" type="search" aria-label="Find an item on the loft maps" placeholder="Find an item by code, name or location…" value="${escapeHtml(loftSearch)}" oninput="loftSetSearch(this.value)">
       ${map && isAdmin ? editing ? `<button class="btn btn-primary btn-sm" onclick="loftSaveLayout()" ${loftSaving ? 'disabled' : ''}>${loftSaving ? 'Saving…' : 'Save layout'}</button><button class="btn btn-secondary btn-sm" onclick="loftCancelEdit()" ${loftSaving ? 'disabled' : ''}>Cancel editing</button>` : '<button class="btn btn-secondary btn-sm" onclick="loftBeginEdit()">Edit layout</button>' : ''}</div>
     <p id="loftStatus" class="loft-status" role="status" aria-live="polite">${escapeHtml(loftStatus)}</p>
     ${map ? `${editing ? '<div class="loft-draft-note">Editing this layout. Choose Save layout to publish your changes.</div>' : ''}
     <div class="loft-layout"><div class="card loft-plan ${editing ? 'is-editing' : ''}">
       ${editing ? `<label for="loftMapName">Loft name</label><input id="loftMapName" maxlength="80" value="${escapeHtml(map.name)}" oninput="loftDraft.name=this.value" ${loftSaving ? 'disabled' : ''}>
-        <div class="loft-outline-tools">${loftDrawing ? `<button class="btn btn-primary btn-sm" onclick="loftFinishOutline()">Finish outline</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('undo')">Undo corner</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('cancel')">Cancel drawing</button>` : '<button class="btn btn-secondary btn-sm" onclick="loftStartOutline()">Draw loft outline</button><button class="btn btn-secondary btn-sm" onclick="loftAddSection()">Add storage section</button>'}</div>` : ''}
-      <p class="loft-help">${loftDrawing ? 'Click each corner around the outside of your loft in order. Use Finish outline to close the shape.' : editing ? 'Draw an outline to match the loft. Drag sections to move them; drag the dark corner to resize. You can also use the position and size fields.' : 'Click a coloured section to see the items stored there. Use the section buttons below on any screen size.'}</p>
+        <div class="loft-outline-tools">${loftDrawing ? `<button class="btn btn-primary btn-sm" onclick="loftFinishOutline()">Finish outline</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('undo')">Undo corner</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('cancel')">Cancel drawing</button>` : `<details class="loft-preset-panel" ${selected ? '' : 'open'}><summary>Room shape &amp; storage presets</summary>${loftPresetButtons()}</details>`}</div>` : ''}
+      <p class="loft-help">${loftDrawing ? 'Click each corner around the outside of your loft in order. Use Finish outline to close the shape.' : editing ? 'Choose a room shape, then tap a storage preset. Select a section below the map to move it with the arrows or change its size.' : 'Click a coloured section to see the items stored there. Use the section buttons below on any screen size.'}</p>
       <svg id="loftCanvas" viewBox="0 0 1000 600" role="img" aria-label="${escapeHtml(map.name)} storage layout">
         <defs><pattern id="loftGrid" width="50" height="30" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 30" fill="none" stroke="#dce5df" stroke-width="1"/></pattern></defs><rect width="1000" height="600" fill="url(#loftGrid)"/>
         <polygon points="${(map.outline || []).map(p => p.x * 10 + ',' + p.y * 6).join(' ')}" fill="#fff" stroke="#476254" stroke-width="4"/>
@@ -201,10 +203,11 @@ function renderLoftMap() {
           ${editing && selected?.id === s.id && !loftDrawing ? `<rect data-resize="true" x="${(s.x + s.w) * 10 - 14}" y="${(s.y + s.h) * 6 - 14}" width="14" height="14" rx="2" fill="#173e2e" style="cursor:nwse-resize"/>` : ''}</g>`; }).join('')}
         ${loftDrawing ? `<polyline points="${loftOutlinePoints.map(p => p.x * 10 + ',' + p.y * 6).join(' ')}" fill="#e4b64222" stroke="#ad7600" stroke-width="4" stroke-dasharray="8 5"/>${loftOutlinePoints.map(p => `<circle cx="${p.x * 10}" cy="${p.y * 6}" r="6" fill="#ad7600"/>`).join('')}` : ''}
       </svg>
+      ${editing && selected && !loftDrawing ? `<div class="loft-map-tap-controls"><strong>${escapeHtml(selected.name)}</strong>${loftTouchControls()}</div>` : ''}
       <div class="loft-section-list"><button class="btn btn-secondary btn-sm" onclick="loftSelectSection('')">All sections</button>${sections.map(s => `<button class="btn ${selected?.id === s.id ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="loftSelectSection(${inlineJsArg(s.id)})">${escapeHtml(s.name)} (${count(s.id)})</button>`).join('')}</div>
       ${!sections.length ? '<p class="loft-help">No storage sections yet. An admin can use Edit layout to add them.</p>' : ''}
     </div><aside class="card loft-side">${editing && selected ? `<h3>Edit storage section</h3><div class="form-group"><label for="loftSectionName">Section name</label><input id="loftSectionName" maxlength="80" value="${escapeHtml(selected.name)}" oninput="loftUpdateSection('name',this.value)"></div><div class="form-group"><label for="loftSectionColor">Colour</label><input type="color" id="loftSectionColor" value="${/^#[0-9a-f]{6}$/i.test(selected.color) ? selected.color : '#c7e2d5'}" onchange="loftUpdateSection('color',this.value)"></div>
-      <div class="loft-number-grid">${[['x', 'Across (%)'], ['y', 'Down (%)'], ['w', 'Width (%)'], ['h', 'Height (%)']].map(([key,label]) => `<label>${label}<input type="number" min="${key === 'w' || key === 'h' ? 2 : 0}" max="100" step="0.5" value="${Math.round(selected[key] * 10) / 10}" onchange="loftUpdateSection('${key}',this.value)"></label>`).join('')}</div><div class="loft-row-actions"><button class="btn btn-danger btn-sm" onclick="loftRemoveSection()">Remove section</button></div>` : `<h3>${selected ? escapeHtml(selected.name) : 'Items in this loft'}</h3>
+      <details class="loft-advanced"><summary>Exact position &amp; size</summary><div class="loft-number-grid">${[['x', 'Across (%)'], ['y', 'Down (%)'], ['w', 'Width (%)'], ['h', 'Height (%)']].map(([key,label]) => `<label>${label}<input type="number" min="${key === 'w' || key === 'h' ? 2 : 0}" max="100" step="0.5" value="${Math.round(selected[key] * 10) / 10}" onchange="loftUpdateSection('${key}',this.value)"></label>`).join('')}</div></details><div class="loft-row-actions"><button class="btn btn-danger btn-sm" onclick="loftRemoveSection()">Remove section</button></div>` : `<h3>${selected ? escapeHtml(selected.name) : 'Items in this loft'}</h3>
       <p class="loft-help">${assigned.length} matching item${assigned.length === 1 ? '' : 's'}${selected ? ' in this section' : ' assigned to this loft'}.</p>
       ${assigned.length ? assigned.map(item => `<div class="loft-item"><strong>${escapeHtml(item.itemName)}</strong><br><code>${escapeHtml(item.itemCode)}</code><br><span>${escapeHtml(getItemStorageLocation(item))}</span>${canEditFeature('documents') ? `<br><button class="btn btn-secondary btn-sm" onclick="loftOpenItem(${inlineJsArg(item.id)})">Edit item</button>` : ''}</div>`).join('') : '<p class="loft-help">No items match here. Choose another section or change the search.</p>'}
       ${selected && !editing && canEditFeature('documents') ? `<form onsubmit="loftAssignItem(event)" style="margin-top:1rem"><label for="loftAssignItemSelect">Assign an existing item here</label><select id="loftAssignItemSelect" required><option value="">Choose an item</option>${records.slice().sort((a,b) => String(a.itemCode).localeCompare(String(b.itemCode),undefined,{numeric:true})).map(i => `<option value="${escapeHtml(i.id)}">${escapeHtml(i.itemCode + ' — ' + i.itemName)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" type="submit" style="margin-top:.5rem">Assign to this section</button></form>` : ''}
@@ -216,14 +219,21 @@ function bindLoftCanvas() {
   const canvas = document.getElementById('loftCanvas'); if (!canvas) return;
   let drag = null;
   const point = event => { const matrix = canvas.getScreenCTM(); if (!matrix) return null; const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()); return { x: LoftGeometry.clamp(p.x / 10, 0, 100), y: LoftGeometry.clamp(p.y / 6, 0, 100) }; };
+  canvas.addEventListener('click', event => {
+    if (!loftDrawing || !loftDraft || loftSaving) return;
+    const p = point(event); if (!p) return;
+    if (loftOutlinePoints.length >= 50) return loftSetStatus('Use up to 50 corners for the outline.');
+    loftOutlinePoints.push({ x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }); renderLoftMap();
+  });
   canvas.addEventListener('pointerdown', event => {
     if (loftSaving) return;
     const p = point(event); if (!p) return;
-    if (loftDrawing && loftDraft) { if (loftOutlinePoints.length >= 50) return loftSetStatus('Use up to 50 corners for the outline.'); loftOutlinePoints.push({ x: Math.round(p.x * 2) / 2, y: Math.round(p.y * 2) / 2 }); renderLoftMap(); return; }
+    if (loftDrawing && loftDraft) return;
     const target = event.target.closest('[data-section]'); if (!target) return;
     const id = target.dataset.section;
     if (!loftDraft) { loftSelectSection(id); return; }
     const section = loftSections(loftDraft).find(s => s.id === id); if (!section) return;
+    if (event.pointerType === 'touch') { loftSelectSection(id); return; }
     loftSelectedSectionId = id;
     drag = { p, original: { ...section }, section, resize: !!event.target.closest('[data-resize]'), target, moved: false };
     canvas.setPointerCapture(event.pointerId); event.preventDefault();
