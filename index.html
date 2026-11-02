@@ -517,7 +517,7 @@
               <option value="once">Send once per person when requirements are met</option>
               <option value="daily">Send once per day per person while requirements are met</option>
             </select>
-            <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">Uses this banner’s title, message and selected audience. Checks every 5 minutes, even with the app closed, using UK time. Appears in Notification Centre for people with access and sends a device alert where push is enabled. “Once” is for the lifetime of this banner; editing or switching it back on does not send it again. The unread-notifications condition cannot trigger an automatic notification.</p>
+            <p style="font-size:.75rem;color:var(--text-muted);margin-top:.4rem;">Uses this banner’s title, message and selected audience. Checks every 5 minutes, even with the app closed, using UK time. Appears in Notification Centre for people with access and sends a device alert where push is enabled. “Once” is for the lifetime of this banner; editing or switching it back on does not send it again. Unread reminders ignore their own reminder messages, so they cannot trigger themselves.</p>
           </div>
 
           <div style="display:flex; flex-wrap:wrap; gap:1.25rem; margin-bottom:0.75rem;">
@@ -913,7 +913,7 @@
     </div>
     <script src="help-guides.js"></script>
     <script src="https://unpkg.com/@zxing/browser@0.2.1"></script>
-    <script src="app.js?v=banner-notifications-13"></script>
+    <script src="app.js?v=automatic-banner-notifications-14"></script>
   </body>
 </html>
 
