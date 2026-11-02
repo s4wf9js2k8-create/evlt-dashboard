@@ -45,6 +45,7 @@ async function pushToAllDevices(notification) {
   const entries = all
     // The device that sent it already showed the alert locally. Other devices (even signed in as
     // the same person) still get it. Older entries without a device id fall back to the sender's name.
+    .filter(([, item]) => !Array.isArray(notification.recipientUids) || notification.recipientUids.includes(item.uid))
     .filter(([, item]) => notification.senderDevice
       ? item.deviceId !== notification.senderDevice
       : (!notification.sentBy || item.user !== notification.sentBy));
@@ -231,5 +232,82 @@ export const forceRevokeAccount = onCall(
       removedLegacyPermissions: permissionKeys.length,
       authDisabled
     };
+  }
+);
+
+ 
+// Server checks keep banner alerts running when every browser is closed.
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { asList as bannerList, bannerEligible, deliveryId } from './banner-notifications.js';
+
+export const sendScheduledBannerNotifications = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Europe/London', region: 'europe-west1', timeoutSeconds: 300, maxInstances: 1, retryCount: 2 },
+  async () => {
+    const database = getDatabase();
+    const [dataSnap, bindingsSnap, adminsSnap] = await Promise.all([
+      database.ref('EVLT_ADMIN_DB').get(),
+      database.ref('EVLT_ACCOUNT_BINDINGS').get(),
+      database.ref('EVLT_SYSTEM_ADMIN_UIDS').get()
+    ]);
+    const data = dataSnap.val() || {};
+    const banners = bannerList(data.customBanners).filter(b => b.id && b.active !== false && ['once', 'daily'].includes(b.notification?.mode));
+    if (!banners.length) return;
+    const accounts = Object.fromEntries(Object.entries(bindingsSnap.val() || {}).filter(([, b]) => b?.approved === true));
+    for (const [uid, enabled] of Object.entries(adminsSnap.val() || {})) {
+      if (enabled !== true) continue;
+      try {
+        const user = await getAuth().getUser(uid);
+        if (user.disabled || !user.emailVerified) continue;
+        accounts[uid] = { ...accounts[uid], isAdmin: true, volunteerName: accounts[uid]?.volunteerName || user.displayName || user.email };
+      } catch (error) { logger.warn('Could not load banner admin recipient', { uid, code: error.code }); }
+    }
+    const now = new Date();
+    let delivered = 0;
+    for (const banner of banners) {
+      for (const [uid, account] of Object.entries(accounts)) {
+        if (!bannerEligible(banner, account, data, now)) continue;
+        const id = deliveryId(banner.id, uid, banner.notification.mode, now);
+        const state = database.ref('banner_notification_state/' + id);
+        const claim = await state.transaction(previous => {
+          if (previous?.sentAt || (previous?.leaseUntil || 0) > Date.now()) return;
+          return { leaseUntil: Date.now() + 6 * 60 * 1000 };
+        });
+        if (!claim.committed) continue;
+        try {
+          // Recheck approval before enqueueing to avoid notifying a revoked account.
+          const [currentBinding, currentAdmin] = await Promise.all([
+            database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).get(),
+            database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + uid).get()
+          ]);
+          if (currentBinding.val()?.approved !== true && currentAdmin.val() !== true) {
+            await state.remove();
+            continue;
+          }
+          const notification = {
+            id: 'banner-' + id,
+            title: String(banner.title || 'EVLT banner reminder').slice(0, 80),
+            body: String(banner.text || '').slice(0, 500),
+            sentAt: new Date().toISOString(),
+            sentBy: 'Automatic banner',
+            recipientUids: [uid],
+            bannerId: banner.id,
+            linkPage: banner.linkPage || 'dashboard'
+          };
+          await database.ref('EVLT_ADMIN_DB/notifications').transaction(value => {
+            const list = bannerList(value);
+            if (list.some(n => n.id === notification.id)) return;
+            return [...list, notification];
+          });
+          await state.set({ sentAt: notification.sentAt, bannerId: banner.id, uid });
+          delivered++;
+        } catch (error) {
+          // Pending deliveries retry after the lease; deterministic IDs avoid duplicates.
+          logger.error('Banner notification delivery failed', { bannerId: banner.id, uid, message: error.message });
+          await state.update({ leaseUntil: 0 });
+          throw error;
+        }
+      }
+    }
+    logger.info('Automatic banner notifications checked', { banners: banners.length, delivered });
   }
 );
