@@ -8082,10 +8082,22 @@
         const button = panel && Array.from(panel.querySelectorAll('button')).find(el => (el.getAttribute('onclick') || '').includes(targetUid));
         if (button) { button.disabled = true; button.textContent = 'Server revoking…'; }
         try {
-          if (!firebase.functions) throw new Error('Firebase Functions SDK is not loaded. Refresh the page and try again.');
-          const callable = firebase.app().functions('europe-west1').httpsCallable('forceRevokeAccount');
-          const response = await callable({ uid: targetUid });
-          const result = response.data || {};
+          // Use the callable HTTP protocol directly: the Functions compat SDK
+          // requests a Messaging token, which can fail on GitHub Pages before
+          // this unrelated account operation ever reaches the server.
+          const idToken = await auth.currentUser.getIdToken();
+          const response = await fetch('https://europe-west1-' + firebaseConfig.projectId + '.cloudfunctions.net/forceRevokeAccount', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+            body: JSON.stringify({ data: { uid: targetUid } })
+          });
+          const payload = await response.json();
+          if (!response.ok || payload.error) {
+            const error = new Error(payload.error?.message || 'The revoke server returned HTTP ' + response.status);
+            error.code = payload.error?.status || 'HTTP_' + response.status;
+            throw error;
+          }
+          const result = payload.result || payload.data || {};
           if (!result.success) throw new Error('The server did not confirm the revoke operation.');
           renderPermissionAccountSummary();
           if (typeof loadPendingAccountRequests === 'function') loadPendingAccountRequests();
