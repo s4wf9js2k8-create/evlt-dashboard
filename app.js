@@ -793,6 +793,7 @@
           showLoginError('Secure sign-in is unavailable. Please check the connection and reload.');
           return;
         }
+        syncNotificationReadTime();
         if (databaseListener || Object.keys(pageDatabaseListeners).length) return;
         if (currentUser.isSystemAdmin) {
           databaseListener = snapshot => {
@@ -1346,8 +1347,16 @@
         return list.filter(n => n.sentAt > lastSeen).length;
       }
 
+      function syncNotificationReadTime() {
+        const uid = auth?.currentUser?.uid;
+        const seen = localStorage.getItem(getNotificationLastSeenKey());
+        if (!database || !uid || !seen || !Number.isFinite(Date.parse(seen))) return;
+        database.ref('EVLT_NOTIFICATION_READS/' + uid).transaction(previous => previous && previous >= seen ? undefined : seen)
+          .catch(error => console.warn('Could not sync notification read time:', error));
+      }
+
       function markNotificationsSeen() {
-        try { localStorage.setItem(getNotificationLastSeenKey(), new Date().toISOString()); } catch (e) {}
+        try { localStorage.setItem(getNotificationLastSeenKey(), new Date().toISOString()); syncNotificationReadTime(); } catch (e) {}
       }
 
       function renderNotificationsPage() {
@@ -2764,6 +2773,7 @@
         const el = document.getElementById('customBannerAdmin');
         if (!el) return;
         const list = getCustomBannerList();
+        const notificationLabel = b => b.notification?.mode === 'once' ? 'Once per person' : b.notification?.mode === 'daily' ? 'Once per day per person' : 'Off';
         const customRows = list.length === 0 ? '<p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">You have not created any banners yet.</p>' : list.map(b => bannerAdminRow({
           tone: b.tone,
           title: b.title || (String(b.text || '').slice(0, 70) + (String(b.text || '').length > 70 ? '…' : '')),
@@ -2780,7 +2790,7 @@
           return bannerAdminRow({
             tone: set.tone || def.tone || 'blue',
             title: def.label + (customised ? ' (customised)' : ''),
-            detail: `${def.fixed ? '' : `<em>${escapeHtml(String(set.text || '').trim() || def.text)}</em><br>`}<strong>Who:</strong> ${escapeHtml(describeBannerAudience(set))}${def.page !== 'dashboard' ? ` (and has access to ${escapeHtml((ACCOUNT_ACCESS_PAGES.find(p => p.key === def.page) || { label: def.page }).label)})` : ''}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(set))}`,
+            detail: `${def.fixed ? '' : `<em>${escapeHtml(String(set.text || '').trim() || def.text)}</em><br>`}<strong>Who:</strong> ${escapeHtml(describeBannerAudience(set))}${def.page !== 'dashboard' ? ` (and has access to ${escapeHtml((ACCOUNT_ACCESS_PAGES.find(p => p.key === def.page) || { label: def.page }).label)})` : ''}<br><strong>When:</strong> ${escapeHtml(describeBannerWhen(set))}<br><strong>Notification:</strong> ${notificationLabel(set)}`,
             status: builtinBannerStatus(def),
             buttons: `
               <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBuiltinBanner(${inlineJsArg(def.key)})">${set.active === false ? 'Turn on' : 'Turn off'}</button>
@@ -2862,8 +2872,8 @@
         document.getElementById('bannerModalTitle').innerText = isBuiltin ? 'Edit automatic banner: ' + def.label : (b ? 'Edit banner' : 'New banner');
         const show = (elId, on) => { document.getElementById(elId).style.display = on ? '' : 'none'; };
         show('bannerTitleGroup', !isBuiltin);
-        show('bannerNotificationGroup', !isBuiltin);
-        document.getElementById('bannerNotificationMode').value = !isBuiltin && b?.notification?.mode ? b.notification.mode : 'off';
+        show('bannerNotificationGroup', true);
+        document.getElementById('bannerNotificationMode').value = b?.notification?.mode || 'off';
         show('bannerTextGroup', !(isBuiltin && def.fixed));
         show('bannerLookRow', !(isBuiltin && def.fixed));
         show('bannerLinkGroup', !isBuiltin);
@@ -2903,8 +2913,10 @@
         if (!text && !(builtinDef && builtinDef.fixed)) { alert('Please enter the banner text.'); return; }
         const start = document.getElementById('bannerStart').value, end = document.getElementById('bannerEnd').value;
         if (start && end && end < start) { alert('The end date is before the start date.'); return; }
+        const notificationMode = document.getElementById('bannerNotificationMode').value;
         if (builtinDef) {
           const setting = {
+            notification: { mode: notificationMode },
             active: document.getElementById('bannerActive').checked,
             dismissible: document.getElementById('bannerDismissible').checked,
             audience: { pages: bannerChecked('banner-aud-page'), roles: bannerChecked('banner-aud-role'), people: bannerChecked('banner-aud-person') },
@@ -2926,11 +2938,6 @@
           map[builtinDef.key] = setting;
           closeModal('bannerModal');
           saveBannerSettings(map);
-          return;
-        }
-        const notificationMode = document.getElementById('bannerNotificationMode').value;
-        if (notificationMode !== 'off' && bannerChecked('banner-cond').includes('unreadNotifications')) {
-          alert('Automatic notifications cannot use “I have unread notifications”: read status is stored on each device. Untick that condition or switch notifications off.');
           return;
         }
         const id = document.getElementById('bannerId').value;
