@@ -8071,94 +8071,30 @@
       }
 
       async function deleteApprovedAccount(uid) {
-        const firebaseUser = auth && auth.currentUser;
-        if (!firebaseUser || !currentUser || !currentUser.isSystemAdmin || !database) {
-          alert('Revoke failed: you must be signed in as a System Admin.');
+        if (!auth || !auth.currentUser || !currentUser || !currentUser.isSystemAdmin) {
+          alert('Force revoke failed: sign in as a System Admin first.');
           return false;
         }
         const targetUid = String(uid || '').trim();
-        if (!targetUid) { alert('Revoke failed: the selected account has no Firebase UID.'); return false; }
-        if (!confirm("FORCE DELETE this person's EVLT account approval, linked sign-up requests and legacy permission entry? Their volunteer profile and historical Trust records will be kept.")) return false;
-
+        if (!targetUid) { alert('Force revoke failed: account UID is missing.'); return false; }
+        if (!confirm("FORCE REVOKE this EVLT account? The server will remove all matching approval links, sign-up requests and legacy permissions, disable the Firebase login and revoke its sessions. The volunteer profile and historical Trust records will be kept.")) return false;
         const panel = document.getElementById('permissionAccountsPanel');
         const button = panel && Array.from(panel.querySelectorAll('button')).find(el => (el.getAttribute('onclick') || '').includes(targetUid));
-        if (button) { button.disabled = true; button.textContent = 'Force deleting…'; }
-
+        if (button) { button.disabled = true; button.textContent = 'Server revoking…'; }
         try {
-          // Read the selected binding so cleanup can also catch duplicate links
-          // belonging to the same email/name, not just the currently displayed UID.
-          const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
-          const bindings = bindingsSnapshot.val() || {};
-          const selected = bindings[targetUid] || null;
-          const targetEmail = String(selected && selected.email || '').trim().toLowerCase();
-          const targetName = String(selected && selected.volunteerName || '').trim().toLowerCase();
-          const matchingUids = Object.entries(bindings)
-            .filter(([key, value]) => key === targetUid || (value && (
-              (targetEmail && String(value.email || '').trim().toLowerCase() === targetEmail) ||
-              (targetName && String(value.volunteerName || '').trim().toLowerCase() === targetName)
-            )))
-            .map(([key]) => key);
-
-          const requestsSnapshot = await database.ref('EVLT_ACCOUNT_REQUESTS').once('value');
-          const requests = requestsSnapshot.val() || {};
-          const matchingRequestUids = Object.entries(requests)
-            .filter(([key, value]) => key === targetUid || (value && (
-              (targetEmail && String(value.email || '').trim().toLowerCase() === targetEmail) ||
-              (targetName && String(value.name || '').trim().toLowerCase() === targetName)
-            )))
-            .map(([key]) => key);
-
-          // One atomic multi-location update removes every matching account link
-          // and request. Also clear the old name-keyed permission record.
-          const updates = {};
-          matchingUids.forEach(key => { updates['EVLT_ACCOUNT_BINDINGS/' + key] = null; });
-          matchingRequestUids.forEach(key => { updates['EVLT_ACCOUNT_REQUESTS/' + key] = null; });
-
-          let legacyPermissions = null;
-          if (targetName) {
-            const permissionsSnapshot = await database.ref('EVLT_ADMIN_DB/userPermissions').once('value');
-            legacyPermissions = permissionsSnapshot.val() || {};
-            const matchingPermissionKey = Object.keys(legacyPermissions).find(key => String(key).trim().toLowerCase() === targetName);
-            if (matchingPermissionKey) updates['EVLT_ADMIN_DB/userPermissions/' + matchingPermissionKey] = null;
-          }
-
-          if (!Object.keys(updates).length) {
-            throw new Error('No matching Firebase records could be identified. Nothing was deleted.');
-          }
-          await database.ref().update(updates);
-
-          // Verify from fresh server reads that no approval/request/legacy permission
-          // for this person remains before removing the row from the screen.
-          const [verifyBindings, verifyRequests, verifyPermissions] = await Promise.all([
-            database.ref('EVLT_ACCOUNT_BINDINGS').once('value'),
-            database.ref('EVLT_ACCOUNT_REQUESTS').once('value'),
-            database.ref('EVLT_ADMIN_DB/userPermissions').once('value')
-          ]);
-          const remainingBindings = verifyBindings.val() || {};
-          const remainingRequests = verifyRequests.val() || {};
-          const remainingPermissions = verifyPermissions.val() || {};
-          const stillLinked = Object.entries(remainingBindings).some(([key, value]) =>
-            key === targetUid || (value && (
-              (targetEmail && String(value.email || '').trim().toLowerCase() === targetEmail) ||
-              (targetName && String(value.volunteerName || '').trim().toLowerCase() === targetName)
-            )));
-          const stillRequested = Object.entries(remainingRequests).some(([key, value]) =>
-            key === targetUid || (value && (
-              (targetEmail && String(value.email || '').trim().toLowerCase() === targetEmail) ||
-              (targetName && String(value.name || '').trim().toLowerCase() === targetName)
-            )));
-          const stillHasLegacyPermission = targetName && Object.keys(remainingPermissions).some(key => String(key).trim().toLowerCase() === targetName);
-          if (stillLinked || stillRequested || stillHasLegacyPermission) {
-            throw new Error('Firebase still contains matching records after force delete. Check database rules; the account has not been confirmed removed.');
-          }
-
+          if (!firebase.functions) throw new Error('Firebase Functions SDK is not loaded. Refresh the page and try again.');
+          const callable = firebase.app().functions('europe-west1').httpsCallable('forceRevokeAccount');
+          const response = await callable({ uid: targetUid });
+          const result = response.data || {};
+          if (!result.success) throw new Error('The server did not confirm the revoke operation.');
           renderPermissionAccountSummary();
-          loadPendingAccountRequests();
-          alert('Force delete verified: all matching approved account links, sign-up requests and legacy permission entries have been removed. The volunteer profile and historical Trust records were kept. The Firebase Authentication login itself still exists, but it has no EVLT approval.');
+          if (typeof loadPendingAccountRequests === 'function') loadPendingAccountRequests();
+          alert('Server verified the force revoke. Removed '+result.removedBindings+' approval link(s), '+result.removedRequests+' sign-up request(s) and '+result.removedLegacyPermissions+' legacy permission(s). Firebase login disabled: '+(result.authDisabled ? 'yes' : 'no')+'. Volunteer profile and historical records were kept.');
           return true;
         } catch (err) {
-          console.error('Force account deletion failed:', err);
-          alert('Force delete was NOT verified (' + (err.code || 'VERIFY_FAILED') + '): ' + (err.message || 'Unknown error.'));
+          console.error('Server force revoke failed:', err);
+          const message = err && err.message ? err.message : String(err);
+          alert('Server force revoke failed ('+(err.code || 'ERROR')+'): '+message);
           if (button) { button.disabled = false; button.textContent = 'Revoke account'; }
           return false;
         }
