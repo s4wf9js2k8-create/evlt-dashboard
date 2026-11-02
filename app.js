@@ -4220,103 +4220,53 @@
           alert('Only the System Admin can delete volunteer profiles.');
           return false;
         }
-        const vol = (db.volunteers || [])[index];
-        if (!vol) {
-          alert('This volunteer is no longer in the current list. Refresh and try again.');
-          return false;
-        }
-        const volName = getVolunteerName(vol);
-        const normalizedName = String(volName || '').trim().toLowerCase();
-        if (!normalizedName) {
-          alert('This volunteer record has no name. No data was changed.');
-          return false;
-        }
-        if (!confirm('Remove the volunteer profile for "' + volName + '"? Qualification/document records and account access will be removed where permitted. Historical attendance, clock logs, maintenance records and incident reports will be retained. The Firebase Authentication login is not deleted.')) return false;
+        const selected = (db.volunteers || [])[index];
+        if (!selected) { alert('Volunteer not found in the current list. Refresh and try again.'); return false; }
+        const targetName = String(getVolunteerName(selected) || '').trim();
+        const targetKey = targetName.toLowerCase();
+        if (!targetKey) { alert('This volunteer has no name. Nothing was changed.'); return false; }
+        if (!confirm('Delete ALL volunteer directory entries named "' + targetName + '"? Their qualification documents and permissions will also be removed. Historical attendance, clock logs, maintenance and incident records will be kept.')) return false;
 
-        const deleteButtons = Array.from(document.querySelectorAll('#content button')).filter(button =>
-          (button.getAttribute('onclick') || '').includes('deleteVolunteer(')
-        );
-        deleteButtons.forEach(button => { button.disabled = true; button.dataset.oldText = button.textContent; button.textContent = 'Deleting profile…'; });
-
-        let stage = 'checking account links';
-        let timer = null;
-        const withTimeout = (promise, label) => Promise.race([
-          promise,
-          new Promise((_, reject) => {
-            timer = window.setTimeout(() => reject(new Error('Timed out after 12 seconds while ' + label + '.')), 12000);
-          })
-        ]).finally(() => { if (timer) { window.clearTimeout(timer); timer = null; } });
-
+        const button = Array.from(document.querySelectorAll('#content button')).find(b => (b.getAttribute('onclick') || '').includes('deleteVolunteer('));
+        if (button) { button.disabled = true; button.textContent = 'Deleting…'; }
         try {
-          // First perform and verify the core profile deletion. Account-link cleanup
-          // is secondary and must not prevent the volunteer profile being removed.
-          const remainingVolunteers = (db.volunteers || []).filter((item, itemIndex) => itemIndex !== index);
-          const remainingDocs = (db.volunteerDocs || []).filter(doc =>
-            String(doc.volunteer || '').trim().toLowerCase() !== normalizedName
-          );
-          const remainingPermissions = { ...(db.userPermissions || {}) };
-          delete remainingPermissions[volName];
+          // Use a direct write to the exact volunteers node rather than a multi-path root update.
+          // Remove every duplicate directory entry with this exact normalized display name.
+          const currentSnap = await database.ref('EVLT_ADMIN_DB/volunteers').once('value');
+          const currentValue = currentSnap.val();
+          const currentList = Array.isArray(currentValue) ? currentValue : (currentValue ? Object.values(currentValue) : []);
+          const remaining = currentList.filter(v => String(getVolunteerName(v) || '').trim().toLowerCase() !== targetKey);
+          if (remaining.length === currentList.length) throw new Error('No matching volunteer was found in Firebase. The displayed list may be stale.');
+          await database.ref('EVLT_ADMIN_DB/volunteers').set(remaining);
 
-          stage = 'saving the volunteer profile deletion';
-          deleteButtons.forEach(button => { button.textContent = 'Saving profile…'; });
-          await withTimeout(database.ref('EVLT_ADMIN_DB').update({
-            volunteers: remainingVolunteers,
-            volunteerDocs: remainingDocs,
-            userPermissions: remainingPermissions
-          }), stage);
+          const verify = await database.ref('EVLT_ADMIN_DB/volunteers').once('value');
+          const verifyValue = verify.val();
+          const verifiedList = Array.isArray(verifyValue) ? verifyValue : (verifyValue ? Object.values(verifyValue) : []);
+          const stillThere = verifiedList.some(v => String(getVolunteerName(v) || '').trim().toLowerCase() === targetKey);
+          if (stillThere) throw new Error('Firebase still returns a matching volunteer entry after the direct write. Check the live database rules.');
 
-          stage = 'verifying the volunteer profile deletion';
-          const verifySnapshot = await withTimeout(database.ref('EVLT_ADMIN_DB/volunteers').once('value'), stage);
-          const saved = verifySnapshot.val() || [];
-          const savedVolunteers = Array.isArray(saved) ? saved : Object.values(saved);
-          const stillExists = savedVolunteers.some(item =>
-            String(getVolunteerName(item) || '').trim().toLowerCase() === normalizedName
-          );
-          if (stillExists) throw new Error('Firebase still contains this volunteer profile after the write.');
-
-          db.volunteers = savedVolunteers;
+          // Update the local view immediately from the verified database response.
+          db.volunteers = verifiedList;
+          const remainingDocs = (db.volunteerDocs || []).filter(d => String(d.volunteer || '').trim().toLowerCase() !== targetKey);
           db.volunteerDocs = remainingDocs;
-          db.userPermissions = remainingPermissions;
+          const permissions = { ...(db.userPermissions || {}) };
+          delete permissions[targetName];
+          db.userPermissions = permissions;
           renderVolunteers();
 
-          // Clean up linked approvals only after the profile is safely removed.
-          // If these lookups are denied or time out, do not pretend the profile failed.
-          let accessCleanup = 'not checked';
+          // Secondary cleanup: do not let it undo or mask the verified profile deletion.
+          const cleanup = [];
           try {
-            stage = 'checking linked account approvals';
-            const [bindingsSnapshot, requestsSnapshot] = await Promise.all([
-              withTimeout(database.ref('EVLT_ACCOUNT_BINDINGS').once('value'), stage),
-              withTimeout(database.ref('EVLT_ACCOUNT_REQUESTS').once('value'), stage)
-            ]);
-            const bindings = bindingsSnapshot.val() || {};
-            const requests = requestsSnapshot.val() || {};
-            const email = String(vol.Email || vol.email || '').trim().toLowerCase();
-            const linkedUids = Object.entries(bindings)
-              .filter(([, binding]) => binding && String(binding.volunteerName || '').trim().toLowerCase() === normalizedName)
-              .map(([uid]) => uid);
-            const requestUids = Object.entries(requests)
-              .filter(([, request]) => request && (
-                String(request.name || '').trim().toLowerCase() === normalizedName ||
-                (email && String(request.email || '').trim().toLowerCase() === email)
-              ))
-              .map(([uid]) => uid);
-            stage = 'removing linked account approvals';
-            for (const uid of linkedUids) await withTimeout(database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).remove(), stage);
-            for (const uid of requestUids) await withTimeout(database.ref('EVLT_ACCOUNT_REQUESTS/' + uid).remove(), stage);
-            accessCleanup = 'linked approvals and requests removed';
-          } catch (cleanupError) {
-            console.error('Volunteer profile removed, but account cleanup needs attention:', cleanupError);
-            accessCleanup = 'profile deleted, but account access cleanup failed: ' + (cleanupError.message || 'unknown error');
-          }
+            await database.ref('EVLT_ADMIN_DB/volunteerDocs').set(remainingDocs);
+            await database.ref('EVLT_ADMIN_DB/userPermissions').set(permissions);
+          } catch (e) { cleanup.push('profile documents/permissions need manual cleanup (' + (e.code || e.message || 'error') + ')'); }
 
-          alert('Verified: "' + volName + '" has been removed from the Volunteers list. Historical Trust records were retained. Account cleanup status: ' + accessCleanup + '. Firebase Authentication login still exists.');
+          alert('Verified: ' + targetName + ' is no longer in the Firebase Volunteers list.' + (cleanup.length ? ' However, ' + cleanup.join('; ') + '.' : ' Linked profile documents and permissions were also updated.') + ' Historical Trust records were retained. Firebase Authentication login is separate.');
           return true;
         } catch (err) {
-          console.error('Volunteer profile deletion failed during ' + stage + ':', err);
-          const code = err && err.code ? String(err.code) : 'UNKNOWN';
-          const detail = err && err.message ? err.message : 'Check Firebase permissions and connection.';
-          alert('Volunteer profile was NOT confirmed as deleted. Failed while ' + stage + ' (' + code + '): ' + detail);
-          deleteButtons.forEach(button => { button.disabled = false; button.textContent = button.dataset.oldText || 'Delete'; });
+          console.error('Direct volunteer deletion failed:', err);
+          alert('Deletion was NOT verified. ' + (err.code ? err.code + ': ' : '') + (err.message || 'Check Firebase access rules and try again.'));
+          if (button) { button.disabled = false; button.textContent = 'Delete'; }
           return false;
         }
       }
