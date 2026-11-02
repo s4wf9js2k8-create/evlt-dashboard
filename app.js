@@ -8132,6 +8132,9 @@
         }
       }
 
+      // The button is rendered with an inline onclick, so expose this local handler globally.
+      window.deleteApprovedAccount = deleteApprovedAccount;
+
       function renderAccessForbidden(view) {
         const content = document.getElementById('content');
         content.innerHTML = `
