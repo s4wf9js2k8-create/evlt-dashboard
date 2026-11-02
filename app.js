@@ -8071,51 +8071,64 @@
       }
 
       async function deleteApprovedAccount(uid) {
-        if (!currentUser || !currentUser.isSystemAdmin || !database) {
-          alert('Only a signed-in System Admin can remove an approved account.');
+        const firebaseUser = auth && auth.currentUser;
+        if (!firebaseUser || !currentUser || !currentUser.isSystemAdmin || !database) {
+          alert('Revoke failed: you must be signed in as a System Admin.');
           return false;
         }
-        const account = String(uid || '').trim();
-        if (!account) {
-          alert('The account ID is missing. Refresh the page and try again.');
+        const targetUid = String(uid || '').trim();
+        if (!targetUid) {
+          alert('Revoke failed: the selected account has no Firebase UID.');
           return false;
         }
-        if (!confirm("Remove this person's EVLT Operations account approval and sign-up request? This does NOT erase historical Trust records or delete their Firebase Authentication login.")) return false;
+        if (!confirm("Revoke this account's EVLT Operations access? This removes its approval and signs the volunteer out. It does not delete their Firebase Authentication login or historical Trust records.")) return false;
 
-        const button = Array.from(document.querySelectorAll('#permissionAccountsPanel button'))
-          .find(el => (el.getAttribute('onclick') || '').includes(account));
-        const originalText = button ? button.textContent : 'Revoke account';
-        if (button) { button.disabled = true; button.textContent = 'Removing…'; }
+        const panel = document.getElementById('permissionAccountsPanel');
+        const button = panel && Array.from(panel.querySelectorAll('button')).find(el =>
+          (el.getAttribute('onclick') || '').includes(targetUid)
+        );
+        if (button) { button.disabled = true; button.textContent = 'Revoking…'; }
 
-        let timeoutId;
         try {
-          const removal = (async () => {
-            await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).remove();
-            await database.ref('EVLT_ACCOUNT_REQUESTS/' + account).remove();
-            const check = await database.ref('EVLT_ACCOUNT_BINDINGS/' + account).once('value');
-            if (check.exists()) throw new Error('Firebase returned success, but the account approval is still present.');
-          })();
-          await Promise.race([
-            removal,
-            new Promise((_, reject) => {
-              timeoutId = window.setTimeout(() => reject(new Error('Firebase did not respond within 12 seconds. The removal may still be processing; refresh the list before trying again.')), 12000);
-            })
-          ]);
-          alert('The EVLT account approval and sign-up request have been removed.');
-          loadApprovedAccountAccess();
+          // Realtime Database rules authorise revocation by the caller's UID,
+          // not merely by the email-based System Admin flag shown in the UI.
+          const adminUidSnap = await database.ref('EVLT_SYSTEM_ADMIN_UIDS/' + firebaseUser.uid).once('value');
+          if (adminUidSnap.val() !== true) {
+            throw new Error('Your current Firebase UID is not listed in EVLT_SYSTEM_ADMIN_UIDS. The page recognises you as an admin, but Firebase rules do not grant this UID permission to revoke accounts.');
+          }
+
+          const bindingRef = database.ref('EVLT_ACCOUNT_BINDINGS/' + targetUid);
+          const before = await bindingRef.once('value');
+          if (!before.exists()) {
+            renderPermissionAccountSummary();
+            alert('This account approval is already absent. The list has been refreshed.');
+            return true;
+          }
+
+          // Revoke the binding first. This is the record the login flow checks.
+          await bindingRef.remove();
+          const after = await bindingRef.once('value');
+          if (after.exists()) throw new Error('Firebase still returns this account binding after the revoke write.');
+
+          // Pending request cleanup is secondary; it must not undo or mask revocation.
+          let requestNote = '';
+          try {
+            await database.ref('EVLT_ACCOUNT_REQUESTS/' + targetUid).remove();
+          } catch (requestError) {
+            console.warn('Account was revoked, but pending request cleanup failed:', requestError);
+            requestNote = ' The pending sign-up request could not be cleared and may need separate cleanup.';
+          }
+
+          renderPermissionAccountSummary();
           if (typeof loadPendingAccountRequests === 'function') loadPendingAccountRequests();
+          alert('Verified: account access has been revoked. The approved binding is gone, so this account can no longer sign in to EVLT Operations.' + requestNote + ' The Firebase Authentication login itself still exists.');
           return true;
         } catch (err) {
-          console.error('Could not remove approved account:', err);
-          const code = err && err.code ? String(err.code) : 'UNKNOWN';
-          const detail = code === 'PERMISSION_DENIED'
-            ? 'Firebase denied the write. Check that your signed-in UID is listed under EVLT_SYSTEM_ADMIN_UIDS in the live Realtime Database.'
-            : (err && err.message ? err.message : 'Check your connection and try again.');
-          alert('Account removal did not complete (' + code + '). ' + detail);
-          if (button) { button.disabled = false; button.textContent = originalText; }
+          console.error('Account revocation failed:', err);
+          const code = err && err.code ? String(err.code) : 'CHECK_FAILED';
+          alert('Revoke account failed (' + code + '): ' + (err && err.message ? err.message : 'Unknown Firebase error. Check the browser console.'));
+          if (button) { button.disabled = false; button.textContent = 'Revoke account'; }
           return false;
-        } finally {
-          if (timeoutId) window.clearTimeout(timeoutId);
         }
       }
 
