@@ -131,6 +131,19 @@ export const sendNotificationPush = onValueWritten(
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
 import { planAccessSave } from './access-persistence.js';
+import { planOwnAvailability } from './availability.js';
+
+export const setMyAvailability = onCall({region:'europe-west1',cors:true},async request=>{
+  const uid=request.auth?.uid,email=request.auth?.token?.email;
+  if(!uid||!email||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified account.');
+  let failure='permission-denied',planned=false;
+  const result=await getDatabase().ref().transaction(root=>{
+    if(!root)return root;
+    try{const next=planOwnAvailability(root,uid,email,request.data);planned=true;return next;}catch(error){failure=error.message;planned=false;return;}
+  },undefined,false);
+  if(!result.committed||!planned)throw new HttpsError(failure==='invalid-argument'?failure:'permission-denied','Availability could not be saved. Check your calendar access and selected date.');
+  return {saved:true,rotaSignups:result.snapshot.val().EVLT_ADMIN_DB.rotaSignups||[]};
+});
 
 export const saveAccessSettings = onCall({ region: 'europe-west1', cors: true }, async request => {
   const uid=request.auth?.uid;

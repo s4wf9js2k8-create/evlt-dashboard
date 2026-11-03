@@ -3698,34 +3698,35 @@
       }
 
       function changeCalendarMonth(dir) {
-        calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + dir);
+        calendarCurrentDate=new Date(calendarCurrentDate.getFullYear(),calendarCurrentDate.getMonth()+dir,1);
+        selectedCalendarDateStr=calendarCurrentDate.getFullYear()+'-'+String(calendarCurrentDate.getMonth()+1).padStart(2,'0')+'-01';
         renderCalendarView();
       }
 
       function selectCalendarDate(dateStr) {
+        if(!evltDayIso(dateStr))return;
         selectedCalendarDateStr = dateStr;
         renderCalendarView();
+        evltShowSelectedDay();
       }
 
-      function toggleRotaSignup(dateStr) {
-        if (!currentUser || !currentUser.volData) return;
-        const name = getVolunteerName(currentUser.volData);
-        if (!db.rotaSignups) db.rotaSignups = [];
-        const existingIdx = db.rotaSignups.findIndex(r => r.date === dateStr && r.name === name);
-        if (existingIdx > -1) {
-          db.rotaSignups.splice(existingIdx, 1);
-        } else {
-          db.rotaSignups.push({ id: Date.now(), date: dateStr, name });
-        }
-        dbUpdate({ rotaSignups: db.rotaSignups });
-        renderCalendarView();
+      async function toggleRotaSignup(dateStr) {
+        if(!currentUser?.volData||evltRotaSaving)return;
+        const name=getVolunteerName(currentUser.volData),attending=!(db.rotaSignups||[]).some(r=>r.date===dateStr&&r.name===name),owner=evltPageKey();
+        evltRotaSaving=true;
+        const button=document.getElementById('myAvailabilityButton');if(button){button.disabled=true;button.textContent='Saving availability…';}
+        try{const result=await evltSaveOwnAvailability(dateStr,attending);if(evltPageKey()!==owner)return;db.rotaSignups=Array.isArray(result.rotaSignups)?result.rotaSignups:Object.values(result.rotaSignups||{});evltToast((attending?'Availability saved for ':'Signup cancelled for ')+formatDisplayDate(dateStr)+'.');}
+        catch(error){evltToast(error.message,'error');}
+        finally{evltRotaSaving=false;if(currentView==='calendar')renderCalendarView();}
       }
 
-      function removeRotaSignup(dateStr, name) {
-        if (!canEditFeature('calendar')) return alert('You do not have permission to edit attendance and hours.');
-        db.rotaSignups = (db.rotaSignups || []).filter(r => !(r.date === dateStr && r.name === name));
-        dbUpdate({ rotaSignups: db.rotaSignups });
-        renderCalendarView();
+      async function removeRotaSignup(dateStr,name) {
+        if(!canEditFeature('calendar')||evltRotaSaving)return;
+        if(!navigator.onLine)return evltToast('Reconnect before removing availability.','error');
+        evltRotaSaving=true;
+        try{const result=await evltCheckedTransaction(database.ref('EVLT_ADMIN_DB/rotaSignups'),value=>Object.values(value||{}).filter(r=>r&&!(r.date===dateStr&&r.name===name)));if(result.committed){db.rotaSignups=result.snapshot.val()||[];evltToast('Availability removed.');}}
+        catch(error){evltToast('Could not remove availability. Nothing was confirmed saved.','error');}
+        finally{evltRotaSaving=false;if(currentView==='calendar')renderCalendarView();}
       }
 
       function renderCalendarView() {
@@ -3792,23 +3793,19 @@
           const isSelected = dateStr === selectedCalendarDateStr;
           const countForDay = logs.filter(l => toISODate(l.date) === dateStr).length;
 
-          const dayEvents = events.filter(ev => {
-            const start = ev.StartDate || ev.startDate;
-            const end = ev.EndDate || ev.endDate || start;
-            return dateStr >= start && dateStr <= end;
-          });
+          const dayEvents = evltEventsOnDay(events,dateStr).map(entry=>entry.event);
 
           const rotaCountForDay = (db.rotaSignups || []).filter(r => r.date === dateStr).length;
 
           daysHtml += `
-            <div class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" onclick="selectCalendarDate(${inlineJsArg(dateStr)})">
-              <div style="font-weight:700;">${d}</div>
-              <div>
-                ${dayEvents.map(e => `<div class="cal-event-dot" title="${escapeHtml(e.Title || e.title)}">${escapeHtml(e.Title || e.title)}</div>`).join('')}
-                ${countForDay > 0 ? `<div class="cal-badge">${countForDay} log(s)</div>` : ''}
-                ${rotaCountForDay > 0 ? `<div class="cal-badge" style="background:var(--accent);">${rotaCountForDay} coming</div>` : ''}
-              </div>
-            </div>
+            <button type="button" class="cal-day ${isSelected ? 'selected' : ''} ${dayEvents.length > 0 ? 'has-event' : ''}" aria-pressed="${isSelected}" aria-controls="calendarDayDetails" aria-label="${escapeHtml(formatDisplayDate(dateStr)+', '+dayEvents.length+' event'+(dayEvents.length===1?'':'s')+', '+rotaCountForDay+' volunteer'+(rotaCountForDay===1?'':'s')+' available')}" onclick="selectCalendarDate(${inlineJsArg(dateStr)})">
+              <span style="font-weight:700;">${d}</span>
+              <span>
+                ${dayEvents.slice(0,2).map(e => `<span class="cal-event-dot" title="${escapeHtml(e.Title || e.title)}">${escapeHtml(e.Title || e.title)}</span>`).join('')}${dayEvents.length>2?`<span class="cal-event-more">+${dayEvents.length-2} more</span>`:''}
+                ${countForDay > 0 ? `<span class="cal-badge">${countForDay} log(s)</span>` : ''}
+                ${rotaCountForDay > 0 ? `<span class="cal-badge" style="background:var(--accent);">${rotaCountForDay} coming</span>` : ''}
+              </span>
+            </button>
           `;
         }
 
@@ -3818,7 +3815,7 @@
           <div class="page-header">
             <div class="page-title">
               <h2>Attendance & Hours Calendar</h2>
-              <p>Select any date on the calendar to audit shifts and hours worked.</p>
+              <p>Select a day to see events, event details, volunteer availability and recorded hours.</p>
             </div>
           </div>
 
@@ -3843,6 +3840,7 @@
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+              ${evltSelectedDayHtml(selectedCalendarDateStr)}
               <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
                 <div>
                   <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.2rem;">Date: ${formatDisplayDate(selectedCalendarDateStr)}</h3>
@@ -3883,7 +3881,7 @@
               </div>
 
               <div class="card" style="padding: 1.25rem;">
-                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;"><i data-lucide="calendar-check" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Who's Coming — ${formatDisplayDate(selectedCalendarDateStr)}</h3>
+                <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem;"><i data-lucide="calendar-check" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Volunteer availability — ${formatDisplayDate(selectedCalendarDateStr)}</h3>
                 <div style="display:flex;flex-direction:column;gap:.4rem;max-height:140px;overflow-y:auto;margin-bottom:.75rem;">
                   ${(() => {
                     const signups = (db.rotaSignups || []).filter(r => r.date === selectedCalendarDateStr);
@@ -3891,12 +3889,12 @@
                     return signups.map(r => `
                       <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .55rem;">
                         <span style="font-weight:600;">${escapeHtml(r.name)}</span>
-                        ${isAdmin ? `<button class="btn-subtle btn-sm" onclick="removeRotaSignup(${inlineJsArg(selectedCalendarDateStr)}, ${inlineJsArg(r.name)})"><i data-lucide="x"></i></button>` : ''}
+                        ${isAdmin ? `<button class="btn-subtle btn-sm" aria-label="Remove availability for ${escapeHtml(r.name)}" onclick="removeRotaSignup(${inlineJsArg(selectedCalendarDateStr)}, ${inlineJsArg(r.name)})"><i data-lucide="x"></i></button>` : ''}
                       </div>`).join('');
                   })()}
                 </div>
                 ${currentUser?.volData ? `
-                  <button class="btn ${(db.rotaSignups || []).some(r => r.date === selectedCalendarDateStr && r.name === getVolunteerName(currentUser.volData)) ? 'btn-danger' : 'btn-primary'} btn-sm" style="width:100%;" onclick="toggleRotaSignup('${selectedCalendarDateStr}')">
+                  <button id="myAvailabilityButton" ${evltRotaSaving?'disabled':''} class="btn ${(db.rotaSignups || []).some(r => r.date === selectedCalendarDateStr && r.name === getVolunteerName(currentUser.volData)) ? 'btn-danger' : 'btn-primary'} btn-sm" style="width:100%;" onclick="toggleRotaSignup('${selectedCalendarDateStr}')">
                     ${(db.rotaSignups || []).some(r => r.date === selectedCalendarDateStr && r.name === getVolunteerName(currentUser.volData)) ? "Cancel my signup" : "I'll be there"}
                   </button>` : '<p style="font-size:.72rem;color:var(--text-muted);">Sign in as a volunteer to add yourself to the rota.</p>'}
               </div>
@@ -4061,7 +4059,7 @@
         const roleList = roles.length ? roles : ['Standard'];
         const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase() || '?';
         const ytd = getVolYtdHours(name);
-        const dbs = v['DBS Status'] || 'Cleared';
+        const dbs = v['DBS Status'] || 'Not recorded';
         const docs = (db.volunteerDocs || []).filter(d => d.volunteer === name);
         const locoDocs = docs.filter(d => d.type === 'Loco Certification').sort((x, y) => (x.loco || '').localeCompare(y.loco || ''));
         const otherDocs = docs.filter(d => d.type !== 'Loco Certification').sort((x, y) => (x.type || '').localeCompare(y.type || ''));
@@ -4072,7 +4070,7 @@
             ${rows.map(d => volDocCompactRowHtml(d, canManageDocs)).join('')}
           </div>` : '';
         return `
-          <article class="vol-card" data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml(roleList.join(' ').toLowerCase())}">
+          <article class="vol-card" data-volname="${escapeHtml(name.toLowerCase())}" data-volroles="${escapeHtml(roleList.join(' ').toLowerCase())}" data-volroles-json="${escapeHtml(JSON.stringify(roleList))}" data-volstatus="${evltVolunteerRecordStatus(docs)}">
             <header class="vol-card-head">
               <div class="vol-avatar" aria-hidden="true">${escapeHtml(initials)}</div>
               <div class="vol-id">
@@ -4081,20 +4079,20 @@
               </div>
             </header>
             <div class="vol-stats">
-              <div><span class="vol-stat-label">YTD hours</span><span class="vol-stat-value">${ytd > 0 ? ytd.toFixed(1) + ' h' : '0 h'}</span></div>
+              <div><span class="vol-stat-label">Hours this year</span><span class="vol-stat-value">${ytd > 0 ? ytd.toFixed(1) + ' h' : '0 h'}</span></div>
               <div><span class="vol-stat-label">DBS</span><span class="vol-pill" style="background:${dbs === 'Cleared' ? '#dcfce7' : '#fef3c7'}; color:${dbs === 'Cleared' ? '#166534' : '#92400e'};">${escapeHtml(dbs)}</span></div>
-              <div><span class="vol-stat-label">Licence</span><span class="vol-pill" style="background:${overall.bg}; color:${overall.fg};">${overall.label}</span></div>
+              <div><span class="vol-stat-label">Qualifications</span><span class="vol-pill" style="background:${overall.bg}; color:${overall.fg};">${overall.label}</span></div>
             </div>
             <div class="vol-docs">
               ${docs.length
                 ? section('Locomotive certifications', locoDocs) + section('Other qualifications', otherDocs)
-                : '<div class="vol-doc-empty">No licence or qualification records yet.</div>'}
+                : '<div class="vol-doc-empty">No qualification records added.</div>'}
             </div>
             ${(canManageDocs || isAdmin) ? `<footer class="vol-card-foot">
               ${canManageDocs ? `<button class="btn btn-secondary btn-sm" onclick="openVolunteerDocModal(null, ${inlineJsArg(name)})"><i data-lucide="plus"></i> Add certification</button>` : ''}
               ${isAdmin ? `<span class="vol-foot-spacer"></span>
                 <button class="btn btn-secondary btn-sm" onclick="openVolunteerModal(${idx})"><i data-lucide="edit"></i> Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})" title="Delete volunteer"><i data-lucide="trash-2"></i></button>` : ''}
+                <button class="btn btn-danger btn-sm" onclick="deleteVolunteer(${idx})" aria-label="Delete volunteer ${escapeHtml(name)}" title="Delete volunteer"><i data-lucide="trash-2"></i></button>` : ''}
             </footer>` : ''}
           </article>`;
       }
@@ -4105,16 +4103,16 @@
         const isAdmin = currentUser && currentUser.isSystemAdmin;
         const canManageDocs = canManageVolDocs();
         const totalVolunteers = volunteers.length;
-        const clearedDbs = volunteers.filter(v => String(v['DBS Status'] || 'Cleared').toLowerCase() === 'cleared').length;
+        const clearedDbs = volunteers.filter(v => String(v['DBS Status'] || '').toLowerCase() === 'cleared').length;
         const totalYtdHours = volunteers.reduce((sum, volunteer) => sum + getVolYtdHours(getVolunteerName(volunteer)), 0);
         const licenceAlerts = getVolDocAlerts().length;
-        const searchValue = document.getElementById('volSearchInput') ? document.getElementById('volSearchInput').value : '';
+        const searchValue = document.getElementById('volSearchInput') ? document.getElementById('volSearchInput').value : evltVolunteerFilters.search;
 
         content.innerHTML = `
           <div class="page-header" style="align-items:flex-start;">
             <div class="page-title">
               <h2>Volunteer Directory</h2>
-              <p>Each volunteer's profile, roles, DBS status, licence and qualifications in one card.</p>
+              <p>Find volunteers by name or role, and check their recorded qualifications.</p>
             </div>
             ${isAdmin ? `
               <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
@@ -4131,21 +4129,22 @@
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalVolunteers}</div>
             </div>
             <div class="card" style="padding:1rem; border:1px solid var(--border);">
-              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Cleared DBS</div>
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">DBS marked cleared</div>
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem; color:#166534;">${clearedDbs}</div>
             </div>
             <div class="card" style="padding:1rem; border:1px solid var(--border);">
-              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">YTD hours</div>
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Hours this year</div>
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem;">${totalYtdHours.toFixed(1)}h</div>
             </div>
             <div class="card" style="padding:1rem; border:1px solid var(--border);">
-              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Licences to renew</div>
+              <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Qualification renewals</div>
               <div style="font-size:1.65rem; font-weight:800; margin-top:0.4rem; color:${licenceAlerts ? '#b45309' : '#166534'};">${licenceAlerts}</div>
             </div>
           </div>
 
           <div class="card" style="padding:0.85rem; margin-bottom:1rem; border:1px solid var(--border);">
-            <input type="search" id="volSearchInput" value="${escapeHtml(searchValue)}" placeholder="Search volunteers by name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.8rem 0.9rem; border:1px solid var(--border); border-radius:var(--radius);">
+            <label for="volSearchInput" class="evlt-filter-label">Search volunteers</label><input type="search" id="volSearchInput" value="${escapeHtml(searchValue)}" placeholder="Name or role…" oninput="filterVolunteersTable()" style="width:100%; padding:0.8rem 0.9rem; border:1px solid var(--border); border-radius:var(--radius);">
+            ${evltVolunteerFilterHtml()}
           </div>
 
           ${volunteers.length === 0
@@ -4154,21 +4153,15 @@
                <p id="volNoMatches" style="display:none; text-align:center; color:var(--text-muted); font-size:.85rem; padding:1.5rem;">No volunteers match that search.</p>`}
         `;
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-        if (searchValue) filterVolunteersTable();
+        filterVolunteersTable();
       }
 
       function filterVolunteersTable() {
-        const q = (document.getElementById('volSearchInput')?.value || '').trim().toLowerCase();
-        let shown = 0;
-        document.querySelectorAll('#volGrid .vol-card').forEach(card => {
-          const name = card.getAttribute('data-volname') || '';
-          const roles = card.getAttribute('data-volroles') || '';
-          const match = !q || name.includes(q) || roles.includes(q);
-          card.style.display = match ? '' : 'none';
-          if (match) shown++;
-        });
-        const none = document.getElementById('volNoMatches');
-        if (none) none.style.display = shown === 0 && q ? 'block' : 'none';
+        evltVolunteerFilters={search:document.getElementById('volSearchInput')?.value||'',role:document.getElementById('volRoleFilter')?.value||'',status:document.getElementById('volStatusFilter')?.value||''};
+        let shown=0;const cards=Array.from(document.querySelectorAll('#volGrid .vol-card'));
+        cards.forEach(card=>{const match=evltVolunteerFilterMatch({name:card.dataset.volname||'',roles:JSON.parse(card.dataset.volrolesJson||'[]'),status:card.dataset.volstatus||'none'},evltVolunteerFilters);card.hidden=!match;card.style.display=match?'':'none';if(match)shown++;});
+        const count=document.getElementById('volFilterCount');if(count)count.textContent='Showing '+shown+' of '+cards.length+' volunteers';
+        const none=document.getElementById('volNoMatches');if(none)none.style.display=shown===0&&cards.length?'block':'none';
       }
 
       function openVolunteerModal(index = null) {
@@ -4180,7 +4173,7 @@
         document.getElementById('volunteerModalTitle').innerText = existing ? 'Edit Volunteer' : 'Add New Volunteer';
         document.getElementById('volEditIndex').value = index !== null ? index : '';
         document.getElementById('volName').value = existing ? getVolunteerName(existing) : '';
-        document.getElementById('volDbs').value = existing ? (existing['DBS Status'] || 'Cleared') : 'Cleared';
+        document.getElementById('volDbs').value = existing ? (existing['DBS Status'] || 'Not recorded') : 'Not recorded';
 
         const rolesListContainer = document.getElementById('volRolesCheckboxes');
         const availableRoles = getAvailableRoles();
@@ -5644,7 +5637,7 @@
         if(!record.Title||!record.StartDate)return evltShowFormMessage(e.target,'Add an event name and start date.');
         if(!record.EndDate)record.EndDate=record.StartDate;if(record.EndDate<record.StartDate)return evltShowFormMessage(e.target,'The end date must be on or after the start date.');
         if(!await evltCommitRecord('events',{mode:'upsert',target,record,form:e.target,button:e.submitter}))return;
-        closeModal('eventModal');renderEventsPage();
+        closeModal('eventModal');if(currentView==='calendar')renderCalendarView();else renderEventsPage();
       }
 
       function deleteEvent(event,index,expectedId='') {

@@ -23,8 +23,9 @@ function evltBuildEventCalendar(event,index=0,now=new Date()){
   const notes=[event.Description||event.desc,!timed&&event.StartTime?'Start time (UK): '+event.StartTime:'',event.AccessLevel,Array.isArray(event.Requirements)?event.Requirements.join(', '):'',event.Contact?'Contact: '+event.Contact:''].filter(Boolean).join('\n');if(notes)lines.push('DESCRIPTION:'+evltCalendarEscape(notes));
   lines.push('END:VEVENT','END:VCALENDAR');return lines.map(evltCalendarFold).join('\r\n')+'\r\n';
 }
-function evltDownloadEvent(index){
-  if(!userHasAccess('events'))return;
+function evltDownloadEvent(index,expectedId=''){
+  if(!userHasAccess('events')&&!userHasAccess('calendar'))return;
+  if(expectedId)index=(db.events||[]).findIndex(event=>String(event.id)===String(expectedId));
   const event=(db.events||[])[index];if(!event)return;
   try{const text=evltBuildEventCalendar(event,index);const url=URL.createObjectURL(new Blob([text],{type:'text/calendar;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='EVLT-'+String(event.Title||event.title||'event').replace(/[^a-z0-9]+/gi,'-').slice(0,60)+'.ics';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);evltToast('Calendar file downloaded. Open it to add the event to your calendar.');}catch(error){evltToast(error.message,'error');}
 }

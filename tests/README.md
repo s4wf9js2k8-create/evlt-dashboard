@@ -5,7 +5,7 @@ Use Node.js 22 and Java 21 or later. Install function dependencies with `npm ci 
 Run ordinary checks from the repository root:
 
 ```
-node --test tests/access-persistence.test.mjs functions/banner-notifications.test.mjs functions/automatic-banner-notifications.test.mjs
+node --test tests/access-persistence.test.mjs tests/availability.test.mjs functions/banner-notifications.test.mjs functions/automatic-banner-notifications.test.mjs
 ```
 
 Run each `tests/*.test.cjs` file with Node (PowerShell: `Get-ChildItem tests/*.test.cjs | ForEach-Object { node $_.FullName }`).
@@ -16,4 +16,4 @@ The integration check starts a local Realtime Database emulator with synthetic r
 firebase emulators:exec --only database --project demo-evlt-save --config tests/firebase.emulator.json "node tests/access-emulator.integration.mjs"
 ```
 
-This exercises the actual callable handler with local authenticated request fixtures, separate-connection persistence reads, concurrent role saves, stale-edit rejection, volunteer/profile linking, admin checks, and loft save conflicts. Production callable token validation is additionally checked by an unsigned request returning 401; the emulator's request auth fixtures do not validate real token signatures.
+This exercises the actual callable handler with local authenticated request fixtures, separate-connection persistence reads, concurrent role saves, stale-edit rejection, volunteer/profile linking, admin checks, own-availability scoping and cancellation, and loft save conflicts. Production callable token validation is additionally checked by an unsigned request returning 401; the emulator's request auth fixtures do not validate real token signatures.

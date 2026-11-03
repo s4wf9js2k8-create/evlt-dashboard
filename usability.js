@@ -16,6 +16,7 @@ function evltHasActiveWork(){
   if(!currentUser||!document.body.classList.contains('authenticated'))return false;
   const content=document.getElementById('content');if(content?.dataset.evltOwner!==evltPageKey())return false;
   if([...document.querySelectorAll('.modal-overlay')].some(el=>getComputedStyle(el).display!=='none'))return true;
+  if(typeof evltRotaSaving!=='undefined'&&evltRotaSaving)return true;
   if(typeof evltRolePermissionsDirty!=='undefined'&&evltRolePermissionsDirty)return true;
   if(typeof loftDraft!=='undefined'&&loftDraft)return true;
   if(document.getElementById('itemCodeEditor')?.style.display==='block')return true;
