@@ -1,0 +1,24 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),memory=new Map(),errors=[],emittedExports=[];
+const context=vm.createContext({console,setTimeout:()=>1,clearTimeout:()=>{},navigator:{onLine:false},localStorage:{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v)},auth:{currentUser:{uid:'user-a'}},currentUser:{uid:'user-a',name:'Alex'},currentView:'documents',getTodayString:()=> '2026-11-03',getItemStorageLocation:i=>i.location,exportArrayToCsv:(...args)=>emittedExports.push(args),showDatabaseWriteError:e=>errors.push(e.message),database:{ref:()=>{throw Error('Offline write attempted');}},userHasAccess:p=>['documents','dashboard'].includes(p),document:{addEventListener:()=>{},getElementById:()=>null},window:{},ACCOUNT_ACCESS_PAGES:[{key:'documents',label:'Documents'},{key:'dashboard',label:'Dashboard'},{key:'volunteers',label:'Volunteers'}]});
+vm.runInContext(fs.readFileSync(path.join(root,'usability.js'),'utf8'),context);
+const run=code=>vm.runInContext(code,context);
+run(`evltStoreList('evlt-pins-user-a',['documents','volunteers']);`);
+assert.equal(run('JSON.stringify(evltPinnedPages())'),'["documents"]');
+run(`auth.currentUser.uid='user-b'`);assert.equal(run('evltPinnedPages().length'),0);
+run(`auth.currentUser.uid='user-a'`);
+run(`evltItemResults=[{itemCode:'AR-001',itemName:'=2+2',location:'@command',category:'Archive',notes:'safe'}];evltExportItems()`);
+assert.equal(emittedExports[0][1][0].itemName,"'=2+2");assert.equal(emittedExports[0][1][0].location,"'@command");
+const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
+const set=app.slice(app.indexOf('      function dbSet('),app.indexOf('      function dbUpdate('));
+const update=app.slice(app.indexOf('      function dbUpdate('),app.indexOf('      function exportArrayToCsv('));
+vm.runInContext(set+update,context);
+(async()=>{
+  assert.equal(await run(`dbSet('sample',{x:1})`),false);
+  assert.equal(await run(`dbUpdate({sample:{x:1}})`),false);
+  assert.equal(errors.length,2);assert.ok(errors.every(message=>message.includes('offline')));
+  const mapping=app.match(/const PAGE_DATA_KEYS = (\{[\s\S]*?\n      \});/);assert.ok(mapping);
+  const pages=vm.runInNewContext('('+mapping[1]+')'),rules=JSON.parse(fs.readFileSync(path.join(root,'database.rules.json'),'utf8')).rules.EVLT_ADMIN_DB;
+  for(const[page,keys]of Object.entries(pages))for(const key of keys)assert.ok(rules[key]?.['.read']?.includes("child('grantedPages').child('"+page+"')"),page+' cannot read '+key);
+  console.log('Shortcut isolation, export sanitisation, offline-write protection and all page/read-rule checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -22,9 +22,10 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="styles.css?v=item-register-1">
     <link rel="stylesheet" href="loft-map.css?v=2">
+    <link rel="stylesheet" href="usability.css?v=1">
   </head>
   <body>
-    <div style="position:fixed; bottom:8px; right:8px; z-index:9999; background:#0f172a; color:#94a3b8; font-size:10px; font-family:monospace; padding:3px 7px; border-radius:4px; opacity:0.85; pointer-events:none;">BUILD-18-EMAIL-APPROVAL</div>
+    <a href="#content" class="evlt-skip">Skip to main content</a>
     <div id="print-area"></div>
 
     <!-- Dedicated Login Page -->
@@ -42,12 +43,12 @@
           </div>
           <div class="form-group">
             <label for="loginEmail">Email address</label>
-            <input type="email" id="loginEmail" required autocomplete="username" placeholder="you@example.com">
+            <input type="email" id="loginEmail" required autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com">
           </div>
           <div class="form-group">
             <label for="loginUserPin">Password</label>
             <div style="position:relative;">
-              <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="At least 8 characters" style="padding-right:2.8rem;">
+              <input type="password" id="loginUserPin" required minlength="8" autocomplete="current-password" placeholder="Enter your password" style="padding-right:2.8rem;">
               <button type="button" id="loginPasswordToggle" aria-label="Show or hide password" style="position:absolute; right:0.55rem; top:50%; transform:translateY(-50%); border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:0.72rem; font-weight:600;">Show</button>
             </div>
           </div>
@@ -58,8 +59,10 @@
             <i data-lucide="log-in"></i> Sign In
           </button>
           <button id="signupToggleButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">First time? Create an account</button>
+          <details class="evlt-login-help"><summary>Help with signing in</summary><p>New accounts need email verification and approval from a System Admin before pages appear.</p>
           <button id="resetPasswordButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">Forgot password?</button>
           <button id="resendVerificationButton" type="button" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.5rem;">Resend verification email</button>
+          </details>
         </form>
       </div>
     </section>
@@ -90,7 +93,7 @@
       <sidebar id="sidebar">
         <!-- Dynamically rendered -->
       </sidebar>
-      <main id="content">
+      <main id="content" tabindex="-1">
         <!-- Renders dynamically -->
       </main>
     </div>
@@ -553,7 +556,7 @@
     <div class="modal-overlay" id="globalSearchModal">
       <div class="modal" style="max-width:480px;">
         <h3 style="margin-bottom:.75rem;">Search</h3>
-        <input type="text" id="globalSearchInput" placeholder="Search volunteers, incidents, documents, locos..." oninput="performGlobalSearch()" style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:.9rem;margin-bottom:.75rem;">
+        <input type="text" id="globalSearchInput" aria-label="Search pages, items, people and documents" placeholder="Search pages, item codes, people…" oninput="performGlobalSearch()" style="width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:var(--radius);font-size:.9rem;margin-bottom:.75rem;">
         <div id="globalSearchResults" style="max-height:50vh;overflow-y:auto;"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('globalSearchModal')">Close</button>
@@ -917,7 +920,8 @@
     <script src="loft-geometry.js?v=1"></script>
     <script src="loft-phone-controls.js?v=1"></script>
     <script src="loft-map.js?v=2"></script>
-    <script src="app.js?v=loft-map-15"></script>
+    <script src="usability.js?v=1"></script>
+    <script src="app.js?v=usability-16"></script>
   </body>
 </html>
 

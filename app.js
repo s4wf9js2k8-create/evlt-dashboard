@@ -306,6 +306,7 @@
       }
 
       function dbSet(path, value) {
+        if (!navigator.onLine) { showDatabaseWriteError(new Error('You are offline. Reconnect before saving changes.')); return Promise.resolve(false); }
         if (!database) {
           showDatabaseWriteError(new Error('Database connection is unavailable'));
           return Promise.resolve(false);
@@ -317,6 +318,7 @@
       }
 
       function dbUpdate(updates) {
+        if (!navigator.onLine) { showDatabaseWriteError(new Error('You are offline. Reconnect before saving changes.')); return Promise.resolve(false); }
         if (!database) {
           showDatabaseWriteError(new Error('Database connection is unavailable'));
           return Promise.resolve(false);
@@ -909,6 +911,7 @@
       window.setInterval(expireSessionIfIdle, 60 * 1000);
 
       function renderInitialApp() {
+        if (currentUser && userHasAccess(currentView) && evltHasActiveWork()) { evltDeferRefresh(); return; }
         updateLoginUserDropdown();
         if (!currentUser) {
           showLoginPage();
@@ -1368,7 +1371,7 @@
           <div class="page-header">
             <div class="page-title">
               <h2>Notification Centre</h2>
-              <p>Send an alert to everyone using the system, and see what's been sent before.</p>
+              <p>${isAdmin ? "Send an alert to everyone using the system, and review previous messages." : "Read updates and alerts shared with you."}</p>
             </div>
           </div>
           <div class="card" style="padding:1rem; margin-bottom:1.25rem;">
@@ -1405,6 +1408,7 @@
               </table>
             </div>
           </div>`;
+        if (!isAdmin) document.getElementById('notif_title')?.closest('.card')?.remove();
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 
         markNotificationsSeen();
@@ -2337,6 +2341,8 @@
         let html = currentUser.isSystemAdmin
           ? `<div class="sidebar-section-label">Admin</div><a href="#" class="${currentView === 'settings' ? 'active' : ''}" onclick="navigate('settings'); return false;"><i data-lucide="settings"></i> Settings & Permissions</a>`
           : '';
+        const pins = evltPinnedPages();
+        if (pins.length) html += '<div class="sidebar-section-label">My shortcuts</div>' + pins.map(key => { const page=evltPageDefinition(key); return page ? `<a href="#" onclick="navigate(${inlineJsArg(key)});return false;"><i data-lucide="bookmark"></i>${escapeHtml(page.label)}</a>` : ''; }).join('');
         Object.entries(sections).forEach(([secName, pages]) => {
           html += `<div class="sidebar-section-label">${secName}</div>`;
           pages.forEach(p => {
@@ -2374,8 +2380,7 @@
       }
 
       function toggleMenu() {
-        document.getElementById('sidebar').classList.toggle('active');
-        document.getElementById('overlay').classList.toggle('active');
+        evltSyncMenu(!document.getElementById('sidebar').classList.contains('active'));
       }
 
       function getVolunteerName(v) {
@@ -2399,6 +2404,7 @@
       }
 
       function navigate(view) {
+        const isNewPage = view !== currentView;
         if (!userHasAccess(view)) {
           alert('Access Restricted: You do not have permission to view this page.');
           return;
@@ -2433,6 +2439,8 @@
           case 'settings': renderSettings(); break;
           default: renderDashboard();
         }
+        evltEnhancePage(view);
+        if (isNewPage) { window.scrollTo(0, 0); document.getElementById('content')?.focus({preventScroll:true}); }
       }
 
       function getDriverStatusHtml() {
@@ -3190,6 +3198,7 @@
       }
 
       function addRunningTrain() {
+        if (!canEditFeature('dashboard')) { evltToast('You have view-only access to daily checks.','error'); return; }
         const select = document.getElementById('newRunningTrainSelect');
         const trainName = select.value;
         if (!trainName) return;
@@ -3206,6 +3215,7 @@
       }
 
       function removeRunningTrain(trainName) {
+        if (!canEditFeature('dashboard')) { evltToast('You have view-only access to daily checks.','error'); return; }
         if (!db.dailyChecks.runningTrains) return;
         db.dailyChecks.runningTrains = trainName === COACHES_VALUE
           ? db.dailyChecks.runningTrains.filter(t => !isCoachName(t))
@@ -3215,6 +3225,7 @@
       }
 
       function openOpCheckModal(checkKey) {
+        if (!canEditFeature('dashboard')) { evltToast('You have view-only access to daily checks.','error'); return; }
         const daily = db.dailyChecks || { trackWalk: {}, testRun: {} };
         if (checkKey === 'testRun') {
           if (!daily.trackWalk || daily.trackWalk.result !== 'Pass') {
@@ -3309,6 +3320,7 @@
       }
 
       function openIncidentModal(index = null) {
+        if (!canEditFeature('incidents')) { evltToast('You have view-only access to incidents.','error'); return; }
         if (!canEditFeature('incidents')) return alert('You do not have permission to edit incident records.');
         editingIncidentIndex = index;
         const existing = (index !== null && db.incidents) ? db.incidents[index] : null;
@@ -6269,69 +6281,31 @@
         if (input) input.value = '';
         if (resultsEl) resultsEl.innerHTML = '<p style="font-size:.78rem;color:var(--text-muted);text-align:center;padding:1rem;">Start typing to search volunteers, incidents, documents, locos and more.</p>';
         document.getElementById('globalSearchModal').style.display = 'flex';
+        performGlobalSearch();
         setTimeout(() => { if (input) input.focus(); }, 50);
       }
 
       function performGlobalSearch() {
-        const q = (document.getElementById('globalSearchInput').value || '').trim().toLowerCase();
-        const resultsEl = document.getElementById('globalSearchResults');
-        if (!q) {
-          resultsEl.innerHTML = '<p style="font-size:.78rem;color:var(--text-muted);text-align:center;padding:1rem;">Start typing to search volunteers, incidents, documents, locos and more.</p>';
-          return;
+        const q=(document.getElementById('globalSearchInput')?.value||'').trim().toLowerCase();
+        const host=document.getElementById('globalSearchResults');if(!host||!currentUser)return;
+        const results=[],match=text=>String(text||'').toLowerCase().includes(q);
+        const add=(page,type,label,action,details='')=>{if(userHasAccess(page)&&(!q||match(label+' '+details)))results.push({type,label,action,details});};
+        const recent=evltStoredList('evlt-recent-'+evltPageKey());
+        const pages=[...ACCOUNT_ACCESS_PAGES,...(currentUser.isSystemAdmin?[{key:'settings',label:'Settings & Permissions'}]:[])];
+        (q?pages:pages.slice().sort((a,b)=>{const ai=recent.indexOf(a.key),bi=recent.indexOf(b.key);return (ai<0?99:ai)-(bi<0?99:bi);})).forEach(p=>add(p.key,q?'Page':'Quick access',p.label,'navigate('+JSON.stringify(p.key)+')'));
+        if(q){
+          (db.itemCodes||[]).forEach(i=>add('documents','Stored item',i.itemCode+' — '+i.itemName,'docsSubView="items";navigate("documents");openItemCodeForm('+JSON.stringify(String(i.id))+')',getItemStorageLocation(i)+' '+(i.category||'')));
+          loftMaps().forEach(m=>loftSections(m).forEach(s=>add('documents','Storage section',m.name+' / '+s.name,'loftSelectedMapId='+JSON.stringify(m.id)+';loftSelectedSectionId='+JSON.stringify(s.id)+';docsSubView="lofts";navigate("documents")')));
+          (db.volunteers||[]).forEach(v=>add('volunteers','Volunteer',getVolunteerName(v),'navigate("volunteers")'));
+          (db.incidents||[]).forEach(i=>add('incidents','Incident',(i.asset||i['Asset / Location']||'Incident')+' — '+String(i.Description||i.desc||'').slice(0,80),'navigate("incidents")'));
+          (db.documents||[]).forEach(d=>add('documents','Document',d.title||'Untitled document','docsSubView="general";navigate("documents")'));
+          (db.eurotunnelTrains||[]).forEach(t=>add('eurotunnel','Eurotunnel loco',eurotunnelLocoLabel(t.id),'navigate("eurotunnel");eurotunnelCurrentSubView="stock";renderEurotunnelPage()',String(t.number||'')));
+          (db.fleetItems||[]).forEach(f=>add('maintenance','Fleet asset',f.name,'navigate("maintenance")'));
+          (db.actions||[]).forEach(a=>add('actions','Action',a.Title||a.title,'navigate("actions")'));
+          (db.events||[]).forEach(e=>add('events','Event',e.Title||e.title,'navigate("events")'));
+          (db.helpGuides||[]).forEach(g=>add('help','Help guide',g.title,'navigate("help")'));
         }
-        const results = [];
-
-        (db.volunteers || []).forEach(v => {
-          const name = getVolunteerName(v);
-          if (name.toLowerCase().includes(q)) results.push({ type: 'Volunteer', icon: 'user', label: name, action: "navigate('volunteers')" });
-        });
-
-        (db.incidents || []).forEach(i => {
-          const text = `${i.asset || i['Asset / Location'] || ''} ${i.Description || i.desc || ''}`;
-          if (text.toLowerCase().includes(q)) {
-            const label = `${i.asset || i['Asset / Location'] || 'Incident'} — ${(i.Description || i.desc || '').slice(0, 60)}`;
-            results.push({ type: 'Incident', icon: 'alert-triangle', label, action: "navigate('incidents')" });
-          }
-        });
-
-        (db.documents || []).forEach(d => {
-          if ((d.title || '').toLowerCase().includes(q)) results.push({ type: 'Document', icon: 'file-text', label: d.title, action: "navigate('documents')" });
-        });
-
-        (db.eurotunnelTrains || []).forEach(t => {
-          const text = `${t.name || ''} ${t.number || ''}`;
-          if (text.toLowerCase().includes(q)) results.push({ type: 'Eurotunnel Loco', icon: 'train-front', label: eurotunnelLocoLabel(t.id), action: `navigate('eurotunnel'); eurotunnelCurrentSubView='stock'; renderEurotunnelPage();` });
-        });
-
-        (db.fleetItems || []).forEach(f => {
-          if ((f.name || '').toLowerCase().includes(q)) results.push({ type: 'Fleet Asset', icon: 'train', label: f.name, action: "navigate('maintenance')" });
-        });
-
-        (db.actions || []).forEach(a => {
-          const label = a.Title || a.title;
-          if (label && label.toLowerCase().includes(q)) results.push({ type: 'Action', icon: 'check-square', label, action: "navigate('actions')" });
-        });
-
-        (db.events || []).forEach(e => {
-          const label = e.Title || e.title;
-          if (label && label.toLowerCase().includes(q)) results.push({ type: 'Event', icon: 'calendar-range', label, action: "navigate('events')" });
-        });
-
-        (db.helpGuides || []).forEach(g => {
-          if ((g.title || '').toLowerCase().includes(q)) results.push({ type: 'Help Guide', icon: 'book-open', label: g.title, action: "navigate('help')" });
-        });
-
-        resultsEl.innerHTML = results.length === 0
-          ? '<p style="font-size:.8rem;color:var(--text-muted);text-align:center;padding:1rem;">No matches found.</p>'
-          : results.slice(0, 30).map(r => `
-            <div style="display:flex;align-items:center;gap:.6rem;padding:.6rem .5rem;border-bottom:1px solid var(--border-subtle);cursor:pointer;" onclick="closeModal('globalSearchModal'); ${r.action}">
-              <i data-lucide="${r.icon}" style="width:16px;height:16px;color:var(--primary);flex-shrink:0;"></i>
-              <div style="min-width:0;">
-                <div style="font-size:.65rem;text-transform:uppercase;color:var(--text-muted);font-weight:700;">${r.type}</div>
-                <div style="font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.label || '')}</div>
-              </div>
-            </div>`).join('');
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+        host.innerHTML=results.length?(q?'':'<p class="evlt-dialog-note">Jump to a page, or type to find an item, person, action or document.</p>')+results.slice(0,q?40:8).map(r=>'<button type="button" class="evlt-search-result" onclick="'+escapeHtml('closeModal("globalSearchModal");'+r.action)+'"><span><span class="evlt-search-meta">'+escapeHtml(r.type)+'</span><br><span class="evlt-search-title">'+escapeHtml(r.label||'Untitled')+'</span>'+(r.details?'<br><span class="evlt-summary-note">'+escapeHtml(r.details)+'</span>':'')+'</span></button>').join(''):'<div class="evlt-item-empty"><strong>No matches found</strong><p>Try an item code, a shorter name, or a location.</p></div>';
       }
 
       function eurotunnelShowLightbox(src) {
@@ -7050,12 +7024,12 @@
           if (loftSaving || !confirm('Discard your unsaved layout changes?')) return;
           loftDraft = null; loftDrawing = false;
         }
-        docsSubView = view; renderDocuments();
+        docsSubView = view; renderDocuments(); window.scrollTo(0, 0);
       }
 
       function docsTabsHtml() {
         return `
-          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+          <div class="evlt-doc-tabs" style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn ${docsSubView === 'general' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('general')">General Documents</button>
             <button class="btn ${docsSubView === 'items' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('items')">Item Register</button>
             <button class="btn ${docsSubView === 'lofts' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setDocsSubView('lofts')">Loft Map</button>
@@ -7256,7 +7230,7 @@
             .some(value => String(value || '').toLowerCase().includes(query));
           const matchesCategory = !itemCodeCategoryFilter || String(item.category || '').trim() === itemCodeCategoryFilter;
           const matchesLocation = !itemCodeLocationFilter || String(item.location || '').trim() === itemCodeLocationFilter;
-          return matchesSearch && matchesCategory && matchesLocation;
+          return matchesSearch && matchesCategory && matchesLocation && (!evltOnlyUnmapped || !getItemLoftLink(item));
         });
         const sorted = filtered.slice().sort((a, b) => itemCodeCompare(a, b, key) || itemCodeCompare(a, b, 'itemCode'));
         const locations = new Set(records.map(item => String(item.location || '').trim()).filter(Boolean));
@@ -7285,7 +7259,7 @@
           </div>
           <div id="itemCodeEditor" class="card item-code-editor" style="display:none;padding:1rem;margin-bottom:1rem;"></div>
           <div class="item-register-toolbar">
-            <label class="item-register-search"><i data-lucide="search"></i><input id="itemCodeSearch" type="search" value="${escapeHtml(itemCodeSearch)}" placeholder="Search code, item, location…" oninput="setItemCodeSearch(this.value)"></label>
+            <label class="item-register-search"><i data-lucide="search"></i><input id="itemCodeSearch" type="search" aria-label="Search registered items" value="${escapeHtml(itemCodeSearch)}" placeholder="Search code, item, location…" oninput="setItemCodeSearch(this.value)"></label>
             <label class="item-register-sort"><span>Sort by</span><select id="itemCodeSort" onchange="setItemCodeSort(this.value)">
               <option value="location" ${itemCodeSort === 'location' ? 'selected' : ''}>Location, then code</option>
               <option value="code" ${itemCodeSort === 'code' ? 'selected' : ''}>Item code</option>
@@ -7317,6 +7291,7 @@
                 <td><div style="display:flex;gap:.35rem;justify-content:flex-end;"><button type="button" class="btn btn-secondary btn-sm" onclick="openItemCodeForm(${inlineJsArg(item.id)})" aria-label="Edit ${escapeHtml(item.itemCode)}" title="Edit"><i data-lucide="pencil"></i></button><button type="button" class="btn btn-danger btn-sm" onclick="deleteItemCode(${inlineJsArg(item.id)})" aria-label="Delete ${escapeHtml(item.itemCode)}" title="Delete"><i data-lucide="trash-2"></i></button></div></td>
               </tr>`).join('') : `<tr><td colspan="6" class="item-register-empty">${records.length ? 'No items match the current filters.' : 'No items registered yet. Scan a code or add the first item.'}</td></tr>`}</tbody>
           </table></div></div>`;
+        evltRenderItemExtras(sorted, records);
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
@@ -7422,6 +7397,7 @@
         const customInput = document.getElementById(fieldKey === 'location' ? 'itemCodeLocationCustom' : 'itemCodeCategoryCustom');
         if (!customInput) return;
         customInput.style.display = value === '__custom__' ? 'block' : 'none';
+        customInput.required = value === '__custom__';
         if (value !== '__custom__') customInput.value = '';
       }
 
@@ -7474,6 +7450,7 @@
       }
 
       function openItemCodeForm(id = null, scannedCode = '') {
+        if (!canEditFeature('documents')) return evltShowItemDetails(id, scannedCode);
         itemCodeFormId = id;
         const editor = document.getElementById('itemCodeEditor');
         if (!editor) return;
@@ -7496,8 +7473,8 @@
             <div class="item-code-form-grid">
               <div class="form-group"><label for="itemCodeValue">Item code</label><div class="item-code-value-stack"><div class="item-code-input-row"><input id="itemCodeValue" data-user-edited="${existing ? '1' : '0'}" data-last-auto-code="${escapeHtml(defaultCode)}" required maxlength="120" autocomplete="off" value="${escapeHtml(defaultCode)}" placeholder="Scan or type code" oninput="this.dataset.userEdited = this.value.trim() ? '1' : '0';"><button type="button" class="btn btn-secondary btn-sm item-code-suggest-btn" ${nextSuggestedCode ? '' : 'disabled'} onclick="const field = document.getElementById('itemCodeValue'); field.value = ${inlineJsArg(nextSuggestedCode)}; field.dataset.userEdited = '0'; field.dataset.lastAutoCode = ${inlineJsArg(nextSuggestedCode)}; field.focus();">Use suggested</button></div><small id="itemCodeSuggestionText" class="item-code-suggestion-text">${categoryValue ? `Next suggested: <strong>${escapeHtml(nextSuggestedCode)}</strong>` : 'Choose a category to generate the next code.'}</small></div></div>
               <div class="form-group"><label for="itemCodeName">Item name</label><input id="itemCodeName" required maxlength="160" value="${escapeHtml(existing?.itemName || '')}" placeholder="What is the item?"></div>
-              <div class="form-group"><label for="itemCodeLocationSelect">Storage location</label><div class="item-code-choice-stack"><select id="itemCodeLocationSelect" onchange="setItemCodeChoiceMode('location', this.value)"><option value="">Select location</option>${locationOptions.map(location => `<option value="${escapeHtml(location)}" ${locationSelectedValue === location ? 'selected' : ''}>${escapeHtml(location)}</option>`).join('')}<option value="__custom__" ${locationSelectedValue === '__custom__' ? 'selected' : ''}>Add new location…</option></select><input id="itemCodeLocationCustom" type="text" value="${escapeHtml(locationValue && !locationOptions.includes(locationValue) ? locationValue : '')}" placeholder="New storage location" style="display:${locationSelectedValue === '__custom__' ? 'block' : 'none'};" /></div>${suggestedLocationHtml}</div>
-              <div class="form-group"><label for="itemCodeCategorySelect">Category</label><div class="item-code-choice-stack"><select id="itemCodeCategorySelect" onchange="setItemCodeChoiceMode('category', this.value); syncItemCodeSuggestion();"><option value="">Select category</option>${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${categorySelectedValue === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}<option value="__custom__" ${categorySelectedValue === '__custom__' ? 'selected' : ''}>Add new category…</option></select><input id="itemCodeCategoryCustom" type="text" value="${escapeHtml(categoryValue && !categoryOptions.includes(categoryValue) ? categoryValue : '')}" placeholder="New category" style="display:${categorySelectedValue === '__custom__' ? 'block' : 'none'};" oninput="syncItemCodeSuggestion()" /></div>${suggestedCategoryHtml}</div>
+              <div class="form-group"><label for="itemCodeLocationSelect">Storage location</label><div class="item-code-choice-stack"><select id="itemCodeLocationSelect" required onchange="setItemCodeChoiceMode('location', this.value)"><option value="">Select location</option>${locationOptions.map(location => `<option value="${escapeHtml(location)}" ${locationSelectedValue === location ? 'selected' : ''}>${escapeHtml(location)}</option>`).join('')}<option value="__custom__" ${locationSelectedValue === '__custom__' ? 'selected' : ''}>Add new location…</option></select><input id="itemCodeLocationCustom" type="text" value="${escapeHtml(locationValue && !locationOptions.includes(locationValue) ? locationValue : '')}" placeholder="New storage location" style="display:${locationSelectedValue === '__custom__' ? 'block' : 'none'};" /></div>${suggestedLocationHtml}</div>
+              <div class="form-group"><label for="itemCodeCategorySelect">Category</label><div class="item-code-choice-stack"><select id="itemCodeCategorySelect" required onchange="setItemCodeChoiceMode('category', this.value); syncItemCodeSuggestion();"><option value="">Select category</option>${categoryOptions.map(category => `<option value="${escapeHtml(category)}" ${categorySelectedValue === category ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}<option value="__custom__" ${categorySelectedValue === '__custom__' ? 'selected' : ''}>Add new category…</option></select><input id="itemCodeCategoryCustom" type="text" value="${escapeHtml(categoryValue && !categoryOptions.includes(categoryValue) ? categoryValue : '')}" placeholder="New category" style="display:${categorySelectedValue === '__custom__' ? 'block' : 'none'};" oninput="syncItemCodeSuggestion()" /></div>${suggestedCategoryHtml}</div>
               <div class="form-group item-code-notes"><label for="itemLoftZone">Loft map section</label><select id="itemLoftZone" onchange="itemLoftSelectionChanged()">${itemLoftZoneOptions(existing?.loftMapId && existing?.loftSectionId ? existing.loftMapId + '|' + existing.loftSectionId : '')}</select><small style="color:var(--text-muted);">Choose a saved section to link this item to its position on the map. An admin can add sections in Loft Map.</small></div>
               <div class="form-group item-code-notes"><label for="itemCodeNotes">Notes</label><textarea id="itemCodeNotes" rows="2" maxlength="500" placeholder="Optional details">${escapeHtml(existing?.notes || '')}</textarea></div>
             </div>
@@ -7527,7 +7504,7 @@
         const mapLink = selectedItemLoftZone();
         const location = mapLink?.label || getItemCodeChoiceValue('location');
         const category = getItemCodeChoiceValue('category');
-        if (!itemCode || !itemName || !location || !category) return;
+        if (!itemCode || !itemName || !location || !category) { evltShowFormMessage(event.target, 'Add an item code and name, then choose a storage location and category.'); return; }
         const records = Array.isArray(db.itemCodes) ? db.itemCodes.slice() : [];
         const duplicate = records.find(item => String(item.itemCode || '').trim().toLowerCase() === itemCode.toLowerCase() && String(item.id) !== String(itemCodeFormId));
         if (duplicate) {
@@ -8640,7 +8617,7 @@
               <span class="tag" style="display:inline-flex; align-items:center; gap:.4rem; background:#eef2ff; color:#3730a3; padding:.38rem .7rem; border-radius:999px; font-size:.78rem; font-weight:700;">${escapeHtml(currentUser.email || 'Unknown admin')}</span>
             </div>
             <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
-              <input type="email" id="currentAdminEmailInput" value="${escapeHtml(currentUser.email || '')}" style="min-width:220px; flex:1;">
+              <input type="email" id="currentAdminEmailInput" aria-label="Admin email address" value="${escapeHtml(currentUser.email || '')}" style="min-width:220px; flex:1;">
               <button class="btn btn-primary btn-sm" onclick="changeCurrentAdminEmail()"><i data-lucide="user-cog"></i> Change my admin email</button>
             </div>
             <div id="adminEmailReauthPanel" style="display:none;margin-top:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:8px;">
@@ -8701,19 +8678,19 @@
 
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
             <div class="card" style="padding:1.25rem;">
-              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Push Notification Token</h3>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Web push tokens are used for instant safety alerts on operations.</p>
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Push notifications</h3>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Set up alerts on this device or send a test notification.</p>
               <div style="display:flex; gap:0.5rem;">
-                <input type="text" id="vapidKeyInput" value="BBxni9UFiHxKnAW2w0Zhd-WXrrBQwuAqYgw_QqIeH9llPXaz1_bcbcWZo-0QN3r-ANXoQI2hvjZI5WnL7RbV_88" style="font-family:monospace; font-size:0.75rem; padding:0.4rem;" readonly>
+                <input type="hidden" id="vapidKeyInput" value="BBxni9UFiHxKnAW2w0Zhd-WXrrBQwuAqYgw_QqIeH9llPXaz1_bcbcWZo-0QN3r-ANXoQI2hvjZI5WnL7RbV_88" style="font-family:monospace; font-size:0.75rem; padding:0.4rem;" readonly>
                 <button class="btn btn-secondary btn-sm" onclick="openNotificationModal(); sendTestNotification()"><i data-lucide="bell-ring"></i> Send Test Alert</button>
               </div>
             </div>
 
             <div class="card" style="padding:1.25rem;">
-              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Export & Repository Backup</h3>
-              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Download the full application source file for GitHub or local backup, or download a snapshot of all database records.</p>
+              <h3 style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.4rem;">Data exports</h3>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Download a backup of the saved records, or open the application source repository.</p>
               <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <button class="btn btn-primary btn-sm" onclick="exportAppHtml()"><i data-lucide="file-code"></i> Download App (index.html)</button>
+                <a class="btn btn-secondary btn-sm" href="https://github.com/s4wf9js2k8-create/evlt-dashboard" target="_blank" rel="noopener noreferrer">Source repository</a>
                 <button class="btn btn-secondary btn-sm" onclick="exportDatabaseJson()"><i data-lucide="download"></i> Download DB Snapshot</button>
               </div>
             </div>
