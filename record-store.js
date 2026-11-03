@@ -5,6 +5,7 @@ async function evltCheckedTransaction(ref,update){
   let listener;
   try{
     await new Promise((resolve,reject)=>{listener=()=>resolve();ref.on('value',listener,reject);});
+    if(typeof ref.get==='function')await ref.get();
     return await ref.transaction(update,undefined,false);
   }finally{if(listener)ref.off('value',listener);}
 }

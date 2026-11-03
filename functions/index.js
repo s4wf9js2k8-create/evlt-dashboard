@@ -132,12 +132,44 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
 import { planAccessSave } from './access-persistence.js';
 import { planOwnAvailability } from './availability.js';
+import {planOperation,planPublicVisitRequest,operationalLookups,enforceDueServiceHolds} from './operations.js';
+import {randomUUID,createHash} from 'node:crypto';
+import {checkedTransaction} from './database-transactions.js';
+
+export const manageOperations=onCall({region:'europe-west1',cors:true,maxInstances:5},async request=>{
+  if(!request.auth?.uid||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified EVLT account.');
+  const actor={uid:request.auth.uid,email:request.auth.token.email},meta={now:Date.now(),recordId:randomUUID(),secondaryId:randomUUID()};let failure=null,result=null;
+  const saved=await checkedTransaction(getDatabase().ref(),root=>{if(!root)return root;try{const planned=planOperation(root,actor,request.data||{},meta);result=planned.result;failure=null;return planned.root;}catch(error){failure=error;result=null;return;}},undefined,false);
+  if(!saved.committed||!result)throw new HttpsError(failure?.code||'aborted',failure?.message||'The save could not be confirmed. Reload the record and try again.');
+  return {saved:true,...result};
+});
+
+export const refreshOperationalLookups=onCall({region:'europe-west1',cors:true,maxInstances:3},async request=>{
+  const uid=request.auth?.uid;if(!uid||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in first.');
+  const [adminSnap,bindingSnap]=await Promise.all([getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get(),getDatabase().ref('EVLT_ACCOUNT_BINDINGS/'+uid).get()]);const binding=bindingSnap.val(),admin=adminSnap.val()===true,approved=binding?.approved===true&&binding.email===request.auth.token.email,maintenance=admin||approved&&binding.grantedPages?.maintenance===true,equipment=admin||approved&&binding.grantedPages?.equipment===true;
+  if(!maintenance&&!equipment)throw new HttpsError('permission-denied','Maintenance or equipment access is required.');
+  const [volunteers,incidents]=await Promise.all([getDatabase().ref('EVLT_ADMIN_DB/volunteers').get(),getDatabase().ref('EVLT_ADMIN_DB/incidents').get()]),lookup=operationalLookups({volunteers:volunteers.val(),incidents:incidents.val()});
+  await getDatabase().ref('EVLT_ADMIN_DB').update(lookup);return {operationalVolunteerNames:lookup.operationalVolunteerNames,...(maintenance?{fleetDefectSummary:lookup.fleetDefectSummary}:{})};
+});
+
+export const updateOperationalVolunteerNames=onValueWritten({ref:'/EVLT_ADMIN_DB/volunteers',instance:'evlt-admin-default-rtdb',region:'europe-west1'},async event=>{const lookup=operationalLookups({volunteers:event.data.after.val()});await getDatabase().ref('EVLT_ADMIN_DB/operationalVolunteerNames').set(lookup.operationalVolunteerNames);});
+export const updateFleetDefectSummary=onValueWritten({ref:'/EVLT_ADMIN_DB/incidents',instance:'evlt-admin-default-rtdb',region:'europe-west1'},async event=>{const lookup=operationalLookups({incidents:event.data.after.val()});await getDatabase().ref('EVLT_ADMIN_DB/fleetDefectSummary').set(lookup.fleetDefectSummary);});
+
+export const getVisitRequestInfo=onCall({region:'europe-west1',cors:true,maxInstances:3},async()=>{const r=(await getDatabase().ref('EVLT_ADMIN_DB/operationsSettings/visits').get()).val()||{};return {enabled:r.publicRequestsEnabled===true,rules:String(r.rules||''),openTime:String(r.openTime||''),closeTime:String(r.closeTime||''),prices:r.prices||{}};});
+
+export const submitVisitRequest=onCall({region:'europe-west1',cors:true,maxInstances:3,timeoutSeconds:30},async request=>{
+  if(JSON.stringify(request.data||{}).length>14000)throw new HttpsError('invalid-argument','This request is too long.');
+  const meta={now:Date.now(),recordId:randomUUID(),rateKey:createHash('sha256').update(String(request.rawRequest.ip||'unknown')).digest('hex')};let failure=null,result=null;
+  const saved=await checkedTransaction(getDatabase().ref(),root=>{if(!root)return root;try{const planned=planPublicVisitRequest(root,request.data||{},meta);result=planned.result;failure=null;return planned.root;}catch(error){failure=error;result=null;return;}},undefined,false);
+  if(!saved.committed||!result)throw new HttpsError(failure?.code||'aborted',failure?.message||'Your request could not be confirmed. Try again or contact EVLT.');
+  return {saved:true,reference:result.reference};
+});
 
 export const setMyAvailability = onCall({region:'europe-west1',cors:true},async request=>{
   const uid=request.auth?.uid,email=request.auth?.token?.email;
   if(!uid||!email||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified account.');
   let failure='permission-denied',planned=false;
-  const result=await getDatabase().ref().transaction(root=>{
+  const result=await checkedTransaction(getDatabase().ref(),root=>{
     if(!root)return root;
     try{const next=planOwnAvailability(root,uid,email,request.data);planned=true;return next;}catch(error){failure=error.message;planned=false;return;}
   },undefined,false);
@@ -150,7 +182,7 @@ export const saveAccessSettings = onCall({ region: 'europe-west1', cors: true },
   if(!uid||request.auth?.token?.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified account.');
   if((await getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get()).val()!==true)throw new HttpsError('permission-denied','System Admin access is required.');
   let failure='aborted';
-  const result=await getDatabase().ref().transaction(root=>{
+  const result=await checkedTransaction(getDatabase().ref(),root=>{
     if(!root)return root; // Retry with the authoritative value when the SDK's initial local cache is empty.
     try{return planAccessSave(root,uid,request.data,Date.now());}catch(error){failure=error.message;return;}
   },undefined,false);
@@ -266,6 +298,7 @@ export const forceRevokeAccount = onCall(
  
 // Server checks keep banner alerts running when every browser is closed.
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+export const checkRequiredServiceHolds=onSchedule({schedule:'0 0 * * *',timeZone:'Europe/London',region:'europe-west1',maxInstances:1},async()=>{let count=0;await checkedTransaction(getDatabase().ref(),root=>{if(!root)return root;const result=enforceDueServiceHolds(root,Date.now());count=result.changedCount;return count?result.root:undefined;},undefined,false);logger.info('Required-service hold check completed.',{heldAssets:count});});
 import { asList as bannerList, bannerEligible, deliveryId, getNotificationBanners, resolveNotificationBanner } from './banner-notifications.js';
 
 export const sendScheduledBannerNotifications = onSchedule(

@@ -91,7 +91,8 @@
       }
       // Locos only (coaches removed) - used with a single "Coaches" option in menus
       function getLocoOnlyTrains() {
-        return AVAILABLE_TRAINS.filter(t => !isCoachName(t));
+        const fleet=(db.fleetItems||[]).filter(Boolean);
+        return fleet.length?fleet.filter(f=>['Steam','Diesel','Electric'].includes(f.type)).map(f=>f.name):AVAILABLE_TRAINS.filter(t=>!isCoachName(t));
       }
       // Including "Management" role for page access controls
       const DEFAULT_ROLES = ["Standard", "Admin", "Management", "Driver", "Platform", "Shop", "Maintenance", "Barn", "Tearoom", "Eurotunnel"];
@@ -108,6 +109,8 @@
         { key: 'actions', label: 'Actions', icon: 'check-square', section: 'Operations' },
         { key: 'maintenance', label: 'Maintenance & Fleet', icon: 'wrench', section: 'Operations' },
         { key: 'events', label: 'Events', icon: 'calendar-range', section: 'Operations' },
+        { key: 'bookings', label: 'Visitor Bookings', icon: 'calendar-check', section: 'Operations' },
+        { key: 'equipment', label: 'Equipment & Loans', icon: 'package', section: 'Operations' },
         { key: 'eurotunnel', label: 'Eurotunnel N Gauge', icon: 'train-front', section: 'Operations' },
         { key: 'suppliers', label: 'Suppliers', icon: 'truck', section: 'Management' },
         { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
@@ -192,9 +195,11 @@
         competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles','removedRoles','volunteerDocs'],
         actions: ['actions','volunteers'],
-        maintenance: ['fleetItems','maintenanceLogs','assets'],
+        maintenance: ['fleetItems','maintenanceLogs','assets','fleetJobs','fleetPlans','fleetDefectSummary','operationalVolunteerNames','ms365Config'],
         events: ['events','volunteers','clockLogs'],
         eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
+        bookings: ['visitBookings','operationsSettings','ms365Config'],
+        equipment: ['equipmentAssets','equipmentLoans','equipmentJobs','equipmentPlans','operationalVolunteerNames','ms365Config'],
         suppliers: ['suppliers'],
         enquiries: ['enquiries'],
         documents: ['documents','volunteerDocs','archiveUploads','itemCodes','loftMaps'],
@@ -2422,6 +2427,8 @@
           case 'volunteers': renderVolunteers(); break;
           case 'actions': renderActionsPage(); break;
           case 'maintenance': renderMaintenancePage(); break;
+          case 'bookings': opsRenderBookings(); break;
+          case 'equipment': opsRenderEquipment(); break;
           case 'events': renderEventsPage(); break;
           case 'eurotunnel': renderEurotunnelPage(); break;
           case 'suppliers': renderGenericModule('suppliers'); break;
@@ -3060,7 +3067,7 @@
               <div style="display: flex; gap: 0.5rem; max-width: 350px;">
                 <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
                   <option value="">-- Add Loco to Today's Run --</option>
-                  ${getLocoOnlyTrains().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
+                  ${getLocoOnlyTrains().filter(t=>!getUnavailableFleetNames().some(n=>n.includes(t.toLowerCase()))).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
                   <option value="${COACHES_VALUE}">Coaches (all)</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
@@ -3202,6 +3209,7 @@
         if (!trainName) return;
         if (!db.dailyChecks.runningTrains) db.dailyChecks.runningTrains = [];
         const toAdd = trainName === COACHES_VALUE ? getCoachNames() : [trainName];
+        if(toAdd.some(name=>getUnavailableFleetNames().some(blocked=>blocked.includes(name.toLowerCase())))){evltToast('An asset in this selection is recorded as unavailable. Resolve its hold before adding it to the running list.','error');return;}
         let changed = false;
         toAdd.forEach(n => {
           if (!db.dailyChecks.runningTrains.includes(n)) { db.dailyChecks.runningTrains.push(n); changed = true; }
@@ -3250,7 +3258,7 @@
         const trainGroup = document.getElementById('trainSelectionGroup');
         if (checkKey === 'testRun') {
           trainGroup.style.display = 'block';
-          const redTagged = getRedTaggedAssets();
+          const redTagged = getUnavailableFleetNames();
           const locoSelect = document.getElementById('opCheckLocoSelect');
           const savedTrains = checkData.trains || [];
           const activeLoco = savedTrains.length > 0 ? (savedTrains.every(t => isCoachName(t)) ? COACHES_VALUE : savedTrains[0]) : '';
@@ -4260,7 +4268,9 @@
 
       let maintAssetFilterValue = '';
 
-      function renderMaintenancePage() {
+      function renderMaintenancePage() { return opsRenderMaintenance(); }
+
+      function renderLegacyMaintenancePage() {
         const content = document.getElementById('content');
         const fleet = db.fleetItems || [];
         const filterSelect = document.getElementById('maintAssetFilter');
@@ -5538,7 +5548,7 @@
             </div>
             ${ev.Description || ev.desc ? `<p style="font-size:0.8rem; color:var(--text);">${escapeHtml(ev.Description || ev.desc)}</p>` : ''}
             ${ev.Requirements && ev.Requirements.length ? `<div style="display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.55rem;">${ev.Requirements.map(r => `<span style="background:#f1f5f9; color:var(--text-muted); padding:2px 8px; border-radius:10px; font-size:0.68rem; font-weight:600;">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
-            <div style="margin-top:.75rem"><button type="button" class="btn btn-secondary btn-sm" onclick="evltDownloadEvent(${idx})">Add to calendar</button></div>
+            <div style="margin-top:.75rem;display:flex;gap:.4rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm" onclick="evltDownloadEvent(${idx})">Add to calendar</button>${canEditFeature('bookings')&&(ev.bookingId||canEditFeature('events'))?`<button type="button" class="btn btn-secondary btn-sm" onclick="opsOpenBookingForEvent(${idx})">${ev.bookingId?'Manage booking':'Add booking details'}</button>`:''}</div>
             ${canEdit ? `
               <div style="display:flex; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.6rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})" style="flex:1;"><i data-lucide="edit"></i> Edit</button>

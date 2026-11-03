@@ -17,3 +17,12 @@ firebase emulators:exec --only database --project demo-evlt-save --config tests/
 ```
 
 This exercises the actual callable handler with local authenticated request fixtures, separate-connection persistence reads, concurrent role saves, stale-edit rejection, volunteer/profile linking, admin checks, own-availability scoping and cancellation, and loft save conflicts. Production callable token validation is additionally checked by an unsigned request returning 401; the emulator's request auth fixtures do not validate real token signatures.
+
+Operations unit and client checks:
+
+```
+node --test tests/operations.test.mjs tests/operations-client.test.mjs
+firebase emulators:exec --only database --project demo-evlt-operations --config firebase.operations-test.json "node tests/operations-emulator.integration.mjs"
+```
+
+The operations emulator loads the production database rules and synthetic records. It exercises actual callable handlers, booking/event privacy, public request moderation, concurrent checkout, damaged returns, maintenance release gates, current-data reads and restricted page permissions. Microsoft calendar routing and payloads are tested with local mocks; real OAuth consent, Outlook writes and OneDrive access require organisation setup and a connected Microsoft account.

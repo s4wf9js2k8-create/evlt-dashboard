@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Request a group visit · EVLT</title><link rel="stylesheet" href="styles.css?v=directory-21"><link rel="stylesheet" href="operations.css?v=1"><script defer src="booking-request.js?v=1"></script></head>
+<body><main class="ops-public-main"><div class="ops-public-brand"><span>Elham Valley Line Trust</span></div><section class="card"><h1>Request a group visit</h1><p>Arrange a school visit, private group visit or birthday visit. Your request will be reviewed by EVLT; submitting this form does not confirm a booking.</p><div id="visitRequestStatus" role="status">Loading visit information…</div><p id="visitRequestRules" class="ops-long-text"></p><form id="visitRequestForm" class="ops-public-form" hidden><div class="ops-form">
+<div class="form-group"><label for="groupName">Group or school name</label><input id="groupName" name="groupName" required maxlength="160" autocomplete="organization"></div>
+<div class="form-group"><label for="visitType">Visit type</label><select id="visitType" name="type"><option>School</option><option>Private group</option><option>Birthday</option><option>Other</option></select></div>
+<div class="form-group"><label for="contactName">Your name</label><input id="contactName" name="contactName" required maxlength="120" autocomplete="name"></div>
+<div class="form-group"><label for="contactEmail">Email</label><input id="contactEmail" name="email" type="email" required maxlength="254" autocomplete="email"></div>
+<div class="form-group"><label for="contactPhone">Phone (optional)</label><input id="contactPhone" name="phone" type="tel" maxlength="50" autocomplete="tel"></div>
+<div class="form-group"><label for="visitDate">Preferred visit date</label><input id="visitDate" name="date" type="date" required></div>
+<div class="form-group"><label for="startTime">Preferred arrival time</label><input id="startTime" name="startTime" type="time" required></div>
+<div class="form-group"><label for="endTime">Preferred finish time</label><input id="endTime" name="endTime" type="time" required></div>
+<div class="form-group"><label for="adults">Adults</label><input id="adults" name="adults" type="number" required min="0" max="500" value="0"></div>
+<div class="form-group"><label for="children">Children</label><input id="children" name="children" type="number" required min="0" max="500" value="0"></div>
+<div class="form-group ops-wide"><label for="visitNotes">What would you like to arrange?</label><textarea id="visitNotes" name="notes" rows="4" maxlength="5000"></textarea></div>
+<div class="form-group ops-wide"><label for="accessNotes">Access arrangements (optional; please avoid sensitive personal details)</label><textarea id="accessNotes" name="accessNotes" rows="3" maxlength="1500"></textarea></div>
+<div class="ops-honeypot" aria-hidden="true"><label for="website">Leave this blank</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+</div><p id="visitRequestEstimate" class="ops-note" role="status"></p><p class="ops-note">EVLT will use the contact details you provide to handle this request. Please do not include children’s names or payment-card details.</p><button type="submit" class="btn btn-primary">Send visit request</button></form><p><a href="https://elhamvalleylinetrust.org/" target="_blank" rel="noopener noreferrer">Visit the EVLT website</a></p></section></main></body></html>

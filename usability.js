@@ -10,6 +10,7 @@ function evltHasActiveWork(){
   if(!currentUser||!document.body.classList.contains('authenticated'))return false;
   const content=document.getElementById('content');if(content?.dataset.evltOwner!==evltPageKey())return false;
   if([...document.querySelectorAll('.modal-overlay')].some(el=>getComputedStyle(el).display!=='none'))return true;
+  if(typeof opsSaving!=='undefined'&&opsSaving)return true;
   if(typeof evltRotaSaving!=='undefined'&&evltRotaSaving)return true;
   if(typeof evltRolePermissionsDirty!=='undefined'&&evltRolePermissionsDirty)return true;
   if(typeof loftDraft!=='undefined'&&loftDraft)return true;
@@ -58,6 +59,9 @@ function evltEnhancePage(page){
   document.querySelectorAll('#sidebar a.active').forEach(a=>a.setAttribute('aria-current','page'));
   const definition=evltPageDefinition(page);let context=document.getElementById('evltPageTools');
   if(definition){if(!context){context=document.createElement('div');context.id='evltPageTools';context.className='evlt-page-tools';content.prepend(context);}context.innerHTML=`<span>${escapeHtml(definition.section||'EVLT Operations')} / ${escapeHtml(definition.label)}</span>`;}
+  if(typeof evltMicrosoftSettingsPanel==='function')evltMicrosoftSettingsPanel();
+  if(typeof evltMicrosoftResume==='function')evltMicrosoftResume();
+  if(typeof opsHandleDeepLink==='function')opsHandleDeepLink();
   evltSettingsJump();evltLabelFields();evltApplyViewOnly(page);evltStackActionTable(page);evltUpdateConnection(evltUpdateConnection.connected!==false);
 }
 function evltLabelFields(){
