@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict');
+const context=vm.createContext({console,Intl,Date,TextEncoder,document:{addEventListener:()=>{}},toISODate:value=>String(value||'').slice(0,10)});vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../event-calendar.js'),'utf8'),context);
+const build=event=>context.evltBuildEventCalendar(event,0,new Date('2026-11-03T00:00:00Z'));
+let ics=build({Title:'Two days',StartDate:'2026-11-07',EndDate:'2026-11-08'});assert.match(ics,/DTSTART;VALUE=DATE:20261107/);assert.match(ics,/DTEND;VALUE=DATE:20261109/);
+ics=build({Title:'Summer event',StartDate:'2026-07-01',StartTime:'10:00',EndTime:'16:00'});assert.match(ics,/DTSTART:20260701T090000Z/);assert.match(ics,/DTEND:20260701T150000Z/);
+ics=build({Title:'Winter event',StartDate:'2026-11-07',StartTime:'10:00',EndTime:'16:00'});assert.match(ics,/DTSTART:20261107T100000Z/);
+ics=build({Title:'Late shift',StartDate:'2026-11-07',StartTime:'23:00',EndTime:'01:00'});assert.match(ics,/DTEND:20261108T010000Z/);
+ics=build({Title:'Comma, semicolon; slash\\ and\nnewline',StartDate:'2026-11-07'});assert.match(ics,/SUMMARY:Comma\\, semicolon\\; slash\\\\ and\\nnewline/);
+assert.throws(()=>build({StartDate:'2026-02-30'}));assert.throws(()=>build({StartDate:'2026-11-08',EndDate:'2026-11-07'}));assert.throws(()=>build({StartDate:'2026-03-29',StartTime:'01:30'}));
+ics=build({Title:'🚂'.repeat(100),StartDate:'2026-11-07'});assert.ok(ics.split('\r\n').every(line=>Buffer.byteLength(line,'utf8')<=75));
+console.log('Calendar dates, UK summer/winter time, overnight events, escaping and UTF-8 folding checks passed.');

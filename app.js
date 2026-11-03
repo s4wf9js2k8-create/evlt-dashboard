@@ -120,6 +120,7 @@
 
       const DASHBOARD_WIDGETS = [
         { key: 'alerts', label: 'Operations alerts' },
+        { key: 'myDay', label: 'Your day and shortcuts' },
         { key: 'runningTrains', label: "Today's running trains" },
         { key: 'dailyChecks', label: 'Daily safety inspections' },
         { key: 'stats', label: 'Operations totals' },
@@ -437,6 +438,7 @@
           }
         }
 
+        if (!usedAi || !extracted.workDone) await evltLoadOcr();
         if ((!usedAi || !extracted.workDone) && window.Tesseract) {
           try {
             if (statusEl) statusEl.innerText = usedAi ? 'Reading text on-device...' : 'AI reader unavailable — running on-device text scan...';
@@ -3034,6 +3036,7 @@
           </div>
 
           <div id="dashboardWidgets">
+          ${evltMyDayHtml()}
           <div data-dashboard-widget="alerts">
             ${personalisedBannersHtml()}
             ${currentUser && !currentUser.isShopKiosk && builtinBannerVisible('licence-alerts') ? volDocAlertBannerHtml() : (currentUser && currentUser.isShopKiosk ? volDocAlertBannerHtml() : '')}
@@ -5348,11 +5351,12 @@
         const isAdmin = canEditFeature('actions');
         const todayIso = getTodayString();
 
-        const pending = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && (!a.DueDate || toISODate(a.DueDate||a.dueDate) >= todayIso));
-        const overdue = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && a.DueDate && toISODate(a.DueDate||a.dueDate) < todayIso);
+        const pending = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && (!(a.DueDate||a.dueDate) || toISODate(a.DueDate||a.dueDate) >= todayIso));
+        const overdue = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && (a.DueDate||a.dueDate) && toISODate(a.DueDate||a.dueDate) < todayIso);
         const completed = allActions.filter(a => (a.Status||'') === 'Completed');
 
-        const filtered = actionsFilter === 'all' ? allActions
+        const mine = allActions.filter(a => (a.Status||'Pending') !== 'Completed' && isAssignedToMe(a.AssignedTo || a.assignedTo));
+        const filtered = actionsFilter === 'mine' ? mine : actionsFilter === 'all' ? allActions
           : actionsFilter === 'overdue' ? overdue
           : actionsFilter === 'completed' ? completed
           : pending;
@@ -5372,6 +5376,7 @@
           </div>
 
           <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.85rem;">
+            ${tabBtn('mine', 'Assigned to me', mine.length)}
             ${tabBtn('pending', 'Pending', pending.length)}
             ${tabBtn('overdue', '⚠ Overdue', overdue.length, true)}
             ${tabBtn('completed', 'Completed', completed.length)}
@@ -5396,7 +5401,7 @@
                   ${filtered.length === 0 ? `<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">No ${actionsFilter} tasks.</td></tr>` :
                     filtered.map((a) => {
                       const idx = allActions.indexOf(a);
-                      const isOverdue = (a.Status||'Pending') !== 'Completed' && a.DueDate && toISODate(a.DueDate||a.dueDate) < todayIso;
+                      const isOverdue = (a.Status||'Pending') !== 'Completed' && (a.DueDate||a.dueDate) && toISODate(a.DueDate||a.dueDate) < todayIso;
                       return `
                       <tr style="${isOverdue ? 'background:#fff5f5;' : ''}">
                         <td>
@@ -5577,7 +5582,7 @@
         const content = document.getElementById('content');
         const admin = canEditFeature('events');
         const canEdit = canEditFeature('events');
-        if (checkExpiredEvents()) dbUpdate({ events: db.events });
+        if (canEdit && checkExpiredEvents()) dbUpdate({ events: db.events });
         const events = (db.events || []).map((ev, idx) => ({ ev, idx })).sort((a, b) => toISODate(a.ev.StartDate || a.ev.startDate).localeCompare(toISODate(b.ev.StartDate || b.ev.startDate)));
         const todayIso = getTodayString();
         const upcoming = events.filter(e => toISODate(e.ev.EndDate || e.ev.endDate || e.ev.StartDate || e.ev.startDate) >= todayIso);
@@ -5591,7 +5596,7 @@
           <div class="card" style="padding:1.1rem; border-left:4px solid ${color};">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom:.35rem;">
               <h3 style="font-size:1rem; font-weight:700; color:var(--text);">${escapeHtml(ev.Title || ev.title)}</h3>
-              <span style="background:${color}1a; color:${color}; padding:2px 8px; border-radius:10px; font-size:0.65rem; font-weight:700; flex-shrink:0; white-space:nowrap;">${type}</span>
+              <span style="background:${color}1a; color:${color}; padding:2px 8px; border-radius:10px; font-size:0.65rem; font-weight:700; flex-shrink:0; white-space:nowrap;">${escapeHtml(type)}</span>
             </div>
             <div style="font-size:0.78rem; color:var(--text-muted); display:flex; flex-direction:column; gap:.2rem; margin-bottom:0.6rem;">
               <span><i data-lucide="calendar" style="width:13px;height:13px;vertical-align:-2px;"></i> ${formatDisplayDate(ev.StartDate || ev.startDate)} → ${formatDisplayDate(ev.EndDate || ev.endDate)}${timeRange ? ` · ${timeRange}` : ''}</span>
@@ -5601,6 +5606,7 @@
             </div>
             ${ev.Description || ev.desc ? `<p style="font-size:0.8rem; color:var(--text);">${escapeHtml(ev.Description || ev.desc)}</p>` : ''}
             ${ev.Requirements && ev.Requirements.length ? `<div style="display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.55rem;">${ev.Requirements.map(r => `<span style="background:#f1f5f9; color:var(--text-muted); padding:2px 8px; border-radius:10px; font-size:0.68rem; font-weight:600;">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
+            <div style="margin-top:.75rem"><button type="button" class="btn btn-secondary btn-sm" onclick="evltDownloadEvent(${idx})">Add to calendar</button></div>
             ${canEdit ? `
               <div style="display:flex; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.6rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})" style="flex:1;"><i data-lucide="edit"></i> Edit</button>
@@ -7153,11 +7159,15 @@
         const video = document.getElementById('memberVisitCameraVideo');
         const status = document.getElementById('memberVisitCameraStatus');
         if (!panel || !video || !status) return;
+        const scannerRequest = ++evltScannerRequest.member;
         panel.style.display = 'block';
         if (!navigator.mediaDevices?.getUserMedia) {
           status.textContent = 'Camera access is unavailable. Use a handheld scanner or enter the membership code.';
           return;
         }
+        status.textContent = 'Loading the scanner…';
+        await evltLoadScannerLibraries(false);
+        if (!panel.isConnected || getComputedStyle(panel).display === 'none' || scannerRequest !== evltScannerRequest.member) return;
         if (!window.ZXingBrowser?.BrowserMultiFormatReader) {
           status.textContent = 'The barcode scanner could not load. Check the internet connection, or use a handheld scanner or enter the code.';
           return;
@@ -7582,12 +7592,16 @@
         const video = document.getElementById('itemCodeCameraVideo');
         const status = document.getElementById('itemCodeCameraStatus');
         if (!panel || !video || !status) return;
+        const scannerRequest = ++evltScannerRequest.item;
         panel.style.display = 'block';
         if (!navigator.mediaDevices?.getUserMedia) {
           status.textContent = 'Camera access is unavailable. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
           return;
         }
+        status.textContent = 'Loading the scanner…';
+        await evltLoadScannerLibraries(true);
+        if (!panel.isConnected || getComputedStyle(panel).display === 'none' || scannerRequest !== evltScannerRequest.item) return;
         if (!window.ZXingBrowser?.BrowserMultiFormatReader && !window.Tesseract) {
           status.textContent = 'Camera scanning could not load. Use a scanner in the item-code field or type the code.';
           openItemCodeForm();
@@ -8630,7 +8644,7 @@
 
           <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
             <h3 style="font-size:.95rem;font-weight:700;margin-bottom:.5rem;">Admin access list</h3>
-            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">Admins are authorized by Firebase account UID. Have the replacement sign in with a verified account and submit an access request, then use “Grant System Admin” on that request. Keep the current primary until the replacement has tested dashboard access.</p>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem;">System Admin access is granted to verified accounts. Have the replacement sign in with a verified account and submit an access request, then use “Grant System Admin” on that request. Keep the current primary until the replacement has tested dashboard access.</p>
             <div style="display:flex; flex-direction:column; gap:.6rem; margin-bottom:.8rem;">
               ${adminEmails.length ? adminEmails.map(email => `
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; border:1px solid var(--border); border-radius:10px; padding:.6rem .8rem; background:rgba(255,255,255,.7);">

@@ -1,0 +1,8 @@
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+let appends=0,ready=false;
+const context=vm.createContext({console,setTimeout,clearTimeout,setInterval:()=>1,document:{addEventListener:()=>{},createElement:()=>({remove:()=>{}}),head:{appendChild:script=>{appends++;setImmediate(()=>{ready=true;script.onload();});}}},window:{},toISODate:value=>String(value||'').slice(0,10)});
+vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../daily-tools.js'),'utf8'),context);
+const summary=context.evltDaySummary({actions:[{Title:'Mine',AssignedTo:'Alex',DueDate:'2026-11-01',Status:'Pending'},{Title:'Done',AssignedTo:'Alex',Status:'Completed'},{Title:'Other',AssignedTo:'Jamie',Status:'Pending'}],events:[{Title:'Soon',StartDate:'2026-11-05'},{Title:'Old',StartDate:'2026-10-01'},{Title:'Later',StartDate:'2026-12-01'}]},{name:'alex'},()=>true,'2026-11-03');
+assert.equal(summary.actions.length,1);assert.equal(summary.actions[0].Title,'Mine');assert.equal(summary.overdue,1);assert.equal(summary.upcoming.length,1);
+const hidden=context.evltDaySummary({actions:[{AssignedTo:'Alex'}],events:[{StartDate:'2026-11-05'}]},{name:'Alex'},()=>false,'2026-11-03');assert.equal(hidden.actions.length,0);assert.equal(hidden.upcoming.length,0);
+(async()=>{const results=await Promise.all([context.evltLoadScriptOnce('sample-library',()=>ready),context.evltLoadScriptOnce('sample-library',()=>ready)]);assert.deepEqual(results,[true,true]);assert.equal(appends,1);await context.evltLoadScriptOnce('sample-library',()=>ready);assert.equal(appends,1);console.log('Personal task/event filtering and deduplicated scanner loading checks passed.');})().catch(error=>{console.error(error);process.exitCode=1;});

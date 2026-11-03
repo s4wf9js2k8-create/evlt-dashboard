@@ -61,13 +61,20 @@ function evltEnhancePage(page){
   document.querySelectorAll('#sidebar a.active').forEach(a=>a.setAttribute('aria-current','page'));
   const definition=evltPageDefinition(page);let context=document.getElementById('evltPageTools');
   if(definition){if(!context){context=document.createElement('div');context.id='evltPageTools';context.className='evlt-page-tools';content.prepend(context);}const pinned=evltPinnedPages().includes(page);context.innerHTML=`<span>${escapeHtml(definition.section||'EVLT Operations')} / ${escapeHtml(definition.label)}</span><button type="button" class="btn btn-subtle btn-sm" aria-pressed="${pinned}" onclick="evltTogglePinned(${inlineJsArg(page)})">${pinned?'Unpin shortcut':'Pin shortcut'}</button>`;}
-  evltSettingsJump();evltLabelFields();evltApplyViewOnly(page);evltUpdateConnection(evltUpdateConnection.connected!==false);
+  evltSettingsJump();evltLabelFields();evltApplyViewOnly(page);evltStackActionTable(page);evltUpdateConnection(evltUpdateConnection.connected!==false);
 }
 function evltLabelFields(){
   document.querySelectorAll('.form-group').forEach(group=>{const label=group.querySelector('label:not([for])'),controls=group.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),select,textarea');if(label&&controls.length===1){const control=controls[0];if(!control.id)control.id='evlt-field-'+(++evltLabelFields.next);label.htmlFor=control.id;}});
   document.querySelectorAll('button[title]:not([aria-label])').forEach(button=>{if(!button.textContent.trim())button.setAttribute('aria-label',button.title);});
 }
 evltLabelFields.next=0;
+function evltStackActionTable(page){
+  if(page!=='actions')return;
+  const table=document.querySelector('#content table');if(!table)return;table.classList.add('evlt-stack-table');table.setAttribute('role','table');
+  const headings=[...table.querySelectorAll('thead th')].map(th=>th.textContent.trim());table.querySelectorAll('tr').forEach(tr=>tr.setAttribute('role','row'));table.querySelectorAll('thead th').forEach(th=>th.setAttribute('role','columnheader'));
+  table.querySelectorAll('tbody tr').forEach(tr=>{[...tr.children].forEach((td,index)=>{td.setAttribute('role','cell');td.dataset.label=td.colSpan>1?'':headings[index]||'';});});
+  if(!canEditFeature('actions')){document.querySelector('#content [onclick="openActionModal()"]')?.remove();table.querySelectorAll('button[onclick^="toggleActionStatus"]').forEach(button=>{const text=document.createElement('span');text.textContent=button.textContent;button.replaceWith(text);});}
+}
 function evltApplyViewOnly(page){
   if(page!=='dashboard')return;
   if(!canEditFeature('incidents'))document.querySelector('#content [onclick="openIncidentModal()"]')?.remove();
