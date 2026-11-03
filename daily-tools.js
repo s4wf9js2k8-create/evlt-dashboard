@@ -1,7 +1,7 @@
 // Pure preparation makes personal summaries easy to verify without live records.
 function evltDaySummary(data,user,canView,today){
   const norm=value=>String(value||'').trim().toLowerCase();
-  const actions=canView('actions')?(data.actions||[]).filter(a=>!['completed','cancelled'].includes(norm(a.Status||a.status))&&norm(a.AssignedTo||a.assignedTo)===norm(user.name)).sort((a,b)=>String(toISODate(a.DueDate||a.dueDate)||'9999').localeCompare(String(toISODate(b.DueDate||b.dueDate)||'9999'))):[];
+  const actions=canView('actions')?(data.actions||[]).filter(a=>!['completed','cancelled'].includes(norm(a.Status||a.status))&&(typeof EVLTAssignments!=='undefined'?EVLTAssignments.includes(a.AssignedTo||a.assignedTo,user.name,data.volunteers,user.volData?.Roles||''):norm(a.AssignedTo||a.assignedTo)===norm(user.name))).sort((a,b)=>String(toISODate(a.DueDate||a.dueDate)||'9999').localeCompare(String(toISODate(b.DueDate||b.dueDate)||'9999'))):[];
   const upcoming=canView('events')?(data.events||[]).map(e=>({...e,start:toISODate(e.StartDate||e.startDate),end:toISODate(e.EndDate||e.endDate||e.StartDate||e.startDate)})).filter(e=>e.start&&e.end>=today&&Math.round((new Date(e.start)-new Date(today))/86400000)<=7).sort((a,b)=>a.start.localeCompare(b.start)):[];
   return{actions,upcoming,overdue:actions.filter(a=>toISODate(a.DueDate||a.dueDate)&&toISODate(a.DueDate||a.dueDate)<today).length};
 }

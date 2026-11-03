@@ -34,3 +34,11 @@ The work board, recurring services, inspection findings, maintenance history and
 ## Verification
 
 Run tests as described in tests/README.md. Tests use synthetic records and the local database emulator. The Gemini model was additionally exercised against sample maintenance paperwork. Real Microsoft consent and connected-account operations require organisation setup.
+
+## Shared actions and maintenance assignments
+
+Actions can have several people and several related assets. Use the checkboxes to select individuals, All volunteers, or Maintenance team. The two team choices follow the current volunteer directory and exact Maintenance role, including later membership changes. Assigned to me, Your day and scheduled action banners use the same membership logic. Recurring actions retain all selected assignees and assets.
+
+Maintenance work orders accept multiple people and team choices. Record completed work can separately list the actual people who performed it. Maintenance role membership is exposed to this page only as a yes/no flag beside each operational name; private volunteer records are not added to the page.
+
+June and Daphne are presented together in asset choices. Selecting that carriage choice on a new action relates the task to both records. Existing actions that cover one carriage retain that scope until its checkbox changes. Their separate asset histories and service status remain available.

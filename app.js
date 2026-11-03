@@ -181,7 +181,7 @@
         incidents: ['incidents','assets','volunteers'],
         competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles','removedRoles','volunteerDocs'],
-        actions: ['actions','volunteers'],
+        actions: ['actions','volunteers','fleetItems'],
         maintenance: ['fleetItems','maintenanceLogs','assets','fleetJobs','fleetPlans','fleetDefectSummary','operationalVolunteerNames','ms365Config'],
         events: ['events','volunteers','clockLogs','visitBookings','operationsSettings','ms365Config'],
         eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
@@ -2304,7 +2304,7 @@
 
       function isAssignedToMe(value) {
         const me = String((currentUser && currentUser.name) || '').trim().toLowerCase();
-        return !!me && String(value || '').trim().toLowerCase() === me;
+        return EVLTAssignments.includes(value, me, db.volunteers, currentUser?.volData?.Roles||currentUser?.volData?.roles||'');
       }
 
       function bannerDaysFromToday(iso) {
@@ -2884,7 +2884,7 @@
                     const coachNames = getCoachNames();
                     const hasCoaches = runningTrains.some(t => isCoachName(t));
                     const chips = runningTrains.filter(t => !isCoachName(t)).map(t => ({ label: t, remove: t }));
-                    if (hasCoaches) chips.push({ label: 'Coaches (' + coachNames.join(' & ') + ')', remove: COACHES_VALUE });
+                    if (hasCoaches) chips.push({ label: 'June and Daphne', remove: COACHES_VALUE });
                     return chips.map(c => `
                     <div style="display: inline-flex; align-items: center; gap: 0.4rem; background: var(--primary-light); color: var(--primary); padding: 4px 8px; border-radius: var(--radius); font-weight: 600; font-size: 0.8rem;">
                       <i data-lucide="train" style="width:14px;height:14px;"></i> ${escapeHtml(c.label)}
@@ -2897,7 +2897,7 @@
                 <select id="newRunningTrainSelect" class="form-group" style="margin:0;">
                   <option value="">-- Add Loco to Today's Run --</option>
                   ${getLocoOnlyTrains().filter(t=>!getUnavailableFleetNames().some(n=>n.includes(t.toLowerCase()))).map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}
-                  <option value="${COACHES_VALUE}">Coaches (all)</option>
+                  <option value="${COACHES_VALUE}">June and Daphne</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="addRunningTrain()">Add</button>
               </div>
@@ -3096,7 +3096,7 @@
               if (redTagged.some(rt => rt.includes(train.toLowerCase()))) return '';
               return `<option value="${train}" ${activeLoco === train ? 'selected' : ''}>${train}</option>`;
             }).join('') +
-            `<option value="${COACHES_VALUE}" ${activeLoco === COACHES_VALUE ? 'selected' : ''}>Coaches (all)</option>`;
+            `<option value="${COACHES_VALUE}" ${activeLoco === COACHES_VALUE ? 'selected' : ''}>June and Daphne</option>`;
         } else {
           trainGroup.style.display = 'none';
         }
@@ -4170,7 +4170,7 @@
               <span>Maintenance Log Records</span>
               <select id="maintAssetFilter" onchange="renderMaintenancePage()" style="font-size:0.78rem; padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-weight:500;">
                 <option value="">All Assets</option>
-                ${fleet.map(f => `<option value="${escapeHtml(f.name)}" ${maintAssetFilterValue === f.name ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('')}
+                ${EVLTAssignments.assetChoices(fleet).map(f => `<option value="${escapeHtml(f.value)}" ${maintAssetFilterValue === f.value ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('')}
               </select>
             </div>
             <div class="card">
@@ -4338,7 +4338,7 @@
           fleet.filter(f => f.type !== 'Coach' || (logIndex !== null && f.name === editingAsset))
                .map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)} (${escapeHtml(f.type)})</option>`).join('') +
           (logIndex === null && fleet.some(f => f.type === 'Coach')
-            ? `<option value="${COACHES_VALUE}">Coaches (all: ${getCoachNames().join(' & ')})</option>` : '') +
+            ? `<option value="${COACHES_VALUE}">June and Daphne</option>` : '') +
           '<option value="General Trackwork">General Trackwork</option>' +
           '<option value="Carriage Fleet">Carriage Fleet</option>' +
           '<option value="Infrastructure / Buildings">Infrastructure / Buildings</option>';
@@ -4677,7 +4677,7 @@
         const locos = (db.fleetItems || []).map(x => x.name || x.number).filter(Boolean);
         const euro = (db.eurotunnelTrains || []).map(x => x.name || x.number).filter(Boolean);
         const names = [...new Set([...locos, ...euro])];
-        return names.map(n => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="editArch-loco" value="${escapeHtml(n)}" ${selected.has(n) ? 'checked' : ''}> ${escapeHtml(n)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
+        return EVLTAssignments.assetChoices(names.map(name=>({name}))).map(c => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="editArch-loco" value="${escapeHtml(c.value)}" ${c.members.some(n=>selected.has(n)) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
       }
 
       function addArchiveShiftRow(shift = {}) {
@@ -4717,9 +4717,9 @@
         const row = document.createElement('div');
         row.className = 'archive-edit-maint-row';
         row.style.cssText = 'display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:.4rem;align-items:end;padding:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);';
-        const assets = [...new Set((db.fleetItems || []).map(x => x.name).filter(Boolean))];
+        const assets = EVLTAssignments.assetChoices(db.fleetItems).map(c=>c.value);
         row.innerHTML = `
-          <div class="form-group" style="margin:0;"><label>Asset</label><select class="arch-maint-asset"><option value="">Select asset</option>${assets.map(a=>`<option value="${escapeHtml(a)}" ${a===item.asset?'selected':''}>${escapeHtml(a)}</option>`).join('')}</select></div>
+          <div class="form-group" style="margin:0;"><label>Asset</label><select class="arch-maint-asset"><option value="">Select asset</option>${assets.map(a=>`<option value="${escapeHtml(a)}" ${a===item.asset||a===EVLTAssignments.CARRIAGES&&['June','Daphne'].includes(item.asset)?'selected':''}>${escapeHtml(a)}</option>`).join('')}</select></div>
           <div class="form-group" style="margin:0;"><label>Work completed</label><input class="arch-maint-work" value="${escapeHtml(item.workDone || '')}"></div>
           <div class="form-group" style="margin:0;"><label>Performed by</label><input class="arch-maint-by" value="${escapeHtml(Array.isArray(item.performedBy) ? item.performedBy.join(', ') : (item.performedBy || ''))}"></div>
           <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.archive-edit-maint-row').remove()"><i data-lucide="trash-2"></i></button>`;
@@ -4774,7 +4774,7 @@
           inspector: document.getElementById('editArch_TW_Inspector').value,
           notes: document.getElementById('editArch_TW_Notes').value.trim()
         };
-        const trains = Array.from(document.querySelectorAll('.editArch-loco:checked')).map(x => x.value);
+        const trains = EVLTAssignments.expandAssets(Array.from(document.querySelectorAll('.editArch-loco:checked')).map(x => x.value),db.fleetItems);
         archive.testRun = {
           result: document.getElementById('editArch_TR_Result').value,
           inspector: document.getElementById('editArch_TR_Inspector').value,
@@ -5197,8 +5197,8 @@
                           ${isOverdue ? '<span style="color:#dc2626; font-size:0.65rem; font-weight:700; margin-left:5px;">OVERDUE</span>' : ''}
                           ${a.Description || a.desc ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">${escapeHtml((a.Description || a.desc).substring(0,60))}${(a.Description||a.desc).length>60?'…':''}</div>` : ''}
                         </td>
-                        <td>${escapeHtml(a.Asset || a.asset || '-')}</td>
-                        <td>${escapeHtml(a.AssignedTo || a.assignedTo || 'Unassigned')}</td>
+                        <td>${escapeHtml(EVLTAssignments.assetLabel(a.Asset||a.asset)||'-')}</td>
+                        <td>${escapeHtml(EVLTAssignments.label(a.AssignedTo||a.assignedTo)||'Unassigned')}</td>
                         <td style="color:${isOverdue?'#dc2626':'inherit'}; font-weight:${isOverdue?'700':'400'};">${formatDisplayDate(a.DueDate || a.dueDate)}</td>
                         <td><span style="font-weight:700; font-size:0.7rem; color:${a.Priority === 'High' ? '#dc2626' : a.Priority === 'Medium' ? '#ca8a04' : '#475569'};">${escapeHtml(a.Priority || 'Normal')}</span></td>
                         <td>
@@ -5226,16 +5226,12 @@
         document.getElementById('actionEditIndex').value = index !== null ? index : '';
         document.getElementById('act_title').value = existing ? (existing.Title || existing.title || '') : '';
         document.getElementById('act_desc').value = existing ? (existing.Description || existing.desc || '') : '';
-        document.getElementById('act_assigned').value = existing ? (existing.AssignedTo || existing.assignedTo || '') : '';
+        document.getElementById('act_assigned_container').innerHTML=evltAssigneePicker('act_assigned','AssignedTo','Assigned to',db.volunteers,existing?.AssignedTo||existing?.assignedTo||[]);
         document.getElementById('act_duedate').value = existing ? toISODate(existing.DueDate || existing.dueDate) : getTodayString();
         document.getElementById('act_recurrence').value = existing ? (existing.Recurrence || existing.recurrence || 'None') : 'None';
         document.getElementById('act_priority').value = existing ? (existing.Priority || 'Normal') : 'Normal';
 
-        const assetSel = document.getElementById('act_asset');
-        const fleet = db.fleetItems || [];
-        assetSel.innerHTML = '<option value="">-- None / General Site --</option>' +
-          fleet.map(f => `<option value="${escapeHtml(f.name)}" ${(existing && (existing.Asset||existing.asset)===f.name)?'selected':''}>${escapeHtml(f.name)} (${escapeHtml(f.type)})</option>`).join('');
-        if (existing && (existing.Asset || existing.asset)) assetSel.value = existing.Asset || existing.asset;
+        document.getElementById('act_asset_container').innerHTML=evltAssetsPicker(existing?.Asset||existing?.asset||[]);
 
         document.getElementById('actionModal').style.display = 'flex';
       }
@@ -5244,7 +5240,7 @@
         e.preventDefault();if(!canEditFeature('actions'))return;
         const target=evltEditingRecord('actions'),idxVal=document.getElementById('actionEditIndex').value;
         if(idxVal!==''&&!target)return evltShowFormMessage(e.target,'This action is no longer available. Close and reopen the list.');
-        const record={...(target||{id:Date.now(),Status:'Pending',createdDate:getTodayString()}),Title:document.getElementById('act_title').value.trim(),Description:document.getElementById('act_desc').value,Asset:document.getElementById('act_asset').value,AssignedTo:document.getElementById('act_assigned').value,DueDate:document.getElementById('act_duedate').value,Recurrence:document.getElementById('act_recurrence').value,Priority:document.getElementById('act_priority').value};
+        const record={...(target||{id:Date.now(),Status:'Pending',createdDate:getTodayString()}),Title:document.getElementById('act_title').value.trim(),Description:document.getElementById('act_desc').value,Asset:evltReadActionAssets(),AssignedTo:evltReadSelection('act_assigned'),DueDate:document.getElementById('act_duedate').value,Recurrence:document.getElementById('act_recurrence').value,Priority:document.getElementById('act_priority').value};
         if(!record.Title)return evltShowFormMessage(e.target,'Give this action a title.');
         if(!await evltCommitRecord('actions',{mode:'upsert',target,record,form:e.target,button:e.submitter}))return;
         closeModal('actionModal');renderActionsPage();
@@ -7648,7 +7644,7 @@
         const hasCoaches = (db.fleetItems || []).some(f => f.type === 'Coach');
         document.getElementById('volDocLoco').innerHTML = '<option value="">-- Select Locomotive --</option>' +
           locos.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('') +
-          (hasCoaches ? '<option value="Coaches">Coaches (all)</option>' : '');
+          (hasCoaches ? '<option value="Coaches">June and Daphne</option>' : '');
         document.getElementById('volDocLoco').value = existing ? (existing.loco || '') : '';
 
         document.getElementById('volDocTitle').value = existing ? (existing.title || '') : '';

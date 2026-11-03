@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="styles.css?v=directory-21">
     <link rel="stylesheet" href="loft-map.css?v=2">
     <link rel="stylesheet" href="usability.css?v=5">
-    <link rel="stylesheet" href="operations.css?v=2">
+    <link rel="stylesheet" href="operations.css?v=3">
   </head>
   <body>
     <a href="#content" class="evlt-skip">Skip to main content</a>
@@ -691,16 +691,8 @@
             <label>Description / Details</label>
             <textarea id="act_desc" rows="2" placeholder="Detailed instructions or parts required..."></textarea>
           </div>
-          <div class="form-group">
-            <label>Related Asset / Locomotive / Carriage (Optional)</label>
-            <select id="act_asset">
-              <option value="">-- None / General Site --</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Assigned To (Optional)</label>
-            <input type="text" id="act_assigned" placeholder="e.g. Louie Hull or Maintenance Team">
-          </div>
+          <div id="act_asset_container"></div>
+          <div id="act_assigned_container"></div>
           <div class="form-group">
             <label>Due Date</label>
             <input type="date" id="act_duedate" required>
@@ -912,14 +904,16 @@
     <script defer src="loft-map.js?v=4"></script>
     <script defer src="usability.js?v=operations-6"></script>
     <script defer src="record-store.js?v=4"></script>
-    <script defer src="daily-tools.js?v=2"></script>
+    <script defer src="daily-tools.js?v=3"></script>
     <script defer src="event-calendar.js?v=3"></script>
     <script defer src="permission-editor.js?v=1"></script>
     <script defer src="day-planner.js?v=2"></script>
+    <script type="module" src="functions/assignment-model.js?v=1"></script>
+    <script defer src="assignment-controls.js?v=1"></script>
     <script defer src="operations-model.js?v=1"></script>
-    <script defer src="operations-workspace.js?v=3"></script>
-    <script defer src="ms365-integration.js?v=3"></script>
-    <script defer src="document-scanner.js?v=1"></script>
-    <script defer src="app.js?v=events-scanner-24"></script>
+    <script defer src="operations-workspace.js?v=4"></script>
+    <script defer src="ms365-integration.js?v=4"></script>
+    <script defer src="document-scanner.js?v=2"></script>
+    <script defer src="app.js?v=multi-assign-25"></script>
   </body>
 </html>

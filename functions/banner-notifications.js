@@ -1,3 +1,4 @@
+import assignments from './assignment-model.js';
 import { createHash } from 'node:crypto';
 
 export const asList = value => Array.isArray(value) ? value.filter(Boolean) : Object.values(value || {}).filter(Boolean);
@@ -41,7 +42,7 @@ export function bannerEligible(b, account, data, now = new Date()) {
     iAmNotClockedIn: () => !clocked(account.volunteerName),
     fewDrivers: () => drivers < 2,
     overdueActions: () => actions.some(overdue),
-    myOverdueActions: () => actions.some(a => overdue(a) && norm(a.AssignedTo || a.assignedTo) === norm(account.volunteerName)),
+    myOverdueActions: () => actions.some(a => overdue(a) && assignments.includes(a.AssignedTo||a.assignedTo,account.volunteerName,data.volunteers)),
     openDefects: () => incidents.length > 0,
     redTagged: () => incidents.some(i => /red/i.test(String(i['Red Tag Status'] || '')) && !/^(no|none|n\/a|-)/i.test(String(i['Red Tag Status'] || '').trim())),
     trackWalkMissing: () => !daily.trackWalk?.result,
@@ -97,7 +98,7 @@ export function resolveNotificationBanner(b, account, data, now = new Date()) {
   const hasPage = p => account.isAdmin || account.grantedPages?.[p] === true || (Array.isArray(account.grantedPages) && account.grantedPages.includes(p));
   if (!hasPage(b.linkPage)) return null;
   const today = londonTime(now).day;
-  const mine = value => norm(value) === norm(account.volunteerName);
+  const mine = value => assignments.includes(value,account.volunteerName,data.volunteers);
   const due = a => iso(a.DueDate || a.dueDate);
   const daysAway = date => (new Date(date + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 86400000;
   const openActions = asList(data.actions).filter(a => (a.Status || 'Pending') !== 'Completed');
