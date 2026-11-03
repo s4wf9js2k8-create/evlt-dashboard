@@ -130,6 +130,21 @@ export const sendNotificationPush = onValueWritten(
 // Uses the Admin SDK so database rules cannot silently block a partial client-side delete.
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
+import { planAccessSave } from './access-persistence.js';
+
+export const saveAccessSettings = onCall({ region: 'europe-west1', cors: true }, async request => {
+  const uid=request.auth?.uid;
+  if(!uid||request.auth?.token?.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified account.');
+  if((await getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get()).val()!==true)throw new HttpsError('permission-denied','System Admin access is required.');
+  let failure='aborted';
+  const result=await getDatabase().ref().transaction(root=>{
+    if(!root)return root; // Retry with the authoritative value when the SDK's initial local cache is empty.
+    try{return planAccessSave(root,uid,request.data,Date.now());}catch(error){failure=error.message;return;}
+  },undefined,false);
+  if(!result.committed||!result.snapshot.val())throw new HttpsError(['permission-denied','invalid-argument','already-exists'].includes(failure)?failure:'aborted','The record changed or could not be saved. Refresh and review the latest settings.');
+  const value=result.snapshot.val().EVLT_ADMIN_DB;
+  return {saved:true,rolePageAccess:value.rolePageAccess||{},volunteers:value.volunteers||[],customRoles:value.customRoles||[],removedRoles:value.removedRoles||[],savedAt:value.accessSavedAt};
+});
 
 export const forceRevokeAccount = onCall(
   { region: 'europe-west1', cors: true },

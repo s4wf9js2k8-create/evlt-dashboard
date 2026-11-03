@@ -311,6 +311,7 @@ window.mergeEVLTDefaultHelpGuides = function(existing) {
       continue;
     }
     const current = merged[existingIndex];
+    if (current.hidden === true) continue;
     const legacy = legacyDefaults[String(guide.id)];
     if (legacy && isUntouchedLegacy(current, legacy)) {
       merged[existingIndex] = guide;
@@ -319,3 +320,12 @@ window.mergeEVLTDefaultHelpGuides = function(existing) {
   }
   return { guides: merged, changed };
 };
+
+// New topics are appended so existing built-in guide IDs remain stable.
+window.EVLT_DEFAULT_HELP_GUIDES.push(
+  {category:'Getting Started',title:'Your day, personal shortcuts and search',steps:['Open Dashboard to see your assigned open actions and upcoming events.','Use My actions to open the Assigned to me task view.','Choose Pin shortcut on a page to add it to your personal sidebar. Pins are saved only on this browser for your account.','Open Search or press Ctrl+K to jump to pages and find people, documents, item codes and loft storage sections.'],videoUrl:''},
+  {category:'Documents & Storage',title:'Build a loft map with preset shapes',steps:['Open Documents, then Loft Map. System Admins can choose Add loft or Edit layout.','Choose a rectangle, square, L, U, T or long-room preset. Rotate or flip it to match the space.','Add storage boxes, shelving, cupboards or storage areas. Select a section and use the arrows or Smaller/Larger buttons on a phone.','Name and colour each section, then choose Save layout. Changing a section name keeps its item links.','Assign existing items from the section panel, or choose a loft-map section in the item editor.'],videoUrl:''},
+  {category:'Documents & Storage',title:'Find items, export the register and print labels',steps:['Open Documents → Item Register and search by code, name, category or location.','On a phone, use Filters & sorting to narrow the list. The Needs a map section button finds items that are not linked to a saved loft section.','Choose a mapped location to see the section on the loft map. Copy location copies the storage description.','Export visible items downloads a spreadsheet-compatible CSV of the current results.','Print item labels prepares labels for the current results; choose a location or category first to print a smaller batch.'],videoUrl:''},
+  {category:'Events',title:'Add an event to your phone calendar',steps:['Open Events and find the railway event.','Choose Add to calendar to download an .ics calendar file.','Open the downloaded file on your phone or computer and confirm the import in your calendar app.','Timed events use UK time, including summer time. Multi-day events without a complete time range are exported as date ranges. The download does not connect a calendar account or update automatically when the event changes.'],videoUrl:''},
+  {category:'Getting Started',title:'Connection warnings and keeping unsaved work',steps:['If a live update arrives while you are editing, your form stays open and a New data is available message appears. Save or cancel before refreshing the view.','Offline or reconnecting messages mean you should wait before saving. A form that cannot save stays available so you can try again.','If another person changes the same action, event or record, review the conflict message and reopen the latest record before submitting your changes again.','An app left open overnight will ask you to reload for the new day so its checks and dates are current.'],videoUrl:''}
+);

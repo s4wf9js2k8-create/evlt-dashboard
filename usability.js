@@ -16,6 +16,7 @@ function evltHasActiveWork(){
   if(!currentUser||!document.body.classList.contains('authenticated'))return false;
   const content=document.getElementById('content');if(content?.dataset.evltOwner!==evltPageKey())return false;
   if([...document.querySelectorAll('.modal-overlay')].some(el=>getComputedStyle(el).display!=='none'))return true;
+  if(typeof evltRolePermissionsDirty!=='undefined'&&evltRolePermissionsDirty)return true;
   if(typeof loftDraft!=='undefined'&&loftDraft)return true;
   if(document.getElementById('itemCodeEditor')?.style.display==='block')return true;
   if([...content.querySelectorAll('form')].some(f=>evltDirtyForms.has(f)))return true;
@@ -30,8 +31,9 @@ function evltDeferRefresh(){
 }
 function evltRefreshView(){
   if(evltHasActiveWork()&&!confirm('Refresh this view? Unsaved form changes will be discarded.'))return;
+  if(typeof evltClearRoleDraft==='function')evltClearRoleDraft();
   evltRefreshPending=false;document.querySelectorAll('#content form').forEach(f=>evltDirtyForms.delete(f));
-  if(typeof loftDraft!=='undefined')loftDraft=null;
+  if(typeof loftClearDraft==='function')loftClearDraft();
   navigate(currentView);
 }
 function evltToast(message,type='success'){
@@ -109,7 +111,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.addEventListener('keydown',event=>{
     if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&currentUser){event.preventDefault();openGlobalSearchModal();return;}
     const overlay=evltVisibleDialog();
-    if(event.key==='Escape'){if(overlay){if([...overlay.querySelectorAll('form')].some(f=>evltDirtyForms.has(f))&&!confirm('Close this form and discard your unsaved changes?'))return;closeModal(overlay.id);event.preventDefault();}else evltSyncMenu(false);return;}
+    if(event.key==='Escape'){if(overlay){if(overlay.querySelector('form[data-evlt-saving="true"]')){evltToast('Please wait for the save confirmation.');return;}if([...overlay.querySelectorAll('form')].some(f=>evltDirtyForms.has(f))&&!confirm('Close this form and discard your unsaved changes?'))return;closeModal(overlay.id);event.preventDefault();}else evltSyncMenu(false);return;}
     if(event.key==='Tab'&&overlay){const focusable=[...overlay.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')].filter(el=>!el.disabled&&el.getClientRects().length);if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){last.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first.focus();event.preventDefault();}}
   });
   new MutationObserver(records=>{if(records.some(r=>r.type==='childList')){evltLabelFields();if(currentUser&&(document.getElementById('content')?.dataset.evltOwner!==evltPageKey()||!document.getElementById('evltPageTools')))evltEnhancePage(currentView);}evltWatchDialogs();}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style']});

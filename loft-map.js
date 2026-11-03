@@ -1,5 +1,6 @@
 // Loft layouts and item links share the Documents permission boundary.
 let loftSelectedMapId = '', loftSelectedSectionId = '', loftDraft = null;
+let loftPreferenceOwner = null, loftRecoveryChecked = false;
 let loftDraftRevision = null, loftDrawing = false, loftOutlinePoints = [], loftSearch = '', loftStatus = '', loftSaving = false;
 const loftCopy = value => JSON.parse(JSON.stringify(value));
 const loftId = prefix => prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -11,6 +12,26 @@ function getItemLoftLink(item) {
   return map && section ? { map, section, label: map.name + ' / ' + section.name } : null;
 }
 function getItemStorageLocation(item) { return getItemLoftLink(item)?.label || item.location || ''; }
+function loftAccountKey(){return String((typeof auth!=='undefined'&&auth?.currentUser?.uid)||currentUser?.uid||currentUser?.email||'guest');}
+function loftPreferenceKey(){return 'evlt-loft-selected-'+loftAccountKey();}
+function loftDraftKey(){return 'evlt-loft-draft-'+loftAccountKey();}
+function loftRememberDraft(){
+  if(!loftDraft||!currentUser?.isSystemAdmin)return;
+  try{sessionStorage.setItem(loftDraftKey(),JSON.stringify({map:loftDraft,revision:loftDraftRevision,drawing:loftDrawing,points:loftOutlinePoints,section:loftSelectedSectionId,savedAt:Date.now()}));}catch{}
+}
+function loftClearDraft(){try{sessionStorage.removeItem(loftDraftKey());}catch{}loftDraft=null;loftDrawing=false;}
+function loftPreferredMap(maps,selected,saved){
+  if(maps.some(m=>m.id===selected))return selected;
+  if(maps.some(m=>m.id===saved))return saved;
+  return maps.slice().sort((a,b)=>Number(loftSections(b).length>0)-Number(loftSections(a).length>0)||Number(b.updatedAt||0)-Number(a.updatedAt||0))[0]?.id||'';
+}
+function loftRecoverDraft(){
+  if(loftRecoveryChecked)return;loftRecoveryChecked=true;if(!currentUser?.isSystemAdmin)return;
+  try{const value=JSON.parse(sessionStorage.getItem(loftDraftKey())||'null');if(!value?.map?.id||!LoftGeometry.validOutline(value.map.outline))return;
+    loftDraft=value.map;loftDraftRevision=value.revision??null;loftSelectedMapId=value.map.id;loftSelectedSectionId=value.section||'';loftDrawing=value.drawing===true;loftOutlinePoints=Array.isArray(value.points)?value.points:[];
+    loftStatus='Your unsaved layout has been recovered. Review it and choose Save layout to publish, or Cancel editing to discard it.';
+  }catch{}
+}
 function loftMapCurrent() { return loftDraft || (db.loftMaps || {})[loftSelectedMapId] || null; }
 function loftSetStatus(text) {
   loftStatus = text;
@@ -19,7 +40,7 @@ function loftSetStatus(text) {
 }
 function loftSelectMap(id) {
   if (loftDraft && !confirm('Discard your unsaved layout changes?')) return;
-  loftDraft = null; loftDrawing = false; loftSelectedSectionId = ''; loftSelectedMapId = id; loftStatus = '';
+  loftClearDraft(); loftSelectedSectionId = ''; loftSelectedMapId = id; loftStatus = '';
   renderLoftMap();
 }
 function loftBeginEdit(isNew = false) {
@@ -34,7 +55,7 @@ function loftBeginEdit(isNew = false) {
 }
 function loftCancelEdit() {
   if (loftSaving || (loftDraft && !confirm('Discard your unsaved layout changes?'))) return;
-  loftDraft = null; loftDrawing = false; loftStatus = ''; renderLoftMap();
+  loftClearDraft(); loftStatus = ''; renderLoftMap();
 }
 function loftStartOutline() {
   if (!loftDraft || !currentUser?.isSystemAdmin || loftSaving) return;
@@ -87,6 +108,7 @@ function loftUpdateSection(field, value) {
   // Name inputs keep focus while the drawing updates.
   const label = document.querySelector('[data-loft-label="' + section.id + '"]');
   if (label) label.textContent = section.name;
+  loftRememberDraft();
   if (field !== 'name') renderLoftMap();
 }
 function loftRemoveSection() {
@@ -100,6 +122,7 @@ function loftRemoveSection() {
 async function loftSaveLayout() {
   if (!loftDraft || !currentUser?.isSystemAdmin || loftSaving) return;
   if (loftDrawing) return loftSetStatus('Finish or cancel drawing the outline before saving.');
+  if(!navigator.onLine)return loftSetStatus('You are offline. Your draft is kept on this device; reconnect and save again.');
   const map = loftCopy(loftDraft); map.name = String(map.name || '').trim(); map.sections = loftSections(map);
   if ((db.itemCodes || []).some(i => i.loftMapId === map.id && i.loftSectionId && !map.sections.some(s => s.id === i.loftSectionId))) return loftSetStatus('An item is linked to a section you removed. Restore that section or cancel editing and move the item first.');
   if (!map.name || map.name.length > 80) return loftSetStatus('Give this loft a name of up to 80 characters.');
@@ -116,7 +139,7 @@ async function loftSaveLayout() {
     });
     if (!result.committed) { loftSaving = false; return loftSetStatus('Another admin has changed this loft. Your draft is kept here. Cancel editing to load their version before making your changes again.'); }
     db.loftMaps = { ...(db.loftMaps || {}), [map.id]: map };
-    loftDraft = null; loftDrawing = false; loftStatus = 'Layout saved.';
+    loftClearDraft(); loftStatus = 'Layout saved.';
   } catch (error) { console.error('Could not save loft layout:', error); loftStatus = 'Could not save the layout. Your draft is kept; check your connection and try again.'; }
   finally { loftSaving = false; renderLoftMap(); }
 }
@@ -127,7 +150,7 @@ function showItemOnLoftMap(id) {
   const link = item && getItemLoftLink(item);
   if (!link) return;
   if (loftDraft && !confirm('Discard your unsaved layout changes?')) return;
-  loftDraft = null; loftDrawing = false; loftSelectedMapId = link.map.id; loftSelectedSectionId = link.section.id; loftSearch = ''; docsSubView = 'lofts'; renderDocuments();
+  loftClearDraft(); loftSelectedMapId = link.map.id; loftSelectedSectionId = link.section.id; loftSearch = ''; docsSubView = 'lofts'; renderDocuments();
 }
 function loftSetSearch(value) {
   loftSearch = value; const input = document.getElementById('loftItemSearch'); const cursor = input?.selectionStart;
@@ -172,9 +195,11 @@ function itemLoftSelectionChanged() {
 }
 function renderLoftMap() {
   stopItemCodeCamera();
-  if (loftDraft && !currentUser?.isSystemAdmin) { loftDraft = null; loftDrawing = false; }
-  const maps = loftMaps();
-  if (!loftDraft && !maps.some(m => m.id === loftSelectedMapId)) { loftSelectedMapId = maps[0]?.id || ''; loftSelectedSectionId = ''; }
+  if (loftDraft && !currentUser?.isSystemAdmin) { loftClearDraft(); }
+  const owner=loftAccountKey();if(loftPreferenceOwner!==owner){loftDraft=null;loftDrawing=false;loftSelectedMapId='';loftSelectedSectionId='';loftPreferenceOwner=owner;loftRecoveryChecked=false;}
+  const maps = loftMaps();loftRecoverDraft();
+  if(!loftDraft){let saved='';try{saved=localStorage.getItem(loftPreferenceKey())||'';}catch{}const selected=loftPreferredMap(maps,loftSelectedMapId,saved);if(selected!==loftSelectedMapId)loftSelectedSectionId='';loftSelectedMapId=selected;if(selected)try{localStorage.setItem(loftPreferenceKey(),selected);}catch{}}
+  loftRememberDraft();
   const map = loftMapCurrent(), sections = loftSections(map), isAdmin = !!currentUser?.isSystemAdmin, editing = !!loftDraft;
   const selected = sections.find(s => s.id === loftSelectedSectionId);
   const records = (db.itemCodes || []).filter(Boolean);
@@ -191,7 +216,7 @@ function renderLoftMap() {
     <p id="loftStatus" class="loft-status" role="status" aria-live="polite">${escapeHtml(loftStatus)}</p>
     ${map ? `${editing ? '<div class="loft-draft-note">Editing this layout. Choose Save layout to publish your changes.</div>' : ''}
     <div class="loft-layout"><div class="card loft-plan ${editing ? 'is-editing' : ''}">
-      ${editing ? `<label for="loftMapName">Loft name</label><input id="loftMapName" maxlength="80" value="${escapeHtml(map.name)}" oninput="loftDraft.name=this.value" ${loftSaving ? 'disabled' : ''}>
+      ${editing ? `<label for="loftMapName">Loft name</label><input id="loftMapName" maxlength="80" value="${escapeHtml(map.name)}" oninput="loftDraft.name=this.value;loftRememberDraft()" ${loftSaving ? 'disabled' : ''}>
         <div class="loft-outline-tools">${loftDrawing ? `<button class="btn btn-primary btn-sm" onclick="loftFinishOutline()">Finish outline</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('undo')">Undo corner</button><button class="btn btn-secondary btn-sm" onclick="loftOutlineAction('cancel')">Cancel drawing</button>` : `<details class="loft-preset-panel" ${selected ? '' : 'open'}><summary>Room shape &amp; storage presets</summary>${loftPresetButtons()}</details>`}</div>` : ''}
       <p class="loft-help">${loftDrawing ? 'Click each corner around the outside of your loft in order. Use Finish outline to close the shape.' : editing ? 'Choose a room shape, then tap a storage preset. Select a section below the map to move it with the arrows or change its size.' : 'Click a coloured section to see the items stored there. Use the section buttons below on any screen size.'}</p>
       <svg id="loftCanvas" viewBox="0 0 1000 600" role="img" aria-label="${escapeHtml(map.name)} storage layout">
@@ -255,4 +280,3 @@ function bindLoftCanvas() {
   const end = () => { if (!drag) return; drag = null; renderLoftMap(); };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
 }
-

@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict');
+const ctx=vm.createContext({console});vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../record-store.js'),'utf8'),ctx);const apply=ctx.evltApplyRecordChange;
+const original=[{id:'a',title:'First'},{id:'b',title:'Second'}];
+let next=apply([...original,{id:'c',title:'Added elsewhere'}],{mode:'upsert',target:original[0],record:{title:'Edited'}});assert.equal(next.length,3);assert.equal(next[0].title,'Edited');assert.equal(next[2].title,'Added elsewhere');assert.equal(original[0].title,'First');
+next=apply([original[1],original[0]],{mode:'remove',target:original[0]});assert.equal(next.length,1);assert.equal(next[0].id,'b');
+assert.equal(apply([{id:'a',title:'Changed elsewhere'},original[1]],{mode:'upsert',target:original[0],record:{title:'My stale change'}}),undefined);
+assert.equal(apply([original[1]],{mode:'remove',target:original[0]}),undefined);
+assert.equal(apply(original,{mode:'upsert',record:{id:'a',title:'Duplicate'}}),undefined);
+next=apply([{title:'First',id:'a'}],{mode:'upsert',target:original[0],record:{title:'Still valid'}});assert.equal(next[0].title,'Still valid');
+next=apply([{name:'Legacy record'},{name:'Another'}],{mode:'remove',target:{name:'Legacy record'}});assert.equal(next.length,1);assert.equal(next[0].name,'Another');
+console.log('Concurrent additions, stable-ID deletes, conflict rejection, legacy records and non-mutating changes passed.');

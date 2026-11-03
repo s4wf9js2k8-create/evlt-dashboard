@@ -670,6 +670,7 @@
       }
 
       function closeModal(modalId) {
+        if (typeof evltIsModalSaving === 'function' && evltIsModalSaving(modalId)) return evltToast('Please wait for the save confirmation.');
         const el = document.getElementById(modalId);
         if (el) el.style.display = 'none';
       }
@@ -1487,18 +1488,14 @@
       // Background push to other devices is sent by the Firebase Cloud Function in /functions
       // (sendNotificationPush), which runs automatically whenever a notification is saved above.
 
-      function deleteBroadcastNotification(id) {
-        if (!canEditFeature('notifications')) {
-          alert('You do not have permission to edit notifications.');
-          return;
-        }
-        if (!confirm('Delete this notification for everyone?')) return;
-        db.notifications = (db.notifications || []).filter(n => n.id !== id);
-        dbSet('EVLT_ADMIN_DB/notifications', db.notifications);
-        renderNotificationsPage();
+      async function deleteBroadcastNotification(id) {
+        if(!canEditFeature('notifications'))return;
+        const target=(db.notifications||[]).find(n=>n.id===id);if(!target||!confirm('Delete this notification for everyone?'))return;
+        if(await evltCommitRecord('notifications',{mode:'remove',target}))renderNotificationsPage();
       }
 
       document.addEventListener("DOMContentLoaded", () => {
+        if (typeof evltEnhancePage !== 'function' || typeof evltMyDayHtml !== 'function' || typeof evltCommitRecord !== 'function') { showLoginPage(); showLoginError('An updated app version is ready. Refresh this page to finish updating.'); return; }
         document.getElementById('signupToggleButton')?.addEventListener('click', toggleVolunteerSignup);
         document.getElementById('resetPasswordButton')?.addEventListener('click', resetVolunteerPassword);
         document.getElementById('resendVerificationButton')?.addEventListener('click', resendVolunteerVerification);
@@ -4176,6 +4173,7 @@
 
       function openVolunteerModal(index = null) {
         editingVolunteerIndex = index;
+        evltCaptureEdit('volunteers',index!==null?(db.volunteers||[])[index]:null);
         const vols = db.volunteers || [];
         const existing = index !== null ? vols[index] : null;
 
@@ -4189,7 +4187,7 @@
         const existingRolesStr = existing ? (existing.Roles || existing.roles || '') : '';
 
         rolesListContainer.innerHTML = availableRoles.map(role => {
-          const checked = existingRolesStr.toLowerCase().includes(role.toLowerCase());
+          const checked = getVolunteerRoles(existing).includes(role);
           return `
             <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; font-weight:normal; cursor:pointer; line-height:1.3; padding:2px 0;">
               <input type="checkbox" value="${role}" class="vol-role-cb" ${checked ? 'checked' : ''} style="flex-shrink:0; width:14px; height:14px; margin:0; accent-color:var(--primary);">${role}
@@ -4201,56 +4199,16 @@
       }
 
       async function saveVolunteerForm(e) {
-        e.preventDefault();
-        const indexVal = document.getElementById('volEditIndex').value;
-        const name = document.getElementById('volName').value.trim();
-        const dbs = document.getElementById('volDbs').value;
-
-        if (!name) {
-          alert('Please enter the volunteer name.');
-          return;
-        }
-
-        const selectedRoles = Array.from(document.querySelectorAll('.vol-role-cb:checked')).map(cb => cb.value);
-        const rolesStr = selectedRoles.join(', ') || 'Standard';
-
-        if (!db.volunteers) db.volunteers = [];
-
-        const isEdit = indexVal !== '' && db.volunteers[indexVal];
-        const previousName = isEdit ? getVolunteerName(db.volunteers[indexVal]) : '';
-        if (isEdit) {
-          db.volunteers[indexVal].Name = name;
-          db.volunteers[indexVal].Roles = rolesStr;
-          db.volunteers[indexVal]['DBS Status'] = dbs;
-        } else {
-          db.volunteers.push({
-            Name: name,
-            Roles: rolesStr,
-            'DBS Status': dbs
-          });
-        }
-
-        const saved = await dbSet('EVLT_ADMIN_DB/volunteers', db.volunteers);
-        if (!saved) return;
-        if (currentUser?.isSystemAdmin && database) {
-          try {
-            if (isEdit) {
-              const bindingsSnapshot = await database.ref('EVLT_ACCOUNT_BINDINGS').once('value');
-              const bindings = bindingsSnapshot.val() || {};
-              const linked = Object.entries(bindings).filter(([, binding]) => binding?.approved === true &&
-                [previousName, name].some(candidate => String(binding.volunteerName || '').trim().toLowerCase() === candidate.toLowerCase()));
-              for (const [uid, binding] of linked) {
-                const projection = getRolePermissionProjection(getVolunteerRoles(db.volunteers[indexVal]));
-                await database.ref('EVLT_ACCOUNT_BINDINGS/' + uid).update({ volunteerName: name, grantedPages: projection.grantedPages, editablePages: projection.editablePages });
-              }
-            }
-          } catch (err) {
-            console.error('Could not update account role permissions:', err);
-            alert('The volunteer profile saved, but linked account permissions could not be refreshed. Review Access & Permissions and retry.');
-          }
-        }
-        closeModal('volunteerModal');
-        renderVolunteers();
+        e.preventDefault();if(!currentUser?.isSystemAdmin){evltShowFormMessage(e.target,'Only a System Admin can change volunteer profiles and roles.');return;}
+        const form=e.target;if(form.dataset.evltSaving==='true')return;
+        const name=document.getElementById('volName').value.trim();if(!name){evltShowFormMessage(form,'Enter the volunteer name.');return;}
+        const owner=evltPageKey(),expected=evltEditingRecord('volunteers'),roles=Array.from(document.querySelectorAll('.vol-role-cb:checked')).map(cb=>cb.value),dbs=document.getElementById('volDbs').value;
+        const controls=Array.from(form.elements).map(el=>({el,disabled:el.disabled}));form.dataset.evltSaving='true';controls.forEach(({el})=>el.disabled=true);
+        let saved=false;
+        try{const result=await evltCallAccessSave({kind:'volunteer',expected,name,roles,dbs});if(owner!==evltPageKey())return;db.volunteers=Array.isArray(result.volunteers)?result.volunteers:Object.values(result.volunteers||{});db.rolePageAccess=result.rolePageAccess;saved=true;evltToast('Volunteer and linked account access saved.');}
+        catch(error){evltShowFormMessage(form,error.message);}
+        finally{delete form.dataset.evltSaving;controls.forEach(({el,disabled})=>el.disabled=disabled);}
+        if(saved){closeModal('volunteerModal');renderVolunteers();}
       }
 
       async function deleteVolunteer(index) {
@@ -5418,7 +5376,7 @@
                         </td>
                         <td style="text-align:right;">
                           <button class="btn btn-secondary btn-sm" onclick="openActionModal(${idx})"><i data-lucide="edit"></i> Edit</button>
-                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteAction(${idx})"><i data-lucide="trash-2"></i></button>` : ''}
+                          ${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteAction(${idx}, ${inlineJsArg(a.id ?? "")})"><i data-lucide="trash-2"></i></button>` : ''}
                         </td>
                       </tr>
                     `}).join('')}
@@ -5433,6 +5391,7 @@
       function openActionModal(index = null) {
         if (!canEditFeature('actions')) return alert('You do not have permission to edit action tasks.');
         const existing = index !== null ? (db.actions || [])[index] : null;
+        evltCaptureEdit('actions', existing);
         document.getElementById('actionModalTitle').innerText = existing ? 'Edit Action / Task' : 'Add Action / Task';
         document.getElementById('actionEditIndex').value = index !== null ? index : '';
         document.getElementById('act_title').value = existing ? (existing.Title || existing.title || '') : '';
@@ -5451,28 +5410,14 @@
         document.getElementById('actionModal').style.display = 'flex';
       }
 
-      function saveActionItem(e) {
-        e.preventDefault();
-        if (!canEditFeature('actions')) return alert('You do not have permission to edit action tasks.');
-        if (!db.actions) db.actions = [];
-        const idxVal = document.getElementById('actionEditIndex').value;
-        const actionData = {
-          Title: document.getElementById('act_title').value,
-          Description: document.getElementById('act_desc').value,
-          Asset: document.getElementById('act_asset').value,
-          AssignedTo: document.getElementById('act_assigned').value,
-          DueDate: document.getElementById('act_duedate').value,
-          Recurrence: document.getElementById('act_recurrence').value,
-          Priority: document.getElementById('act_priority').value,
-        };
-        if (idxVal !== '' && db.actions[idxVal]) {
-          db.actions[idxVal] = { ...db.actions[idxVal], ...actionData };
-        } else {
-          db.actions.push({ id: Date.now(), ...actionData, Status: 'Pending', createdDate: getTodayString() });
-        }
-        dbUpdate({ actions: db.actions });
-        closeModal('actionModal');
-        renderActionsPage();
+      async function saveActionItem(e) {
+        e.preventDefault();if(!canEditFeature('actions'))return;
+        const target=evltEditingRecord('actions'),idxVal=document.getElementById('actionEditIndex').value;
+        if(idxVal!==''&&!target)return evltShowFormMessage(e.target,'This action is no longer available. Close and reopen the list.');
+        const record={...(target||{id:Date.now(),Status:'Pending',createdDate:getTodayString()}),Title:document.getElementById('act_title').value.trim(),Description:document.getElementById('act_desc').value,Asset:document.getElementById('act_asset').value,AssignedTo:document.getElementById('act_assigned').value,DueDate:document.getElementById('act_duedate').value,Recurrence:document.getElementById('act_recurrence').value,Priority:document.getElementById('act_priority').value};
+        if(!record.Title)return evltShowFormMessage(e.target,'Give this action a title.');
+        if(!await evltCommitRecord('actions',{mode:'upsert',target,record,form:e.target,button:e.submitter}))return;
+        closeModal('actionModal');renderActionsPage();
       }
 
       function canToggleActionStatus() {
@@ -5545,15 +5490,11 @@
         renderActionsPage();
       }
 
-      function deleteAction(index) {
-        if (!canEditFeature('actions')) {
-          alert('You do not have permission to edit action tasks.');
-          return;
-        }
-        if (!confirm('Delete this action task?')) return;
-        db.actions.splice(index, 1);
-        dbUpdate({ actions: db.actions });
-        renderActionsPage();
+      async function deleteAction(index,expectedId='') {
+        if(!canEditFeature('actions'))return;
+        const target=expectedId?(db.actions||[]).find(a=>String(a.id)===String(expectedId)):(db.actions||[])[index];if(!target)return evltToast('This action is no longer available.','error');
+        if(!confirm('Delete this action task?'))return;
+        if(await evltCommitRecord('actions',{mode:'remove',target}))renderActionsPage();
       }
 
       const EVENT_TYPE_COLORS = {
@@ -5610,7 +5551,7 @@
             ${canEdit ? `
               <div style="display:flex; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.6rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})" style="flex:1;"><i data-lucide="edit"></i> Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteEvent(event, ${idx})"><i data-lucide="trash-2"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="deleteEvent(event, ${idx}, ${inlineJsArg(ev.id ?? "")})"><i data-lucide="trash-2"></i></button>
               </div>
             ` : ''}
           </div>`;
@@ -5673,6 +5614,7 @@
           return;
         }
         const existing = index !== null ? (db.events || [])[index] : null;
+        evltCaptureEdit('events', existing);
         document.getElementById('eventModalTitle').innerText = existing ? 'Edit Event' : 'Add Event';
         document.getElementById('eventEditIndex').value = index !== null ? index : '';
         document.getElementById('evt_title').value = existing ? (existing.Title || existing.title || '') : '';
@@ -5693,48 +5635,24 @@
         document.getElementById('eventModal').style.display = 'flex';
       }
 
-      function saveEventItem(e) {
-        e.preventDefault();
-        if (!canEditFeature('events')) { alert('You do not have permission to save events.'); return; }
-        if (!db.events) db.events = [];
-        const idxVal = document.getElementById('eventEditIndex').value;
-        const checkedPresets = Array.from(document.querySelectorAll('.evt-req-cb:checked')).map(cb => cb.value);
-        const eventData = {
-          Title: document.getElementById('evt_title').value,
-          EventType: document.getElementById('evt_type').value.trim() || 'Other',
-          AccessLevel: document.getElementById('evt_access').value,
-          StartDate: document.getElementById('evt_start').value,
-          EndDate: document.getElementById('evt_end').value,
-          StartTime: document.getElementById('evt_start_time').value,
-          EndTime: document.getElementById('evt_end_time').value,
-          Location: document.getElementById('evt_location').value,
-          Contact: document.getElementById('evt_contact').value,
-          Description: document.getElementById('evt_desc').value,
-          Requirements: [...checkedPresets, ...eventRequirementsDraft]
-        };
-        if (idxVal !== '' && db.events[idxVal]) {
-          db.events[idxVal] = { ...db.events[idxVal], ...eventData };
-        } else {
-          db.events.push({ id: Date.now(), ...eventData });
-        }
-        dbUpdate({ events: db.events });
-        closeModal('eventModal');
-        renderEventsPage();
+      async function saveEventItem(e) {
+        e.preventDefault();if(!canEditFeature('events'))return;
+        const target=evltEditingRecord('events'),idxVal=document.getElementById('eventEditIndex').value;
+        if(idxVal!==''&&!target)return evltShowFormMessage(e.target,'This event is no longer available. Close and reopen the list.');
+        const selected=Array.from(document.querySelectorAll('.evt-req-cb:checked')).map(cb=>cb.value);
+        const record={...(target||{id:Date.now()}),Title:document.getElementById('evt_title').value.trim(),EventType:document.getElementById('evt_type').value.trim()||'Other',AccessLevel:document.getElementById('evt_access').value,StartDate:document.getElementById('evt_start').value,EndDate:document.getElementById('evt_end').value,StartTime:document.getElementById('evt_start_time').value,EndTime:document.getElementById('evt_end_time').value,Location:document.getElementById('evt_location').value,Contact:document.getElementById('evt_contact').value,Description:document.getElementById('evt_desc').value,Requirements:[...selected,...eventRequirementsDraft]};
+        if(!record.Title||!record.StartDate)return evltShowFormMessage(e.target,'Add an event name and start date.');
+        if(!record.EndDate)record.EndDate=record.StartDate;if(record.EndDate<record.StartDate)return evltShowFormMessage(e.target,'The end date must be on or after the start date.');
+        if(!await evltCommitRecord('events',{mode:'upsert',target,record,form:e.target,button:e.submitter}))return;
+        closeModal('eventModal');renderEventsPage();
       }
 
-      function deleteEvent(event, index) {
-        if (!canEditFeature('events')) {
-          alert('You do not have permission to delete events.');
-          return;
-        }
-        const ev = (db.events || [])[index];
-        if (!ev) return;
-        armDangerousButton(event.currentTarget, 'Confirm delete?', () => {
-          db.events.splice(index, 1);
-          dbUpdate({ events: db.events });
-          renderEventsPage();
-        });
+      function deleteEvent(event,index,expectedId='') {
+        if(!canEditFeature('events'))return;
+        const target=expectedId?(db.events||[]).find(e=>String(e.id)===String(expectedId)):(db.events||[])[index];if(!target)return;
+        const button=event.currentTarget;armDangerousButton(button,'Confirm delete?',async()=>{if(await evltCommitRecord('events',{mode:'remove',target,button}))renderEventsPage();});
       }
+
       function eurotunnelRoleRequired() {
         return userHasAccess('eurotunnel');
       }
@@ -7028,7 +6946,7 @@
       function setDocsSubView(view) {
         if (docsSubView === 'lofts' && loftDraft && view !== 'lofts') {
           if (loftSaving || !confirm('Discard your unsaved layout changes?')) return;
-          loftDraft = null; loftDrawing = false;
+          loftClearDraft();
         }
         docsSubView = view; renderDocuments(); window.scrollTo(0, 0);
       }
@@ -8037,7 +7955,7 @@
                       <tr>
                         ${schema.fields.map(f => `<td>${escapeHtml(r[f.name] || '-')}</td>`).join('')}
                         ${moduleKey === 'documents' ? `<td>${r.photo ? `<img src="${escapeHtml(safeImageUrl(r.photo))}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(r.photo))})">` : '-'}</td>` : ''}
-                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteGenericItem('${moduleKey}', ${idx})"><i data-lucide="trash-2"></i></button></td>` : ''}
+                        ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteGenericItem('${moduleKey}', ${idx}, ${inlineJsArg(JSON.stringify(r))})"><i data-lucide="trash-2"></i></button></td>` : ''}
                       </tr>`).join('')}
                 </tbody>
               </table>
@@ -8061,7 +7979,7 @@
         document.getElementById('genericModal').style.display = 'flex';
       }
 
-      function saveGenericItem(e) {
+      async function saveGenericItem(e) {
         e.preventDefault();
         if (editingModuleKey === 'railwayTrackSections') return saveRailwayTrackSection();
         if (editingModuleKey === 'eurotunnelSequence') return saveEurotunnelSequence();
@@ -8078,23 +7996,19 @@
         schema.fields.forEach(f => {
           newItem[f.name] = document.getElementById(`gen_${f.name}`).value;
         });
-        if (!db[editingModuleKey]) db[editingModuleKey] = [];
-        db[editingModuleKey].push(newItem);
-        dbSet(`EVLT_ADMIN_DB/${editingModuleKey}`, db[editingModuleKey]);
+        const collection=editingModuleKey;
+        if(!String(newItem[schema.fields[0].name]||'').trim())return evltShowFormMessage(e.target,'Please complete '+schema.fields[0].label.toLowerCase()+'.');
+        newItem.id='record-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+        if(!await evltCommitRecord(collection,{mode:'upsert',record:newItem,form:e.target,button:e.submitter}))return;
         closeModal('genericModal');
         renderGenericModule(editingModuleKey);
       }
 
-      function deleteGenericItem(moduleKey, index) {
-        const editPage = ({ suppliers: 'suppliers', enquiries: 'enquiries', documents: 'documents', notes: 'notes' })[moduleKey];
-        if (!currentUser?.isSystemAdmin && (!editPage || !canEditFeature(editPage))) {
-          alert('You do not have permission to edit these records.');
-          return;
-        }
-        if (!confirm('Are you sure you want to delete this record?')) return;
-        db[moduleKey].splice(index, 1);
-        dbSet(`EVLT_ADMIN_DB/${moduleKey}`, db[moduleKey]);
-        renderGenericModule(moduleKey);
+      async function deleteGenericItem(moduleKey,index,expected='') {
+        const page=({suppliers:'suppliers',enquiries:'enquiries',documents:'documents',notes:'notes'})[moduleKey];if(!page||!canEditFeature(page))return;
+        let target;try{target=expected?JSON.parse(expected):(db[moduleKey]||[])[index];}catch{return;}
+        if(!target||!confirm('Delete this record?'))return;
+        if(await evltCommitRecord(moduleKey,{mode:'remove',target}))renderGenericModule(moduleKey);
       }
 
       async function deleteApprovedAccount(uid) {
@@ -8471,7 +8385,8 @@
       function renderHelpPage() {
         const content = document.getElementById('content');
         const isAdmin = canEditFeature('help');
-        const guides = db.helpGuides || [];
+        const allGuides = db.helpGuides || [];
+        const guides = allGuides.filter(g => g.hidden !== true);
         const categories = [...new Set(guides.map(g => g.category || 'General'))];
 
         content.innerHTML = `
@@ -8487,11 +8402,11 @@
               <div class="section-group">
                 <div class="section-header">${escapeHtml(cat)}</div>
                 ${guides.filter(g => (g.category || 'General') === cat).map(g => {
-                  const realIndex = guides.indexOf(g);
+                  const realIndex = allGuides.indexOf(g);
                   const expanded = helpExpandedIds.has(g.id);
                   return `
                     <div class="card" style="padding:0;margin-bottom:.75rem;overflow:hidden;">
-                      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.85rem 1rem;cursor:pointer;" onclick="helpToggleGuide(${g.id})">
+                      <div role="button" tabindex="0" aria-expanded="${expanded}" onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();helpToggleGuide(${g.id})}" style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.85rem 1rem;cursor:pointer;" onclick="helpToggleGuide(${g.id})">
                         <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
                           <i data-lucide="${g.videoUrl ? 'play-circle' : 'book-open'}" style="width:18px;height:18px;color:var(--primary);flex-shrink:0;"></i>
                           <strong style="font-size:.88rem;min-width:0;">${escapeHtml(g.title || 'Untitled guide')}</strong>
@@ -8499,7 +8414,7 @@
                         <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;">
                           ${isAdmin ? `
                             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); helpOpenGuideModal(${realIndex})"><i data-lucide="pencil"></i></button>
-                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); helpDeleteGuide(${realIndex})"><i data-lucide="trash-2"></i></button>
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); helpDeleteGuide(${realIndex}, ${inlineJsArg(g.id ?? "")})"><i data-lucide="trash-2"></i></button>
                           ` : ''}
                           <i data-lucide="${expanded ? 'chevron-up' : 'chevron-down'}" style="width:16px;height:16px;color:var(--text-muted);flex-shrink:0;"></i>
                         </div>
@@ -8520,6 +8435,7 @@
                 }).join('')}
               </div>`).join('')}
         `;
+        evltRenderHiddenGuides();
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
@@ -8550,6 +8466,7 @@
         editingHelpGuideIndex = index;
         const guides = db.helpGuides || [];
         const existing = (index !== null && index !== undefined) ? guides[index] : null;
+        evltCaptureEdit('helpGuides', existing);
 
         document.getElementById('genericModalTitle').innerText = existing ? 'Edit Help Guide' : 'Add Help Guide';
         document.getElementById('genericFormFields').innerHTML = `
@@ -8564,35 +8481,18 @@
         document.getElementById('genericModal').style.display = 'flex';
       }
 
-      function saveHelpGuide() {
-        if (!canEditFeature('help')) return alert('You do not have permission to edit help guides.');
-        const title = document.getElementById('helpGuideTitle').value.trim();
-        if (!title) return;
-        const data = {
-          category: document.getElementById('helpGuideCategory').value.trim() || 'General',
-          title,
-          steps: document.getElementById('helpGuideSteps').value.split('\n').map(s => s.trim()).filter(Boolean),
-          videoUrl: document.getElementById('helpGuideVideoUrl').value.trim()
-        };
-        if (!db.helpGuides) db.helpGuides = [];
-        if (editingHelpGuideIndex !== null && editingHelpGuideIndex !== undefined && db.helpGuides[editingHelpGuideIndex]) {
-          const existingId = db.helpGuides[editingHelpGuideIndex].id;
-          db.helpGuides[editingHelpGuideIndex] = { id: existingId, ...data };
-        } else {
-          db.helpGuides.push({ id: Date.now(), ...data });
-        }
-        dbUpdate({ helpGuides: db.helpGuides });
-        closeModal('genericModal');
-        renderHelpPage();
+      async function saveHelpGuide() {
+        if(!canEditFeature('help'))return;const form=document.getElementById('genericForm');
+        const title=document.getElementById('helpGuideTitle').value.trim();if(!title)return evltShowFormMessage(form,'Add a title for this help guide.');
+        const target=evltEditingRecord('helpGuides');
+        const record={...(target||{id:Date.now()}),category:document.getElementById('helpGuideCategory').value.trim()||'General',title,steps:document.getElementById('helpGuideSteps').value.split('\n').map(s=>s.trim()).filter(Boolean),videoUrl:document.getElementById('helpGuideVideoUrl').value.trim()};
+        if(!await evltCommitRecord('helpGuides',{mode:'upsert',target,record,form,button:form.querySelector('[type=submit]')}))return;
+        closeModal('genericModal');renderHelpPage();
       }
 
-      function helpDeleteGuide(index) {
-        if (!canEditFeature('help')) return alert('You do not have permission to edit help guides.');
-        if (!confirm('Delete this help guide?')) return;
-        const guides = db.helpGuides || [];
-        guides.splice(index, 1);
-        dbUpdate({ helpGuides: guides });
-        renderHelpPage();
+      async function helpDeleteGuide(index,expectedId='') {
+        if(!canEditFeature('help'))return;const target=expectedId?(db.helpGuides||[]).find(g=>String(g.id)===String(expectedId)):(db.helpGuides||[])[index];if(!target||!confirm('Hide this help guide? You can restore it from Hidden guides.'))return;
+        if(await evltCommitRecord('helpGuides',{mode:'upsert',target,record:{...target,hidden:true}}))renderHelpPage();
       }
 
       function renderSettings() {
@@ -8769,13 +8669,17 @@
       function renderRolePermissionSettings(selectedRole) {
         const container = document.getElementById('rolePermissionSettings');
         if (!container) return;
+        if (evltRoleSaving || (!selectedRole && evltRolePermissionsDirty && container.querySelector('#permissionRoleSelect'))) return;
+        const activeRole=evltRoleEditor?.owner===evltPageKey()?evltRoleEditor.role:'';
+        if(selectedRole&&selectedRole!==activeRole&&evltRolePermissionsDirty){if(!confirm('Discard unsaved permission changes for '+activeRole+'?')){const select=document.getElementById('permissionRoleSelect');if(select)select.value=activeRole;return;}evltClearRoleDraft();}
         const roles = getAvailableRoles();
         if (!roles.length) {
           container.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem;margin-bottom:.6rem;">There are no roles yet. Add one to set page access.</p><button type="button" class="btn btn-secondary btn-sm" onclick="openAddRoleModal()"><i data-lucide="plus"></i> Add role</button>';
           if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
           return;
         }
-        const role = roles.includes(selectedRole) ? selectedRole : roles[0];
+        const preferred=selectedRole||evltRoleDraft()?.role||activeRole||evltRoleSelection();
+        const role = roles.includes(preferred) ? preferred : roles[0];
         const permissions = getRolePermissions(role);
         container.innerHTML = `
           <div style="display:flex;align-items:end;gap:.75rem;flex-wrap:wrap;margin-bottom:.8rem;">
@@ -8794,13 +8698,14 @@
               <thead><tr style="background:#f8fafc;text-align:left;"><th style="padding:.55rem .7rem;font-size:.72rem;">Page</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can view</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can edit</th></tr></thead>
               <tbody>${ACCOUNT_ACCESS_PAGES.map(page => `<tr style="border-top:1px solid var(--border-subtle);">
                 <td style="padding:.48rem .7rem;font-size:.78rem;">${escapeHtml(page.label)} <span style="font-size:.68rem;color:var(--text-muted);">${escapeHtml(page.section)}</span></td>
-                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-view" data-page="${page.key}" aria-label="${escapeHtml(role)} can view ${escapeHtml(page.label)}" ${permissions[page.key].view ? 'checked' : ''} onchange="syncRoleEditToggle(this)"></td>
-                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-edit" data-page="${page.key}" aria-label="${escapeHtml(role)} can edit ${escapeHtml(page.label)}" ${permissions[page.key].edit ? 'checked' : ''} onchange="syncRoleViewToggle(this)"></td>
+                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-view" data-page="${page.key}" aria-label="${escapeHtml(role)} can view ${escapeHtml(page.label)}" ${permissions[page.key].view ? 'checked' : ''} onchange="syncRoleViewToggle(this)"></td>
+                <td style="text-align:center;padding:.4rem;"><input type="checkbox" class="role-page-edit" data-page="${page.key}" aria-label="${escapeHtml(role)} can edit ${escapeHtml(page.label)}" ${permissions[page.key].edit ? 'checked' : ''} onchange="syncRoleEditToggle(this)"></td>
               </tr>`).join('')}</tbody>
             </table>
           </div>
           <div style="display:flex;justify-content:flex-end;margin-top:.75rem;"><button type="button" class="btn btn-primary btn-sm" onclick="saveRolePermissionSettings()"><i data-lucide="save"></i> Save role permissions</button></div>
           <div id="rolePermissionSaveStatus" role="status" aria-live="polite" style="font-size:.75rem;color:var(--text-muted);margin-top:.45rem;"></div>`;
+        evltPrepareRoleEditor(role,permissions);
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
@@ -8850,64 +8755,19 @@
           '\n\nThis cannot be undone.';
         if (!confirm(message)) return;
 
-        const volunteers = (db.volunteers || []).map(v => {
-          const roles = getVolunteerRoles(v);
-          if (!roles.includes(role)) return v;
-          return { ...v, Roles: roles.filter(r => r !== role).join(', ') || 'Standard' };
-        });
-        const rolePageAccess = { ...(db.rolePageAccess || {}) };
-        delete rolePageAccess[role];
-        const customRoles = (db.customRoles || []).filter(r => r !== role);
-        const isBuiltIn = DEFAULT_ROLES.includes(role);
-        const removedRoles = isBuiltIn ? Array.from(new Set([...(db.removedRoles || []), role])) : (db.removedRoles || []);
-
+        if(evltRoleSaving)return;
+        evltRoleSaving=true;
         try {
-          const updates = await buildAccountPermissionUpdates(rolePageAccess, volunteers);
-          updates['EVLT_ADMIN_DB/volunteers'] = volunteers;
-          updates['EVLT_ADMIN_DB/rolePageAccess'] = Object.keys(rolePageAccess).length ? rolePageAccess : null;
-          updates['EVLT_ADMIN_DB/customRoles'] = customRoles.length ? customRoles : null;
-          updates['EVLT_ADMIN_DB/removedRoles'] = removedRoles.length ? removedRoles : null;
-          await database.ref().update(updates);
-          db.volunteers = volunteers;
-          db.rolePageAccess = rolePageAccess;
-          db.customRoles = customRoles;
-          db.removedRoles = removedRoles;
-          renderRolePermissionSettings();
-          renderPermissionAccountSummary();
-        } catch (err) {
-          console.error('Could not delete role:', err);
-          alert('Could not delete the role. Check your connection and try again.');
-        }
+          const result=await evltCallAccessSave({kind:'deleteRole',role,expected:getRolePermissions(role)});
+          db.volunteers=Array.isArray(result.volunteers)?result.volunteers:Object.values(result.volunteers||{});
+          db.rolePageAccess=result.rolePageAccess;db.customRoles=result.customRoles;db.removedRoles=result.removedRoles;
+          evltClearRoleDraft();evltRoleEditor=null;evltRoleSaving=false;
+          renderRolePermissionSettings();renderPermissionAccountSummary();evltToast('Role removed and linked access updated.');
+        }catch(error){evltToast(error.message,'error');}
+        finally{evltRoleSaving=false;}
       }
 
-      async function saveRolePermissionSettings() {
-        if (!currentUser || !currentUser.isSystemAdmin || !database) return;
-        const role = document.getElementById('permissionRoleSelect')?.value;
-        if (!role) return;
-        const status = document.getElementById('rolePermissionSaveStatus');
-        const rolePageAccess = { ...(db.rolePageAccess || {}) };
-        rolePageAccess[role] = Object.fromEntries(ACCOUNT_ACCESS_PAGES.map(page => {
-          const view = document.querySelector('.role-page-view[data-page="' + page.key + '"]')?.checked === true;
-          const edit = document.querySelector('.role-page-edit[data-page="' + page.key + '"]')?.checked === true;
-          return [page.key, { view: view || edit, edit }];
-        }));
-
-        try {
-          const updates = await buildAccountPermissionUpdates(rolePageAccess);
-          updates['EVLT_ADMIN_DB/rolePageAccess'] = rolePageAccess;
-          await database.ref().update(updates);
-          db.rolePageAccess = rolePageAccess;
-          rolePermissionsNeedMigration = false;
-          renderRolePermissionSettings(role);
-          renderPermissionAccountSummary();
-          const savedStatus = document.getElementById('rolePermissionSaveStatus');
-          if (savedStatus) savedStatus.textContent = 'Permissions saved. Linked accounts now use their role settings.';
-        } catch (err) {
-          console.error('Could not save role permissions:', err);
-          if (status) status.textContent = 'Could not save permissions. Check your connection and try again.';
-          alert('Could not save role permissions. Check your connection and try again.');
-        }
-      }
+      async function saveRolePermissionSettings() { return evltSaveRole(); }
 
       function getRolePermissionProjectionWithPolicy(roles, rolePageAccess) {
         const previous = db.rolePageAccess;
