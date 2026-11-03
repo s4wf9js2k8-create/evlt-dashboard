@@ -1,0 +1,68 @@
+/* The navigation owns its scrolling; the document scroll belongs to the main page. */
+body > header{flex-shrink:0;min-height:56px}
+@media(min-width:769px){
+  body.authenticated>.app-container{padding-left:230px;min-height:calc(100dvh - 56px)}
+  #sidebar{position:fixed;left:0;top:56px;bottom:0;width:230px;height:calc(100vh - 56px);height:calc(100dvh - 56px);max-height:none;overflow-y:auto;overscroll-behavior-y:contain;scrollbar-gutter:stable;z-index:1000;padding-bottom:1.5rem}
+}
+.evlt-calendar-workspace{display:flex;flex-direction:column;gap:1.15rem;min-width:0}
+.evlt-calendar-workspace>.page-header{margin-bottom:0}
+.evlt-calendar-workspace .card{min-width:0;padding:1.15rem}
+.evlt-calendar-workspace h3{font-size:1rem;line-height:1.4;color:#193d28}
+.evlt-calendar-workspace h4{font-size:.8rem;color:#526357;margin:.9rem 0 .7rem}
+.evlt-calendar-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.8rem}
+.evlt-calendar-metrics .card{padding:1rem 1.1rem}
+.evlt-calendar-metrics span{display:block;font-size:.74rem;color:#526357;line-height:1.45}
+.evlt-calendar-metrics strong{display:block;font-size:1.7rem;letter-spacing:-.04em;color:#193d28;margin-top:.3rem}
+.evlt-calendar-overview{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);gap:1.15rem;align-items:start}
+.evlt-month-card{overflow:hidden;scroll-margin-top:76px}
+.evlt-month-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.9rem}
+.evlt-month-toolbar h3{text-align:center}
+.evlt-calendar-workspace .calendar-grid{gap:5px;margin:0}
+.evlt-calendar-workspace .cal-day{min-height:78px;padding:.4rem;gap:.3rem;text-align:left;border-radius:8px}
+.evlt-calendar-workspace .cal-day.selected{box-shadow:inset 0 0 0 2px #21452f;border-color:#21452f;background:#e7f0e8}
+.evlt-calendar-workspace .cal-day.is-today .evlt-cal-date{background:#21452f;color:white;border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center}
+.evlt-cal-date{font-weight:750;line-height:24px}
+.evlt-cal-indicators{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0}
+.evlt-calendar-workspace .cal-event-dot{background:#7c5715;color:#fff;margin:0;display:block}
+.evlt-cal-hours,.evlt-cal-coming{font-size:.62rem;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.5}
+.evlt-cal-hours{color:#21452f}.evlt-cal-coming{color:#775018}
+.evlt-calendar-key{display:flex;flex-wrap:wrap;gap:.65rem;font-size:.7rem;margin:.9rem 0 0}
+.evlt-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.5rem}
+.evlt-card-heading>strong{font-size:1.45rem;color:#193d28;letter-spacing:-.03em;white-space:nowrap}
+.evlt-card-heading small{font-size:.7rem;font-weight:500;letter-spacing:0;color:#526357}
+.evlt-eyebrow{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:#526357;margin-bottom:.3rem;font-weight:650}
+.evlt-hours-chart{display:block;width:100%;height:auto;min-width:0;margin:.4rem 0}
+.evlt-hours-chart text{font-size:11px;fill:#526357}
+.evlt-hours-chart rect{fill:#2d6542}
+.evlt-chart-grid{stroke:#e2e9e2;stroke-width:1}
+.evlt-chart-empty{min-height:165px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;background:#f3f7f3;border:1px dashed #cfdccf;border-radius:10px;padding:1rem;margin:.75rem 0;color:#526357;line-height:1.6}
+.evlt-chart-empty strong{font-size:.85rem;color:#284b34}.evlt-chart-empty p{font-size:.78rem;margin-top:.4rem}
+.evlt-chart-data{font-size:.76rem;color:#365741;margin:.5rem 0}
+.evlt-chart-data summary{cursor:pointer;padding:.5rem 0;font-weight:650;min-height:32px}
+.evlt-chart-data table{font-size:.75rem;width:100%}.evlt-chart-data caption{text-align:left;color:#526357;padding:.5rem 0}.evlt-chart-data th{text-transform:none;letter-spacing:0}.evlt-chart-data td{text-align:right}
+.evlt-chart-data[open]{max-height:290px;overflow:auto}
+.evlt-hour-people{display:flex;flex-direction:column;gap:.8rem}
+.evlt-hour-person>div:first-child{display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;font-size:.78rem;line-height:1.45;margin-bottom:.35rem}
+.evlt-hour-person span{overflow-wrap:anywhere}.evlt-hour-person strong{color:#21452f;white-space:nowrap;font-size:.8rem}
+.evlt-hour-track{height:6px;border-radius:10px;background:#eef3ee;overflow:hidden}
+.evlt-hour-track>span{display:block;height:100%;background:#658e70;border-radius:10px}
+.evlt-calendar-workspace #calendarDayDetails{margin:0;padding:1.15rem;scroll-margin-top:76px}
+.evlt-calendar-workspace .evlt-day-event-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem;margin-top:.9rem}
+.evlt-calendar-workspace .evlt-day-event{margin:0;min-width:0}
+.evlt-calendar-workspace .evlt-day-panel .evlt-day-summary{margin-top:.3rem}
+.evlt-calendar-day-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.15rem;align-items:start}
+.evlt-calendar-day-grid h3{margin-bottom:.25rem}
+.evlt-calendar-roster{display:flex;flex-direction:column;gap:.4rem;margin:.7rem 0;max-height:240px;overflow:auto}
+.evlt-calendar-roster>div{display:flex;align-items:center;justify-content:space-between;gap:.6rem;background:#f1f5f1;padding:.45rem .65rem;border-radius:8px;font-size:.8rem;min-height:44px}
+.evlt-calendar-roster span{overflow-wrap:anywhere}.evlt-calendar-roster button{flex:none}
+.evlt-calendar-shifts{display:flex;flex-direction:column;gap:.65rem;max-height:330px;overflow:auto}
+.evlt-calendar-shifts article{padding:.7rem;background:#f4f7f3;border-radius:8px;border:1px solid #e2e9e0}
+.evlt-calendar-shifts strong,.evlt-calendar-shifts span{display:block;overflow-wrap:anywhere;font-size:.8rem;line-height:1.5}.evlt-calendar-shifts span{font-size:.73rem;color:#526357}
+.evlt-shift-actions{display:flex;gap:.4rem;margin-top:.5rem}
+.evlt-calendar-year-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.15rem;align-items:start}
+.evlt-period-buttons{display:flex;gap:.5rem;margin:.65rem 0 1rem;flex-wrap:wrap}
+.evlt-calendar-totals{max-height:330px;overflow:auto;padding-right:.35rem}
+@media(max-width:1180px){.evlt-calendar-overview{grid-template-columns:minmax(0,1fr)}.evlt-month-insights{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.6rem 1.25rem}.evlt-month-insights>.evlt-card-heading{grid-column:1/-1}.evlt-month-insights>.evlt-hours-chart,.evlt-month-insights>.evlt-chart-empty{grid-column:1;grid-row:2/5}.evlt-month-insights>.ops-note,.evlt-month-insights>.evlt-chart-data,.evlt-month-insights>h4,.evlt-month-insights>.evlt-hour-people{grid-column:2}.evlt-calendar-day-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.evlt-calendar-day-grid>.card:last-child{grid-column:1/-1}}
+@media(max-width:768px){.evlt-calendar-workspace{gap:.85rem}.evlt-calendar-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}.evlt-calendar-metrics .card{padding:.85rem}.evlt-calendar-metrics strong{font-size:1.4rem}.evlt-calendar-workspace .card{padding:.9rem}.evlt-calendar-workspace .cal-day{min-height:72px;padding:.25rem;gap:.15rem}.evlt-calendar-workspace .calendar-grid{gap:3px}.evlt-calendar-workspace .cal-event-dot{font-size:.52rem}.evlt-cal-hours,.evlt-cal-coming{font-size:.55rem}.evlt-month-toolbar{flex-wrap:nowrap}.evlt-month-toolbar .btn{min-width:64px}.evlt-month-toolbar h3{font-size:.92rem}.evlt-calendar-day-grid,.evlt-calendar-year-grid{grid-template-columns:minmax(0,1fr)}.evlt-calendar-day-grid>.card:last-child{grid-column:auto}.evlt-calendar-workspace .evlt-day-event-list{grid-template-columns:minmax(0,1fr)}.evlt-month-insights{display:block}.evlt-card-heading>strong{font-size:1.25rem}.evlt-calendar-workspace #calendarDayDetails{padding:.9rem}.evlt-calendar-roster,.evlt-calendar-shifts,.evlt-calendar-totals{max-height:none}.evlt-calendar-key{gap:.45rem;font-size:.65rem}}
+
+@media(max-width:768px){.evlt-chart-data summary{min-height:44px;display:flex;align-items:center}}

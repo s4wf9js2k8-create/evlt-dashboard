@@ -42,3 +42,9 @@ Actions can have several people and several related assets. Use the checkboxes t
 Maintenance work orders accept multiple people and team choices. Record completed work can separately list the actual people who performed it. Maintenance role membership is exposed to this page only as a yes/no flag beside each operational name; private volunteer records are not added to the page.
 
 June and Daphne are presented together in asset choices. Selecting that carriage choice on a new action relates the task to both records. Existing actions that cover one carriage retain that scope until its checkbox changes. Their separate asset histories and service status remain available.
+
+## Calendar and laptop navigation
+
+On laptops, the navigation menu stays fixed below the app header at the full screen height. Its links scroll independently from the main page. Phones retain the slide-out menu.
+
+Attendance & Hours now provides a calendar, monthly summary cards, daily hours graph, yearly hours graph and volunteer hour breakdowns. Selecting a day moves to its full event details, availability and shift records; Back to month returns to the month grid. Graphs count valid completed clock-in/out pairs only. Incomplete shifts stay visible in the day records and are excluded from hours. Overnight shifts count towards their start date. Daily and monthly figures are also available as accessible tables beneath each graph.
