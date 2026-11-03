@@ -120,7 +120,7 @@
 
       const DASHBOARD_WIDGETS = [
         { key: 'alerts', label: 'Operations alerts' },
-        { key: 'myDay', label: 'Your day and shortcuts' },
+        { key: 'myDay', label: 'Your day' },
         { key: 'runningTrains', label: "Today's running trains" },
         { key: 'dailyChecks', label: 'Daily safety inspections' },
         { key: 'stats', label: 'Operations totals' },
@@ -2340,8 +2340,6 @@
         let html = currentUser.isSystemAdmin
           ? `<div class="sidebar-section-label">Admin</div><a href="#" class="${currentView === 'settings' ? 'active' : ''}" onclick="navigate('settings'); return false;"><i data-lucide="settings"></i> Settings & Permissions</a>`
           : '';
-        const pins = evltPinnedPages();
-        if (pins.length) html += '<div class="sidebar-section-label">My shortcuts</div>' + pins.map(key => { const page=evltPageDefinition(key); return page ? `<a href="#" onclick="navigate(${inlineJsArg(key)});return false;"><i data-lucide="bookmark"></i>${escapeHtml(page.label)}</a>` : ''; }).join('');
         Object.entries(sections).forEach(([secName, pages]) => {
           html += `<div class="sidebar-section-label">${secName}</div>`;
           pages.forEach(p => {

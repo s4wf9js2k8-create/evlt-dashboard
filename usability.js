@@ -4,12 +4,6 @@ const evltDirtyForms = new WeakSet(), evltOpenDialogs = new Map();
 const evltPageKey = () => String(auth?.currentUser?.uid || currentUser?.uid || currentUser?.email || '');
 function evltStoredList(key) { try { const value=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(value)?value:[]; } catch {return [];} }
 function evltStoreList(key,value) {try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
-function evltPinnedPages(){return evltStoredList('evlt-pins-'+evltPageKey()).filter(p=>userHasAccess(p));}
-function evltTogglePinned(page){
-  if(!userHasAccess(page))return;
-  const pages=evltPinnedPages();evltStoreList('evlt-pins-'+evltPageKey(),pages.includes(page)?pages.filter(p=>p!==page):[...pages,page].slice(-8));
-  renderSidebar();evltEnhancePage(currentView);evltToast(pages.includes(page)?'Shortcut removed.':'Added to your shortcuts.');
-}
 function evltRecordPage(page){if(!currentUser)return;const key='evlt-recent-'+evltPageKey();evltStoreList(key,[page,...evltStoredList(key).filter(p=>p!==page)].slice(0,6));}
 function evltPageDefinition(page){return ACCOUNT_ACCESS_PAGES.find(p=>p.key===page)||(page==='settings'?{key:'settings',label:'Settings & Permissions'}:null);}
 function evltHasActiveWork(){
@@ -63,7 +57,7 @@ function evltEnhancePage(page){
   content.dataset.evltOwner=evltPageKey();evltRecordPage(page);evltSyncMenu(false);
   document.querySelectorAll('#sidebar a.active').forEach(a=>a.setAttribute('aria-current','page'));
   const definition=evltPageDefinition(page);let context=document.getElementById('evltPageTools');
-  if(definition){if(!context){context=document.createElement('div');context.id='evltPageTools';context.className='evlt-page-tools';content.prepend(context);}const pinned=evltPinnedPages().includes(page);context.innerHTML=`<span>${escapeHtml(definition.section||'EVLT Operations')} / ${escapeHtml(definition.label)}</span><button type="button" class="btn btn-subtle btn-sm" aria-pressed="${pinned}" onclick="evltTogglePinned(${inlineJsArg(page)})">${pinned?'Unpin shortcut':'Pin shortcut'}</button>`;}
+  if(definition){if(!context){context=document.createElement('div');context.id='evltPageTools';context.className='evlt-page-tools';content.prepend(context);}context.innerHTML=`<span>${escapeHtml(definition.section||'EVLT Operations')} / ${escapeHtml(definition.label)}</span>`;}
   evltSettingsJump();evltLabelFields();evltApplyViewOnly(page);evltStackActionTable(page);evltUpdateConnection(evltUpdateConnection.connected!==false);
 }
 function evltLabelFields(){
