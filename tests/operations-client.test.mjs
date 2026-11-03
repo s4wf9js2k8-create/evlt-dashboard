@@ -12,14 +12,18 @@ test('equipment and fleet views retain holds and match renamed legacy assets',()
  assert.equal(model.equipmentStatus(asset,{l:{assetId:'a',status:'Out',dueDate:'2026-11-02'}},{},'2026-11-03'),'Overdue loan');
  assert.equal(model.fleetSummary(asset,{}, {p:{entityId:'Old name',active:true,nextDue:'2026-11-02',requiredBeforeUse:true}},[],'2026-11-03').held,true);
 });
-test('shared Outlook targets use delegated shared scope and existing links keep original mailbox',()=>{
+test('personal and shared Outlook targets keep separate event links for each account',()=>{
  const config={calendarMailbox:'visits@example.invalid',calendarId:'shared/id'};
- const target=context.evltMicrosoftCalendarTarget({},config);
+ const target=context.evltMicrosoftCalendarTarget({},config,'shared');
  assert.equal(target.base,'/users/visits%40example.invalid/calendars/shared%2Fid/events');
  assert.equal(target.scopes[0],'Calendars.ReadWrite.Shared');
- const existing=context.evltMicrosoftCalendarTarget({msEventId:'event',msCalendarId:''},config);
+ const record={msCalendarLinks:[{mailbox:'',calendarId:'',ownerUid:'alice',accountId:'ms-alice',eventId:'personal-event'},{mailbox:'visits@example.invalid',calendarId:'shared/id',eventId:'shared-event'}]};
+ const existing=context.evltMicrosoftCalendarTarget(record,config,'personal','alice','ms-alice');
  assert.equal(existing.base,'/me/calendar/events');
  assert.equal(existing.scopes[0],'Calendars.ReadWrite');
+ assert.equal(existing.link.eventId,'personal-event');
+ assert.equal(context.evltMicrosoftCalendarTarget(record,config,'personal','bob','ms-bob').link,undefined);
+ assert.equal(context.evltMicrosoftCalendarTarget(record,config,'shared','bob','ms-bob').link.eventId,'shared-event');
 });
 test('Outlook event payload uses UK timezone and never adds attendee invitations',()=>{
  const payload=context.evltMicrosoftCalendarPayload({title:'Sample visit',start:'2026-11-10T10:00:00',end:'2026-11-10T12:00:00',description:'Booking reference'},'stable-id');

@@ -78,7 +78,12 @@ export function planOperation(source,actor,input,meta){
     result={collection:'visitBookings',record:next};
   }else if(['linkBookingCalendar','linkJobCalendar','linkPlanCalendar'].includes(action)){
     const collection=action==='linkBookingCalendar'?'visitBookings':kind+(action==='linkJobCalendar'?'Jobs':'Plans'),key=id(input.id),record=currentRecord(db[collection],key,input.expectedRevision);if(!record)fail('not-found','Reopen the record before linking the calendar.');
-    const next=changed(record,{msEventId:required(input.msEventId,'Microsoft event reference',1000),msCalendarId:text(input.msCalendarId,1000),msMailbox:text(input.msMailbox,254),msEventWebLink:url(input.msEventWebLink)},actor,now,'Microsoft calendar linked');db[collection][key]=next;result={collection,record:next};
+    const mailbox=text(input.msMailbox,254),calendarId=text(input.msCalendarId,1000),accountId=text(input.msAccountId,300);
+    if(mailbox&&(mailbox!==db.ms365Config?.calendarMailbox||calendarId!==(db.ms365Config?.calendarId||'')))fail('failed-precondition','The shared calendar configuration changed. Reopen this record.');
+    const link={ownerUid:actor.uid,accountId,mailbox,calendarId,eventId:required(input.msEventId,'Microsoft event reference',1000),webLink:url(input.msEventWebLink),updatedAt:now};
+    const links=(record.msCalendarLinks||[]).filter(l=>!(l.mailbox===mailbox&&l.calendarId===calendarId&&(mailbox||l.ownerUid===actor.uid&&l.accountId===accountId)));
+    if(links.length>=200)fail('resource-exhausted','This record has too many calendar connections. Contact a System Admin.');
+    const next=changed(record,{msCalendarLinks:[...links,link]},actor,now,'Microsoft calendar linked',mailbox?'Shared EVLT calendar':'Personal Outlook calendar');db[collection][key]=next;result={collection,record:next};
   }else if(action==='saveEquipment'){
     const key=input.id?id(input.id):recordId,current=currentRecord(db.equipmentAssets,key,input.expectedRevision),r=input.record||{},state=r.state||'Available';if(!['Available','Under repair','Retired'].includes(state))fail('invalid-argument','Choose an equipment state.');
     if(state==='Available'&&current&&blockingJobs(db,'equipment',current).length)fail('failed-precondition','Finish the blocking repair jobs before making this item available.');
