@@ -1,6 +1,7 @@
 // Calendar details and read-only planning tools use the existing Events and Attendance records.
 function evltDayIso(value){const day=toISODate(value);if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return '';const parsed=new Date(day+'T00:00:00Z');return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===day?day:'';}
 function evltEventRange(event){
+  if(!event||typeof event!=='object')return null;
   const start=evltDayIso(event.StartDate||event.startDate),end=evltDayIso(event.EndDate||event.endDate||start);if(!start||!end||end<start)return null;
   const overnight=end===start&&/^\d\d:\d\d$/.test(event.StartTime||'')&&/^\d\d:\d\d$/.test(event.EndTime||'')&&event.EndTime<=event.StartTime;
   return {start,end:overnight?evltNextCalendarDay(end):end,overnight};

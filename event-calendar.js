@@ -25,7 +25,7 @@ function evltBuildEventCalendar(event,index=0,now=new Date()){
 }
 function evltDownloadEvent(index,expectedId=''){
   if(!userHasAccess('events')&&!userHasAccess('calendar'))return;
-  if(expectedId)index=(db.events||[]).findIndex(event=>String(event.id)===String(expectedId));
+  if(expectedId)index=(db.events||[]).findIndex(event=>String(event?.id)===String(expectedId));
   const event=(db.events||[])[index];if(!event)return;
   try{const text=evltBuildEventCalendar(event,index);const url=URL.createObjectURL(new Blob([text],{type:'text/calendar;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='EVLT-'+String(event.Title||event.title||'event').replace(/[^a-z0-9]+/gi,'-').slice(0,60)+'.ics';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);evltToast('Calendar file downloaded. Open it to add the event to your calendar.');}catch(error){evltToast(error.message,'error');}
 }
