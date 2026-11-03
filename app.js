@@ -178,7 +178,7 @@
         calendar: ['clockLogs','events','rotaSignups','volunteers'],
         clockLogs: ['clockLogs','volunteers'],
         memberVisits: ['memberVisits'],
-        incidents: ['incidents','assets','volunteers'],
+        incidents: ['incidents','assets','volunteers','fleetItems'],
         competency: ['volunteers','trainingTypes'],
         volunteers: ['volunteers','customRoles','removedRoles','volunteerDocs'],
         actions: ['actions','volunteers','fleetItems'],
@@ -3160,7 +3160,7 @@
         editingIncidentIndex = index;
         const existing = (index !== null && db.incidents) ? db.incidents[index] : null;
         tempPhotoBase64 = existing ? (existing.Photo || '') : '';
-        document.getElementById('incidentAsset').value = existing ? (existing.asset || existing['Asset / Location'] || '') : '';
+        evltPrepareDefectAsset(existing ? (existing.asset || existing['Asset / Location'] || '') : '');
         document.getElementById('incidentDesc').value = existing ? (existing.Description || existing.desc || '') : '';
         document.getElementById('incidentRedTag').value = existing ? (existing['Red Tag Status'] || 'Operational') : 'Operational';
         document.getElementById('incidentPhoto').value = '';
@@ -3194,6 +3194,7 @@
       async function saveIncident(e) {
         e.preventDefault();
         if (!canEditFeature('incidents')) return alert('You do not have permission to edit incident records.');
+        if (!evltValidateDefectAsset(e.target)) return;
         const unlock = lockSubmit(e);
         tempPhotoBase64 = await storePhoto(tempPhotoBase64, 'incidents');
         unlock();
