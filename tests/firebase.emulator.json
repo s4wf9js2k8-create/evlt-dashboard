@@ -1,0 +1,1 @@
+{"database":{"rules":"emulator.rules.json"},"emulators":{"database":{"host":"127.0.0.1","port":19000},"hub":{"port":19400},"logging":{"port":19401},"ui":{"enabled":false},"singleProjectMode":true}}

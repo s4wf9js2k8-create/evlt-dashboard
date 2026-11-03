@@ -7383,6 +7383,8 @@
         const editor = document.getElementById('itemCodeEditor');
         if (!editor) return;
         const existing = id === null ? null : (db.itemCodes || []).find(item => String(item.id) === String(id));
+        if(id!==null&&!existing){evltToast('This item is no longer in the register. Refresh before editing.','error');return;}
+        evltCaptureEdit('itemCodes',existing);
         const categoryValue = existing?.category || '';
         const locationValue = existing ? getItemStorageLocation(existing) : '';
         const recommendationData = getItemCodeRecommendationData(categoryValue, locationValue);
@@ -7420,6 +7422,7 @@
       }
 
       function closeItemCodeForm() {
+        if(document.querySelector('#itemCodeEditor form[data-evlt-saving="true"]'))return;
         itemCodeFormId = null;
         const editor = document.getElementById('itemCodeEditor');
         if (editor) { editor.style.display = 'none'; editor.innerHTML = ''; }
@@ -7430,14 +7433,14 @@
         const itemCode = String(document.getElementById('itemCodeValue')?.value || '').trim();
         const itemName = String(document.getElementById('itemCodeName')?.value || '').trim();
         const mapLink = selectedItemLoftZone();
+        if(document.getElementById('itemLoftZone')?.value&&!mapLink){evltShowFormMessage(event.target,'That map section has changed. Choose a current section or a storage location before saving.');return;}
         const location = mapLink?.label || getItemCodeChoiceValue('location');
         const category = getItemCodeChoiceValue('category');
         if (!itemCode || !itemName || !location || !category) { evltShowFormMessage(event.target, 'Add an item code and name, then choose a storage location and category.'); return; }
         const records = Array.isArray(db.itemCodes) ? db.itemCodes.slice() : [];
         const duplicate = records.find(item => String(item.itemCode || '').trim().toLowerCase() === itemCode.toLowerCase() && String(item.id) !== String(itemCodeFormId));
         if (duplicate) {
-          alert('That item code is already registered. Edit the existing item instead.');
-          openItemCodeForm(duplicate.id);
+          evltShowFormMessage(event.target,'That code is already registered. Use a different code, or cancel and edit the existing item.');
           return;
         }
         const record = {
@@ -7452,27 +7455,13 @@
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser?.name || currentUser?.email || ''
         };
-        const index = records.findIndex(item => String(item.id) === String(itemCodeFormId));
-        if (index >= 0) records[index] = { ...records[index], ...record };
-        else records.push(record);
-        const saveButton = event.submitter;
-        if (saveButton) saveButton.disabled = true;
-        if (!await dbSet('EVLT_ADMIN_DB/itemCodes', records)) {
-          if (saveButton) saveButton.disabled = false;
-          return;
-        }
-        db.itemCodes = records;
-        itemCodeFormId = null;
-        renderItemCodeRegister();
+        if(await evltCommitRecord('itemCodes',{mode:'upsert',target:evltEditingRecord('itemCodes'),record,uniqueField:'itemCode',form:event.target,button:event.submitter})){itemCodeFormId=null;renderItemCodeRegister();}
       }
 
       async function deleteItemCode(id) {
-        const record = (db.itemCodes || []).find(item => String(item.id) === String(id));
-        if (!record || !confirm(`Remove ${record.itemCode} - ${record.itemName}?`)) return;
-        const records = db.itemCodes.filter(item => String(item.id) !== String(id));
-        if (!await dbSet('EVLT_ADMIN_DB/itemCodes', records)) return;
-        db.itemCodes = records;
-        renderItemCodeRegister();
+        const record=(db.itemCodes||[]).find(item=>String(item.id)===String(id));
+        if(!record||!confirm('Remove '+record.itemCode+' - '+record.itemName+'?'))return;
+        if(await evltCommitRecord('itemCodes',{mode:'remove',target:JSON.parse(JSON.stringify(record))}))renderItemCodeRegister();
       }
 
       function normaliseItemCodeCandidate(rawValue) {

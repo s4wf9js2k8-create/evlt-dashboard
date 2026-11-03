@@ -133,7 +133,7 @@ async function loftSaveLayout() {
   map.updatedAt = Date.now(); map.updatedBy = currentUser.name || currentUser.email || '';
   loftSaving = true; renderLoftMap();
   try {
-    const result = await database.ref('EVLT_ADMIN_DB/loftMaps/' + map.id).transaction(previous => {
+    const result = await evltCheckedTransaction(database.ref('EVLT_ADMIN_DB/loftMaps/' + map.id), previous => {
       if ((previous?.updatedAt || null) !== loftDraftRevision) return;
       return map;
     });
@@ -159,12 +159,13 @@ function loftSetSearch(value) {
 async function loftAssignItem(event) {
   event.preventDefault();
   if (!canEditFeature('documents') || loftDraft) return;
+  if(!navigator.onLine)return loftSetStatus('You are offline. Reconnect before assigning an item.');
   const map = loftMapCurrent(), section = loftSections(map).find(s => s.id === loftSelectedSectionId);
   const id = document.getElementById('loftAssignItemSelect')?.value;
   if (!map || !section || !id) return;
   const button = event.submitter; if (button) button.disabled = true;
   try {
-    const result = await database.ref('EVLT_ADMIN_DB/itemCodes').transaction(value => {
+    const result = await evltCheckedTransaction(database.ref('EVLT_ADMIN_DB/itemCodes'), value => {
       const records = Array.isArray(value) ? value.filter(Boolean) : Object.values(value || {}).filter(Boolean);
       const item = records.find(i => String(i.id) === id);
       if (!item) return;
