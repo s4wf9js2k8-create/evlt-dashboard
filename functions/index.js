@@ -1,5 +1,5 @@
 import { onValueWritten } from 'firebase-functions/v2/database';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, applicationDefault } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import { getMessaging } from 'firebase-admin/messaging';
 import { logger } from 'firebase-functions';
@@ -135,9 +135,28 @@ import { planOwnAvailability } from './availability.js';
 import {planOperation,planPublicVisitRequest,operationalLookups,enforceDueServiceHolds} from './operations.js';
 import {randomUUID,createHash} from 'node:crypto';
 import {checkedTransaction} from './database-transactions.js';
+import {scannerPages,reserveScanPages,geminiScanRequest,geminiScanResult,SCAN_MODEL} from './document-scanner.js';
+
+export const readDocumentPages=onCall({region:'europe-west1',cors:true,maxInstances:2,memory:'512MiB',timeoutSeconds:90},async request=>{
+  const uid=request.auth?.uid;if(!uid||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified EVLT account.');
+  const [administrator,binding]=await Promise.all([getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get(),getDatabase().ref('EVLT_ACCOUNT_BINDINGS/'+uid).get()]);
+  const b=binding.val(),approved=b?.approved===true&&b.email===request.auth.token.email;
+  if(administrator.val()!==true&&!(approved&&(b.editablePages?.documents===true||b.editablePages?.maintenance===true)))throw new HttpsError('permission-denied','Editing access to Documents or Maintenance is required to scan paperwork.');
+  let pages;try{pages=scannerPages(request.data?.images);}catch(error){throw new HttpsError('invalid-argument',error.message);}
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),userKey=createHash('sha256').update(uid).digest('hex');
+  const quota=await checkedTransaction(getDatabase().ref('EVLT_SCAN_USAGE/'+today),value=>reserveScanPages(value,userKey,pages.length,Date.now()));
+  if(!quota.committed)throw new HttpsError('resource-exhausted','The daily AI page limit has been reached. Use on-device reading or try tomorrow.');
+  try{
+    const token=await applicationDefault().getAccessToken();
+    const response=await fetch('https://aiplatform.googleapis.com/v1/projects/evlt-admin/locations/global/publishers/google/models/'+SCAN_MODEL+':generateContent',{method:'POST',headers:{Authorization:'Bearer '+token.access_token,'Content-Type':'application/json'},body:JSON.stringify(geminiScanRequest(pages)),signal:AbortSignal.timeout(60000)});
+    if(!response.ok){logger.warn('Document reader unavailable',{status:response.status});throw Error('The AI reader is unavailable. Try on-device reading; your pages have been kept.');}
+    return geminiScanResult(await response.json(),pages.length);
+  }catch(error){if(error instanceof HttpsError)throw error;throw new HttpsError('unavailable',error.message==='The AI reader is unavailable. Try on-device reading; your pages have been kept.'?error.message:'The AI reader could not complete this scan. Your pages have been kept. Try on-device reading.');}
+});
 
 export const manageOperations=onCall({region:'europe-west1',cors:true,maxInstances:5},async request=>{
   if(!request.auth?.uid||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in with a verified EVLT account.');
+  if(request.data?.kind==='equipment'||String(request.data?.action||'').includes('Equipment'))throw new HttpsError('failed-precondition','Volunteer equipment loans have been removed from this platform.');
   const actor={uid:request.auth.uid,email:request.auth.token.email},meta={now:Date.now(),recordId:randomUUID(),secondaryId:randomUUID()};let failure=null,result=null;
   const saved=await checkedTransaction(getDatabase().ref(),root=>{if(!root)return root;try{const planned=planOperation(root,actor,request.data||{},meta);result=planned.result;failure=null;return planned.root;}catch(error){failure=error;result=null;return;}},undefined,false);
   if(!saved.committed||!result)throw new HttpsError(failure?.code||'aborted',failure?.message||'The save could not be confirmed. Reload the record and try again.');
@@ -146,7 +165,7 @@ export const manageOperations=onCall({region:'europe-west1',cors:true,maxInstanc
 
 export const refreshOperationalLookups=onCall({region:'europe-west1',cors:true,maxInstances:3},async request=>{
   const uid=request.auth?.uid;if(!uid||request.auth.token.email_verified!==true)throw new HttpsError('unauthenticated','Sign in first.');
-  const [adminSnap,bindingSnap]=await Promise.all([getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get(),getDatabase().ref('EVLT_ACCOUNT_BINDINGS/'+uid).get()]);const binding=bindingSnap.val(),admin=adminSnap.val()===true,approved=binding?.approved===true&&binding.email===request.auth.token.email,maintenance=admin||approved&&binding.grantedPages?.maintenance===true,equipment=admin||approved&&binding.grantedPages?.equipment===true;
+  const [adminSnap,bindingSnap]=await Promise.all([getDatabase().ref('EVLT_SYSTEM_ADMIN_UIDS/'+uid).get(),getDatabase().ref('EVLT_ACCOUNT_BINDINGS/'+uid).get()]);const binding=bindingSnap.val(),admin=adminSnap.val()===true,approved=binding?.approved===true&&binding.email===request.auth.token.email,maintenance=admin||approved&&binding.grantedPages?.maintenance===true,equipment=false;
   if(!maintenance&&!equipment)throw new HttpsError('permission-denied','Maintenance or equipment access is required.');
   const [volunteers,incidents]=await Promise.all([getDatabase().ref('EVLT_ADMIN_DB/volunteers').get(),getDatabase().ref('EVLT_ADMIN_DB/incidents').get()]),lookup=operationalLookups({volunteers:volunteers.val(),incidents:incidents.val()});
   await getDatabase().ref('EVLT_ADMIN_DB').update(lookup);return {operationalVolunteerNames:lookup.operationalVolunteerNames,...(maintenance?{fleetDefectSummary:lookup.fleetDefectSummary}:{})};

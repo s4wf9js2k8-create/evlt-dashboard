@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="styles.css?v=directory-21">
     <link rel="stylesheet" href="loft-map.css?v=2">
     <link rel="stylesheet" href="usability.css?v=5">
-    <link rel="stylesheet" href="operations.css?v=1">
+    <link rel="stylesheet" href="operations.css?v=2">
   </head>
   <body>
     <a href="#content" class="evlt-skip">Skip to main content</a>
@@ -567,47 +567,37 @@
 
     <!-- Scan Document Modal (OCR) -->
     <div class="modal-overlay" id="scanDocumentModal">
-      <div class="modal" style="max-width: 560px;">
-        <h3>Scan Document</h3>
-        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">Take a photo of, or upload, a maintenance sheet or piece of paperwork. AI will read it and turn it into a draft record for you to check before saving.</p>
-
+      <div class="modal ops-modal" role="dialog" aria-modal="true" aria-labelledby="scan_heading">
+        <h3 id="scan_heading">Scan paperwork &amp; old maintenance logs</h3>
+        <p class="ops-note">Photograph or upload original pages. Review the transcription and original work date before saving. Scanning a maintenance log never changes an asset’s service status.</p>
         <div id="scanStep1">
-          <div class="form-group">
-            <label>Photo of Document</label>
-            <input type="file" id="scan_file" accept="image/*" capture="environment" onchange="handleScanFileSelect(event)">
-            <img id="scan_preview" class="preview-thumb" style="display:none; max-height:200px;" />
+          <div class="ops-actions">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('scan_camera').click()">Take a photo</button><input type="file" id="scan_camera" accept="image/*" capture="environment" onchange="handleScanFileSelect(event)" class="evlt-visually-hidden">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('scan_file').click()">Upload photos or PDF</button><input type="file" id="scan_file" accept="image/*,application/pdf" multiple onchange="handleScanFileSelect(event)" class="evlt-visually-hidden">
           </div>
-          <button type="button" class="btn btn-primary" id="scan_run_btn" style="width:100%; display:none;" onclick="runDocumentScan()"><i data-lucide="scan-line"></i> Read Document</button>
-          <div id="scan_status" style="font-size:0.78rem; color:var(--text-muted); margin-top:0.5rem; text-align:center;"></div>
+          <p class="ops-note">Up to six pages per scan, 20 MB per source file. Turn each page upright for the clearest reading.</p>
+          <img id="scan_preview" alt="Selected original page" hidden style="max-width:100%;max-height:330px;object-fit:contain;margin:1rem auto;display:block">
+          <div id="scan_page_list" class="ops-actions"></div>
+          <div id="scan_page_tools" hidden><button type="button" class="btn btn-secondary" onclick="rotateScanPage()">Rotate page</button> <button type="button" class="btn btn-secondary" onclick="removeScanPage()">Remove page</button></div>
+          <div class="form-group" style="margin-top:1rem"><label for="scan_reader">Read using</label><select id="scan_reader"><option value="cloud">Gemini AI · Firebase backend</option><option value="device">On-device text reader</option></select></div>
+          <p class="ops-note">Gemini sends these pages to Google’s AI through EVLT’s authenticated Firebase backend. On-device reading keeps the pages in this browser while reading, but is less reliable for handwriting.</p>
+          <button type="button" class="btn btn-primary" id="scan_run_btn" hidden onclick="runDocumentScan()">Read pages</button>
+          <p id="scan_status" role="status" aria-live="polite" class="ops-note"></p>
+          <button type="button" class="btn btn-secondary" onclick="cancelDocumentScan()">Cancel</button>
         </div>
-
-        <div id="scanStep2" style="display:none;">
-          <div style="background:#f0f4f0; border:1px solid var(--primary); border-radius:var(--radius); padding:0.6rem 0.8rem; font-size:0.75rem; color:var(--primary); margin-bottom:0.85rem;">
-            <i data-lucide="info" style="width:13px;height:13px;vertical-align:middle;margin-right:4px;"></i>
-            Best-effort automatic reading — please check everything below before saving.
-          </div>
-          <div class="form-group">
-            <label>Title</label>
-            <input type="text" id="scan_title" placeholder="e.g. Toby - Brake Inspection Sheet">
-          </div>
-          <div class="form-group">
-            <label>Linked Asset / Locomotive (auto-detected — please confirm)</label>
-            <select id="scan_asset">
-              <option value="">-- Select Locomotive / Asset --</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Date</label>
-            <input type="date" id="scan_date">
-          </div>
-          <div class="form-group">
-            <label>Extracted Text / Work Done (edit as needed)</label>
-            <textarea id="scan_workdone" rows="6"></textarea>
-          </div>
-          <div class="modal-actions" style="flex-wrap:wrap;">
-            <button type="button" class="btn btn-secondary" onclick="closeModal('scanDocumentModal')">Cancel</button>
-            <button type="button" class="btn btn-secondary" onclick="finalizeScan('document')"><i data-lucide="save"></i> Save as Document Only</button>
-            <button type="button" class="btn btn-primary" onclick="finalizeScan('maintenance')"><i data-lucide="wrench"></i> Add to Maintenance Log</button>
+        <div id="scanStep2" hidden>
+          <p id="scan_review_status" role="status" aria-live="polite" class="ops-callout"></p>
+          <details><summary>Compare original pages</summary><div id="scan_originals"></div></details>
+          <div class="form-group"><label for="scan_title">Title</label><input type="text" id="scan_title" maxlength="200"></div>
+          <div class="form-group"><label for="scan_asset">Linked asset / locomotive (confirm from original)</label><select id="scan_asset"></select></div>
+          <div class="form-group"><label for="scan_date">Original document / work date</label><input type="date" id="scan_date"><p class="ops-note">Required for historical maintenance. A missing date is left blank.</p></div>
+          <div class="form-group"><label for="scan_performedby">Work performed by (if recorded; separate names with commas)</label><input type="text" id="scan_performedby"><p class="ops-note">The person importing this scan is recorded separately.</p></div>
+          <div class="form-group"><label for="scan_workdone">Original text / work done — check and correct</label><textarea id="scan_workdone" rows="10" maxlength="100000"></textarea></div>
+          <div class="modal-actions" style="flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary" onclick="backToScanPages()">Back to pages</button>
+            <button type="button" class="btn btn-secondary" onclick="cancelDocumentScan()">Cancel</button>
+            <button type="button" class="btn btn-secondary" id="scan_save_document" onclick="finalizeScan('document')">Save reviewed document</button>
+            <button type="button" class="btn btn-primary" id="scan_save_maintenance" onclick="finalizeScan('maintenance')">Save historical maintenance log</button>
           </div>
         </div>
       </div>
@@ -921,14 +911,15 @@
     <script defer src="loft-phone-controls.js?v=1"></script>
     <script defer src="loft-map.js?v=4"></script>
     <script defer src="usability.js?v=operations-6"></script>
-    <script defer src="record-store.js?v=3"></script>
+    <script defer src="record-store.js?v=4"></script>
     <script defer src="daily-tools.js?v=2"></script>
     <script defer src="event-calendar.js?v=3"></script>
     <script defer src="permission-editor.js?v=1"></script>
     <script defer src="day-planner.js?v=2"></script>
     <script defer src="operations-model.js?v=1"></script>
-    <script defer src="operations-workspace.js?v=2"></script>
-    <script defer src="ms365-integration.js?v=2"></script>
-    <script defer src="app.js?v=operations-23"></script>
+    <script defer src="operations-workspace.js?v=3"></script>
+    <script defer src="ms365-integration.js?v=3"></script>
+    <script defer src="document-scanner.js?v=1"></script>
+    <script defer src="app.js?v=events-scanner-24"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 // Pure transaction planner. Always operate on current server data, never a browser's whole database copy.
-export const ACCESS_PAGES = ['dashboard','clock','calendar','clockLogs','memberVisits','incidents','competency','volunteers','actions','maintenance','events','bookings','equipment','eurotunnel','suppliers','enquiries','documents','notes','gallery','archives','notifications','myAccount','help'];
+export const ACCESS_PAGES = ['dashboard','clock','calendar','clockLogs','memberVisits','incidents','competency','volunteers','actions','maintenance','events','eurotunnel','suppliers','enquiries','documents','notes','gallery','archives','notifications','myAccount','help'];
 export function canonical(value) { if(value==null)return 'null';if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';if(typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonical(value[k])).join(',')+'}';return JSON.stringify(value); }
 const nameOf=v=>String(v?.Name||v?.name||v?.['Volunteer Name']||v?.['Volunteer ID']||'Unknown');
 const rolesOf=v=>String(v?.Roles||v?.roles||'').split(',').map(s=>s.trim()).filter(Boolean);

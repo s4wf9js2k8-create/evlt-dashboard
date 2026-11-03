@@ -13,7 +13,7 @@ const required=(value,label,max=200)=>{const s=text(value,max);if(!s)fail('inval
 const today=now=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
 const nameOf=v=>text(v?.Name||v?.name||v?.['Volunteer Name']||v?.['Volunteer ID']);
 const same=(a,b)=>text(a).toLowerCase()===text(b).toLowerCase();
-export function canOperate(root,actor,page){const b=root?.EVLT_ACCOUNT_BINDINGS?.[actor.uid];return root?.EVLT_SYSTEM_ADMIN_UIDS?.[actor.uid]===true||!!(b?.approved===true&&b.email===actor.email&&b.editablePages?.[page]===true);}
+export function canOperate(root,actor,page){if(page==='bookings')page='events';const b=root?.EVLT_ACCOUNT_BINDINGS?.[actor.uid];return root?.EVLT_SYSTEM_ADMIN_UIDS?.[actor.uid]===true||!!(b?.approved===true&&b.email===actor.email&&b.editablePages?.[page]===true);}
 export function operationalLookups(db){return {operationalVolunteerNames:[...new Set(list(db.volunteers).map(nameOf).filter(Boolean))].sort().map(Name=>({Name})),fleetDefectSummary:list(db.incidents).filter(i=>!/^(resolved|closed|cancelled)$/i.test(text(i.Status))&&/out of service|red/i.test(text(i['Red Tag Status']))).map((i,index)=>({id:String(i.id||index),asset:text(i.asset||i.assetName||i['Asset / Location'],200),Status:text(i.Status,60),'Red Tag Status':text(i['Red Tag Status'],60)}))};}
 function checkAccess(root,actor,page){if(!actor.uid||!canOperate(root,actor,page))fail('permission-denied','You need editing access to '+page+' for this action.');}
 function currentRecord(collection,key,expected){const current=collection?.[key];if(current){if(Number(expected)!==Number(current.revision||0))fail('aborted','This record has changed. Reopen it before saving.');}else if(Number(expected||0)!==0)fail('not-found','This record is no longer available.');return current||null;}
@@ -56,6 +56,14 @@ export function planOperation(source,actor,input,meta){
     const clientId=text(input.clientId,80),tenantId=text(input.tenantId,80);if(!/^[a-f\d-]{36}$/i.test(clientId)||!/^[a-f\d-]{36}$/i.test(tenantId))fail('invalid-argument','Enter the application and tenant IDs from Microsoft Entra.');
     const calendarMailbox=text(input.calendarMailbox,254);if(calendarMailbox&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarMailbox))fail('invalid-argument','Enter the shared calendar mailbox email address.');
     db.ms365Config={clientId,tenantId,calendarMailbox,calendarId:text(input.calendarId,300),updatedAt:now};result={collection:'ms365Config',record:db.ms365Config};
+  }else if(action==='importMaintenanceScan'){
+    const key=id(input.id||recordId),r=input.record||{},date=day(r.date);if(date>today(now))fail('invalid-argument','A historical maintenance log cannot be dated in the future.');
+    const known=[...list(db.fleetItems),...list(db.eurotunnelTrains),...list(db.assets)].map(a=>a.name||a.assetName||a.Name).filter(Boolean),assetName=required(r.assetName,'asset name',160);
+    if(!known.includes(assetName))fail('invalid-argument','Choose an existing locomotive or asset.');
+    const entries=list(db.maintenanceLogs);if(entries.some(e=>String(e.id)===key))fail('already-exists','This scanned record has already been saved. Reopen Maintenance history to view it.');
+    const pages=(r.scanPages||[]).slice(0,6);let total=0;for(const page of pages){total+=String(page).length;if(typeof page!=='string'||!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(page)||page.length>1600000||total>7000000)fail('invalid-argument','A scanned page is invalid or too large.');}
+    const next={id:key,assetName,workDone:required(r.workDone,'work done / original text',100000),title:text(r.title,200),startDate:date,endDate:date,performedBy:Array.isArray(r.performedBy)?r.performedBy.map(v=>text(v,150)).filter(Boolean).slice(0,30):[],recordedBy:actor.name,createdAt:now,updateState:'',photo:pages[0]||'',scanPages:pages,scanReader:text(r.scanReader,80),source:'scanned-historical-log',notes:'Imported from original paperwork. Transcription reviewed before saving.'};
+    db.maintenanceLogs=[...entries,next];result={collection:'maintenanceLogs',record:next};
   }else if(action==='saveBooking'){
     const key=input.id?id(input.id):recordId,current=currentRecord(db.visitBookings,key,input.expectedRevision),booking=validateBooking(input.record||{}),status=input.record.status||'Request';
     if(!['Request','Reviewing','Confirmed','Completed','Cancelled','Declined'].includes(status))fail('invalid-argument','Choose a booking status.');

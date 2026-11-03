@@ -1,15 +1,4 @@
 
-      // ============================================================
-      // AI DOCUMENT SCANNING — CLOUDFLARE WORKER URL
-      // This calls a small Cloudflare Worker (set up separately, free,
-      // no credit card) that holds the AI access privately server-side —
-      // nothing secret sits in this file, so there's nothing to leak.
-      // Paste your Worker's URL between the quotes below.
-      // If left as-is, the "Scan Document" feature falls back to a basic
-      // on-device text scan instead of AI.
-      // ============================================================
-      const SCAN_WORKER_URL = "https://hidden-tooth-2a78.s4wf9js2k8.workers.dev";
-
       // Background push endpoint. Authorization is checked server-side
       // using a verified Firebase account allowlist; no shared secret is
       // included in this public dashboard code.
@@ -108,9 +97,7 @@
         { key: 'volunteers', label: 'Volunteers', icon: 'users', section: 'Operations' },
         { key: 'actions', label: 'Actions', icon: 'check-square', section: 'Operations' },
         { key: 'maintenance', label: 'Maintenance & Fleet', icon: 'wrench', section: 'Operations' },
-        { key: 'events', label: 'Events', icon: 'calendar-range', section: 'Operations' },
-        { key: 'bookings', label: 'Visitor Bookings', icon: 'calendar-check', section: 'Operations' },
-        { key: 'equipment', label: 'Equipment & Loans', icon: 'package', section: 'Operations' },
+        { key: 'events', label: 'Events & Bookings', icon: 'calendar-range', section: 'Operations' },
         { key: 'eurotunnel', label: 'Eurotunnel N Gauge', icon: 'train-front', section: 'Operations' },
         { key: 'suppliers', label: 'Suppliers', icon: 'truck', section: 'Management' },
         { key: 'enquiries', label: 'Enquiries', icon: 'help-circle', section: 'Management' },
@@ -196,10 +183,8 @@
         volunteers: ['volunteers','customRoles','removedRoles','volunteerDocs'],
         actions: ['actions','volunteers'],
         maintenance: ['fleetItems','maintenanceLogs','assets','fleetJobs','fleetPlans','fleetDefectSummary','operationalVolunteerNames','ms365Config'],
-        events: ['events','volunteers','clockLogs'],
+        events: ['events','volunteers','clockLogs','visitBookings','operationsSettings','ms365Config'],
         eurotunnel: ['suppliers','stock','railwayTracks','railwayTrackSections','eurotunnelTrackSections','eurotunnelTrains','eurotunnelSequences','eurotunnelTasks','eurotunnelMaintenance'],
-        bookings: ['visitBookings','operationsSettings','ms365Config'],
-        equipment: ['equipmentAssets','equipmentLoans','equipmentJobs','equipmentPlans','operationalVolunteerNames','ms365Config'],
         suppliers: ['suppliers'],
         enquiries: ['enquiries'],
         documents: ['documents','volunteerDocs','archiveUploads','itemCodes','loftMaps'],
@@ -354,160 +339,6 @@
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
-
-      /* ================= SCAN DOCUMENT (OCR) ================= */
-
-      let tempScanImageData = '';
-
-      function openScanDocumentModal() {
-        tempScanImageData = '';
-        const fileInput = document.getElementById('scan_file');
-        if (fileInput) fileInput.value = '';
-        const preview = document.getElementById('scan_preview');
-        if (preview) { preview.src = ''; preview.style.display = 'none'; }
-        const runBtn = document.getElementById('scan_run_btn');
-        if (runBtn) { runBtn.style.display = 'none'; runBtn.disabled = false; }
-        const statusEl = document.getElementById('scan_status');
-        if (statusEl) statusEl.innerText = '';
-        document.getElementById('scanStep1').style.display = 'block';
-        document.getElementById('scanStep2').style.display = 'none';
-        document.getElementById('scan_title').value = '';
-        document.getElementById('scan_date').value = getTodayString();
-        document.getElementById('scan_workdone').value = '';
-        populateScanAssetDropdown('');
-        document.getElementById('scanDocumentModal').style.display = 'flex';
-      }
-
-      function handleScanFileSelect(event) {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          tempScanImageData = evt.target.result;
-          const preview = document.getElementById('scan_preview');
-          if (preview) { preview.src = tempScanImageData; preview.style.display = 'block'; }
-          const runBtn = document.getElementById('scan_run_btn');
-          if (runBtn) runBtn.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-      }
-
-      function populateScanAssetDropdown(guess) {
-        const select = document.getElementById('scan_asset');
-        if (!select) return;
-        const fleetNames = (db.fleetItems || []).map(f => f.name).filter(Boolean);
-        const euroNames = (db.eurotunnelTrains || []).map(t => t.name).filter(Boolean);
-        const allNames = [...new Set([...fleetNames, ...euroNames])];
-        select.innerHTML = '<option value="">-- Select Locomotive / Asset --</option>' +
-          allNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-        if (guess) {
-          const guessLower = String(guess).toLowerCase();
-          const match = allNames.find(n => n.toLowerCase().includes(guessLower) || guessLower.includes(n.toLowerCase()));
-          if (match) select.value = match;
-        }
-      }
-
-      async function runDocumentScan() {
-        if (!tempScanImageData) { alert('Please choose a photo first.'); return; }
-        const statusEl = document.getElementById('scan_status');
-        const runBtn = document.getElementById('scan_run_btn');
-        if (runBtn) runBtn.disabled = true;
-        if (statusEl) statusEl.innerText = 'Reading document, please wait...';
-
-        let extracted = { title: '', date: '', workDone: '', assetGuess: '' };
-        let usedAi = false;
-
-        if (SCAN_WORKER_URL) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000);
-            const resp = await fetch(SCAN_WORKER_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ image: tempScanImageData }),
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (resp.ok) {
-              const data = await resp.json();
-              const result = data.result || data;
-              extracted.title = result.title || result.subject || '';
-              extracted.date = result.date || '';
-              extracted.workDone = result.workDone || result.text || result.summary || '';
-              extracted.assetGuess = result.asset || result.assetGuess || result.locomotive || '';
-              usedAi = true;
-            }
-          } catch (err) {
-            console.warn('AI scan worker unavailable, falling back to on-device text scan:', err);
-          }
-        }
-
-        if (!usedAi || !extracted.workDone) await evltLoadOcr();
-        if ((!usedAi || !extracted.workDone) && window.Tesseract) {
-          try {
-            if (statusEl) statusEl.innerText = usedAi ? 'Reading text on-device...' : 'AI reader unavailable — running on-device text scan...';
-            const ocrResult = await Tesseract.recognize(tempScanImageData, 'eng');
-            const text = ocrResult?.data?.text || '';
-            if (text.trim()) extracted.workDone = extracted.workDone || text.trim();
-          } catch (ocrErr) {
-            console.warn('On-device OCR failed:', ocrErr);
-          }
-        }
-
-        document.getElementById('scan_title').value = extracted.title;
-        document.getElementById('scan_date').value = toISODate(extracted.date) || getTodayString();
-        document.getElementById('scan_workdone').value = extracted.workDone;
-        populateScanAssetDropdown(extracted.assetGuess);
-
-        if (statusEl) statusEl.innerText = extracted.workDone ? '' : "Couldn't automatically read this document — please fill the details in manually.";
-        if (runBtn) runBtn.disabled = false;
-
-        document.getElementById('scanStep1').style.display = 'none';
-        document.getElementById('scanStep2').style.display = 'block';
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-      }
-
-      function finalizeScan(target) {
-        const title = document.getElementById('scan_title').value.trim() || 'Scanned Document';
-        const asset = document.getElementById('scan_asset').value;
-        const date = document.getElementById('scan_date').value || getTodayString();
-        const workDone = document.getElementById('scan_workdone').value.trim();
-
-        if (target === 'maintenance') {
-          if (!asset) { alert('Please select which locomotive/asset this relates to.'); return; }
-          if (!db.maintenanceLogs) db.maintenanceLogs = [];
-          db.maintenanceLogs.push({
-            id: Date.now(),
-            assetName: asset,
-            workDone: workDone || title,
-            startDate: date,
-            endDate: date,
-            performedBy: [currentUser ? currentUser.name : 'Unknown'],
-            updateState: '',
-            photo: tempScanImageData,
-            notes: 'Added via document scan.',
-            recordedBy: currentUser ? currentUser.name : 'User'
-          });
-          syncArchiveForDate(date);
-          dbUpdate({ maintenanceLogs: db.maintenanceLogs, historicalArchive: db.historicalArchive });
-          closeModal('scanDocumentModal');
-          if (currentView === 'maintenance') renderMaintenancePage();
-        } else {
-          if (!db.documents) db.documents = [];
-          db.documents.push({
-            id: Date.now(),
-            title: title,
-            category: 'Scanned Document',
-            dateAdded: date,
-            link: '',
-            notes: workDone,
-            photo: tempScanImageData
-          });
-          dbUpdate({ documents: db.documents });
-          closeModal('scanDocumentModal');
-          if (currentView === 'documents') renderGenericModule('documents');
-        }
       }
 
       function syncArchiveForDate(dateStr) {
@@ -2427,8 +2258,6 @@
           case 'volunteers': renderVolunteers(); break;
           case 'actions': renderActionsPage(); break;
           case 'maintenance': renderMaintenancePage(); break;
-          case 'bookings': opsRenderBookings(); break;
-          case 'equipment': opsRenderEquipment(); break;
           case 'events': renderEventsPage(); break;
           case 'eurotunnel': renderEurotunnelPage(); break;
           case 'suppliers': renderGenericModule('suppliers'); break;
@@ -5520,7 +5349,9 @@
         return '';
       }
 
-      function renderEventsPage() {
+      function renderEventsPage() { return opsRenderEventsAndBookings(); }
+
+      function renderEventsList() {
         const content = document.getElementById('content');
         const admin = canEditFeature('events');
         const canEdit = canEditFeature('events');
@@ -5548,7 +5379,7 @@
             </div>
             ${ev.Description || ev.desc ? `<p style="font-size:0.8rem; color:var(--text);">${escapeHtml(ev.Description || ev.desc)}</p>` : ''}
             ${ev.Requirements && ev.Requirements.length ? `<div style="display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.55rem;">${ev.Requirements.map(r => `<span style="background:#f1f5f9; color:var(--text-muted); padding:2px 8px; border-radius:10px; font-size:0.68rem; font-weight:600;">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
-            <div style="margin-top:.75rem;display:flex;gap:.4rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm" onclick="evltDownloadEvent(${idx})">Add to calendar</button>${canEditFeature('bookings')&&(ev.bookingId||canEditFeature('events'))?`<button type="button" class="btn btn-secondary btn-sm" onclick="opsOpenBookingForEvent(${idx})">${ev.bookingId?'Manage booking':'Add booking details'}</button>`:''}</div>
+            <div style="margin-top:.75rem;display:flex;gap:.4rem;flex-wrap:wrap"><button type="button" class="btn btn-secondary btn-sm" onclick="evltDownloadEvent(${idx})">Add to calendar</button>${canEditFeature('events')&&(ev.bookingId||canEditFeature('events'))?`<button type="button" class="btn btn-secondary btn-sm" onclick="opsOpenBookingForEvent(${idx})">${ev.bookingId?'Manage booking':'Add booking details'}</button>`:''}</div>
             ${canEdit ? `
               <div style="display:flex; gap:0.4rem; border-top:1px solid var(--border); padding-top:0.6rem; margin-top:0.6rem;">
                 <button class="btn btn-secondary btn-sm" onclick="openEventModal(${idx})" style="flex:1;"><i data-lucide="edit"></i> Edit</button>
@@ -5561,8 +5392,8 @@
         content.innerHTML = `
           <div class="page-header">
             <div class="page-title">
-              <h2>Railway Events Calendar</h2>
-              <p>Special gala days, public operating days, and private bookings.</p>
+              <h2>Events &amp; Bookings</h2>
+              <p>Museum events and organised school, group and party visits. Ordinary museum visitors do not need to book.</p>
             </div>
             <div style="display:flex; gap:.5rem;">
               ${canEdit ? `<button class="btn btn-primary btn-sm" onclick="openEventModal()"><i data-lucide="plus"></i> Add Event</button>` : ''}
@@ -7933,7 +7764,7 @@
               <h2>${escapeHtml(schema.title)}</h2>
               <p>${escapeHtml(schema.description || 'Operational data and records management.')}</p>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')"><i data-lucide="plus"></i> Add Entry</button>
+            <div class="ops-actions">${moduleKey === 'documents' && isAdmin ? `<button type="button" class="btn btn-secondary btn-sm" onclick="openScanDocumentModal('document')">Scan document / PDF</button>` : ''}<button class="btn btn-primary btn-sm" onclick="openGenericModal('${moduleKey}')"><i data-lucide="plus"></i> Add Entry</button></div>
           </div>
           <div class="card">
             <div class="table-container">
@@ -7944,7 +7775,7 @@
                     records.map((r, idx) => `
                       <tr>
                         ${schema.fields.map(f => `<td>${escapeHtml(r[f.name] || '-')}</td>`).join('')}
-                        ${moduleKey === 'documents' ? `<td>${r.photo ? `<img src="${escapeHtml(safeImageUrl(r.photo))}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(r.photo))})">` : '-'}</td>` : ''}
+                        ${moduleKey === 'documents' ? `<td>${r.scanPages?.length ? `<button type="button" class="btn btn-secondary btn-sm" onclick="evltViewScannedRecord('documents', ${inlineJsArg(String(r.id))})">View scan &amp; text</button>` : r.photo ? `<img src="${escapeHtml(safeImageUrl(r.photo))}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:zoom-in;" onclick="showImageLightbox(${inlineJsArg(safeImageUrl(r.photo))})">` : '-'}</td>` : ''}
                         ${isAdmin ? `<td style="text-align:right;"><button class="btn btn-danger btn-sm" onclick="deleteGenericItem('${moduleKey}', ${idx}, ${inlineJsArg(JSON.stringify(r))})"><i data-lucide="trash-2"></i></button></td>` : ''}
                       </tr>`).join('')}
                 </tbody>

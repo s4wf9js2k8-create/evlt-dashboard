@@ -183,27 +183,27 @@
         ".write": "auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true"
       },
       "visitBookings": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('bookings').val() == true))",
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true))",
         ".write": false
       },
       "operationsSettings": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('bookings').val() == true))",
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true))",
         ".write": false
       },
       "equipmentAssets": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true))",
+        ".read": false,
         ".write": false
       },
       "equipmentLoans": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true))",
+        ".read": false,
         ".write": false
       },
       "equipmentJobs": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true))",
+        ".read": false,
         ".write": false
       },
       "equipmentPlans": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true))",
+        ".read": false,
         ".write": false
       },
       "fleetJobs": {
@@ -215,7 +215,7 @@
         ".write": false
       },
       "operationalVolunteerNames": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true))",
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true))",
         ".write": false
       },
       "fleetDefectSummary": {
@@ -223,7 +223,7 @@
         ".write": false
       },
       "ms365Config": {
-        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('bookings').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('equipment').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true))",
+        ".read": "(auth != null && auth.token.email_verified == true && root.child('EVLT_SYSTEM_ADMIN_UIDS').child(auth.uid).val() == true) || (auth != null && auth.token.email_verified == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('approved').val() == true && root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('email').val() == auth.token.email && (root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('events').val() == true || root.child('EVLT_ACCOUNT_BINDINGS').child(auth.uid).child('grantedPages').child('maintenance').val() == true))",
         ".write": false
       }
     },
@@ -431,6 +431,10 @@
       }
     },
     "EVLT_VISIT_REQUEST_LIMITS": {
+      ".read": false,
+      ".write": false
+    },
+    "EVLT_SCAN_USAGE": {
       ".read": false,
       ".write": false
     }
