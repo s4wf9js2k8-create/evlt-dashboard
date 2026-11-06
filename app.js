@@ -341,20 +341,20 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
 
-      function syncArchiveForDate(dateStr) {
+      function syncArchiveForDate(dateStr, state = db) {
         if (!dateStr) return;
         const iso = toISODate(dateStr);
         if (!iso) return;
 
-        if (!db.historicalArchive) db.historicalArchive = [];
+        if (!state.historicalArchive) state.historicalArchive = [];
         
-        let archIdx = db.historicalArchive.findIndex(a => toISODate(a.date) === iso);
+        let archIdx = state.historicalArchive.findIndex(a => toISODate(a.date) === iso);
         
-        const dayClockLogs = (db.clockLogs || []).filter(l => toISODate(l.date) === iso);
-        const dayIncidents = (db.incidents || []).filter(i => toISODate(i.Date) === iso);
-        const dayMaintenance = (db.maintenanceLogs || []).filter(m => toISODate(m.endDate) === iso || toISODate(m.startDate) === iso);
-        const dayActionsAdded = (db.actions || []).filter(a => toISODate(a.createdDate) === iso);
-        const dayActionsCompleted = (db.actions || []).filter(a => toISODate(a.completedDate) === iso);
+        const dayClockLogs = (state.clockLogs || []).filter(l => toISODate(l.date) === iso);
+        const dayIncidents = (state.incidents || []).filter(i => toISODate(i.Date) === iso);
+        const dayMaintenance = (state.maintenanceLogs || []).filter(m => toISODate(m.endDate) === iso || toISODate(m.startDate) === iso);
+        const dayActionsAdded = (state.actions || []).filter(a => toISODate(a.createdDate) === iso);
+        const dayActionsCompleted = (state.actions || []).filter(a => toISODate(a.completedDate) === iso);
 
         const attendanceMapped = dayClockLogs.map(l => ({
           name: l.name,
@@ -377,14 +377,14 @@
         }));
 
         if (archIdx > -1) {
-          db.historicalArchive[archIdx].attendance = attendanceMapped;
-          if (mappedIncidents.length > 0) db.historicalArchive[archIdx].incidents = mappedIncidents;
-          if (mappedMaint.length > 0) db.historicalArchive[archIdx].maintenance = mappedMaint;
-          if (dayActionsAdded.length > 0) db.historicalArchive[archIdx].actionsAdded = dayActionsAdded.map(a => a.Title || a.title);
-          if (dayActionsCompleted.length > 0) db.historicalArchive[archIdx].actionsCompleted = dayActionsCompleted.map(a => a.Title || a.title);
+          state.historicalArchive[archIdx].attendance = attendanceMapped;
+          if (mappedIncidents.length > 0) state.historicalArchive[archIdx].incidents = mappedIncidents;
+          if (mappedMaint.length > 0) state.historicalArchive[archIdx].maintenance = mappedMaint;
+          if (dayActionsAdded.length > 0) state.historicalArchive[archIdx].actionsAdded = dayActionsAdded.map(a => a.Title || a.title);
+          if (dayActionsCompleted.length > 0) state.historicalArchive[archIdx].actionsCompleted = dayActionsCompleted.map(a => a.Title || a.title);
         } else {
           if (dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0) {
-            db.historicalArchive.push({
+            state.historicalArchive.push({
               date: iso,
               trackWalk: { inspector: 'N/A', result: 'Not Completed', notes: '' },
               testRun: { inspector: 'N/A', result: 'Not Completed', notes: '', trains: [] },
@@ -398,7 +398,7 @@
           }
         }
 
-        db.historicalArchive.sort((a, b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+        state.historicalArchive.sort((a, b) => toISODate(b.date).localeCompare(toISODate(a.date)));
       }
 
       function syncAllArchives() {
@@ -3454,8 +3454,10 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveClockLogShiftEdit(e) {
+      async function saveClockLogShiftEdit(e) {
         e.preventDefault();
+        const form = e.target;
+        if (form.dataset.evltSaving === 'true') return;
 
         if (!canEditFeature('clockLogs')) {
           alert('You do not have permission to edit attendance records.');
@@ -3473,11 +3475,19 @@
           return;
         }
 
-        if (!db.clockLogs) db.clockLogs = [];
+        // Prepare the attendance and its archive together without changing the displayed data.
+        const staged = {...db,
+          clockLogs: JSON.parse(JSON.stringify(db.clockLogs || [])),
+          historicalArchive: JSON.parse(JSON.stringify(db.historicalArchive || []))
+        };
 
         const oldLog = idValue
-          ? db.clockLogs.find(l => String(l.id) === String(idValue))
+          ? staged.clockLogs.find(l => String(l.id) === String(idValue))
           : null;
+        if (idValue && !oldLog) {
+          evltShowFormMessage(form, 'This attendance record was removed. Close and reopen the editor.');
+          return;
+        }
         const oldDate = oldLog ? toISODate(oldLog.date) : null;
 
         if (oldLog) {
@@ -3487,7 +3497,7 @@
           oldLog.clockOut = clockOut;
           oldLog.status = 'Completed';
         } else {
-          db.clockLogs.push({
+          staged.clockLogs.push({
             id: Date.now(),
             name,
             date,
@@ -3498,13 +3508,31 @@
         }
 
         // Rebuild the historical archive for both dates if a record was moved.
-        if (oldDate && oldDate !== date) syncArchiveForDate(oldDate);
-        syncArchiveForDate(date);
+        if (oldDate && oldDate !== date) syncArchiveForDate(oldDate, staged);
+        syncArchiveForDate(date, staged);
 
-        dbUpdate({
-          clockLogs: db.clockLogs,
-          historicalArchive: db.historicalArchive
-        });
+        const controls = Array.from(form.elements || []).map(element => ({element, disabled:element.disabled}));
+        form.dataset.evltSaving = 'true';
+        form.setAttribute('aria-busy', 'true');
+        controls.forEach(({element}) => { element.disabled = true; });
+        let saved = false;
+        try {
+          saved = await dbUpdate({clockLogs:staged.clockLogs, historicalArchive:staged.historicalArchive});
+          if (!saved) {
+            evltShowFormMessage(form, 'Could not save attendance. Your entry is still here. Check your connection and access, then try again.');
+            return;
+          }
+          db.clockLogs = staged.clockLogs;
+          db.historicalArchive = staged.historicalArchive;
+        } catch (error) {
+          console.error('Attendance save failed:', error);
+          evltShowFormMessage(form, 'Could not save attendance. Your entry is still here; please try again.');
+          return;
+        } finally {
+          delete form.dataset.evltSaving;
+          form.removeAttribute('aria-busy');
+          controls.forEach(({element, disabled}) => { element.disabled = disabled; });
+        }
 
         closeModal('editClockLogModal');
         if (currentView === 'calendar') {
