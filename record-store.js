@@ -26,7 +26,7 @@ function evltApplyRecordChange(value,change){
   return records;
 }
 async function evltCommitRecord(collection,change){
-  const pages={itemCodes:'documents',actions:'actions',events:'events',helpGuides:'help',notifications:'notifications',suppliers:'suppliers',enquiries:'enquiries',documents:'documents',notes:'notes'};
+  const pages={historicalArchive:'archives',itemCodes:'documents',actions:'actions',events:'events',helpGuides:'help',notifications:'notifications',suppliers:'suppliers',enquiries:'enquiries',documents:'documents',notes:'notes'};
   if(!pages[collection]||!canEditFeature(pages[collection])){evltToast('You do not have editing access to these records.','error');return false;}
   const form=change.form,button=change.button;if(form?.dataset.evltSaving==='true')return false;
   if(!navigator.onLine){if(form)evltShowFormMessage(form,'You are offline. Your entry is still here; reconnect and save again.');else evltToast('You are offline. Nothing has been deleted.','error');return false;}

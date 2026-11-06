@@ -4540,6 +4540,7 @@
         const index = archives.findIndex(a => toISODate(a.date) === dateIso);
         if (index < 0) { alert('Archive record not found.'); return; }
         const a = archives[index];
+        evltCaptureEdit('historicalArchive', a);
 
         document.getElementById('editArchiveIndex').value = index;
         document.getElementById('editArchiveDateTxt').textContent = formatDisplayDate(a.date);
@@ -4561,12 +4562,12 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveArchiveEdit(e) {
+      async function saveArchiveEdit(e) {
         e.preventDefault();
         if (!canEditFeature('archives')) { alert('You do not have permission to edit archive records.'); return; }
-        const index = parseInt(document.getElementById('editArchiveIndex').value, 10);
-        const archive = db.historicalArchive?.[index];
-        if (!archive) { alert('Archive record no longer exists.'); return; }
+        const target = evltEditingRecord('historicalArchive');
+        if (!target) { alert('Please reopen the archive day before saving.'); return; }
+        const archive = JSON.parse(JSON.stringify(target));
 
         archive.trackWalk = {
           result: document.getElementById('editArch_TW_Result').value,
@@ -4602,22 +4603,22 @@
           performedBy: (row.querySelector('.arch-maint-by')?.value || '').split(',').map(x => x.trim()).filter(Boolean)
         })).filter(x => x.asset || x.workDone);
 
-        db.historicalArchive.sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
-        dbUpdate({ historicalArchive: db.historicalArchive });
-        closeModal('editArchiveModal');
-        renderArchives();
+        if (await evltCommitRecord('historicalArchive', {mode:'upsert', target, record:archive, form:e.target})) {
+          closeModal('editArchiveModal');
+          renderArchives();
+        }
       }
 
-      function deleteArchiveDay(dateIso) {
+      async function deleteArchiveDay(dateIso) {
         if (!canEditFeature('archives')) {
           alert('You do not have permission to edit archive records.');
           return;
         }
         if (!confirm(`Are you sure you want to permanently delete the archive record for ${formatDisplayDate(dateIso)}?`)) return;
 
-        db.historicalArchive = (db.historicalArchive || []).filter(a => toISODate(a.date) !== dateIso);
-        dbSet('EVLT_ADMIN_DB/historicalArchive', db.historicalArchive);
-        renderArchives();
+        const target = (db.historicalArchive || []).find(a => toISODate(a.date) === dateIso);
+        if (!target) { alert('Archive record no longer exists.'); return; }
+        if (await evltCommitRecord('historicalArchive', {mode:'remove', target})) renderArchives();
       }
 
       function dataUrlToBlob(dataUrl) {
