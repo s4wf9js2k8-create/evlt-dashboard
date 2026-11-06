@@ -1,3 +1,4 @@
+import { revokeAccount, activePushUid } from './account-revocation.js';
 import { onValueWritten } from 'firebase-functions/v2/database';
 import { initializeApp, getApps, applicationDefault } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
@@ -65,7 +66,14 @@ async function pushToAllDevices(notification) {
 
   const staleKeys = [];
   for (let i = 0; i < entries.length; i += 500) {
-    const chunk = entries.slice(i, i + 500);
+    const candidates = entries.slice(i, i + 500);
+    const uids = [...new Set(candidates.map(([, item]) => item.uid))];
+    const approved = new Set();
+    for (const uid of uids) {
+      if (await activePushUid(getDatabase(), getAuth(), uid)) approved.add(uid);
+    }
+    const chunk = candidates.filter(([, item]) => approved.has(item.uid));
+    if (!chunk.length) continue;
     // Data-only message: the service worker shows it, so each device gets exactly one alert.
     const result = await getMessaging().sendEachForMulticast({
       tokens: chunk.map(([, item]) => item.token),
@@ -225,92 +233,11 @@ export const forceRevokeAccount = onCall(
     }
 
     const targetUid = String(request.data?.uid || '').trim();
-    if (!targetUid || targetUid.length > 128 || targetUid === callerUid) {
+    if (!targetUid || targetUid.length > 128 || /[.#$\[\]\/]/.test(targetUid) || targetUid === callerUid) {
       throw new HttpsError('invalid-argument', 'A valid different account UID is required.');
     }
 
-    const [bindingsSnap, requestsSnap, permissionsSnap] = await Promise.all([
-      db.ref('EVLT_ACCOUNT_BINDINGS').get(),
-      db.ref('EVLT_ACCOUNT_REQUESTS').get(),
-      db.ref('EVLT_ADMIN_DB/userPermissions').get()
-    ]);
-    const bindings = bindingsSnap.val() || {};
-    const requests = requestsSnap.val() || {};
-    const permissions = permissionsSnap.val() || {};
-    const selected = bindings[targetUid] || null;
-    const selectedRequest = requests[targetUid] || null;
-    const email = String(selected?.email || selectedRequest?.email || '').trim().toLowerCase();
-    const name = String(selected?.volunteerName || selectedRequest?.name || '').trim().toLowerCase();
-
-    const bindingUids = Object.entries(bindings).filter(([key, value]) =>
-      key === targetUid || (value && (
-        (email && String(value.email || '').trim().toLowerCase() === email) ||
-        (name && String(value.volunteerName || '').trim().toLowerCase() === name)
-      ))
-    ).map(([key]) => key);
-    const requestUids = Object.entries(requests).filter(([key, value]) =>
-      key === targetUid || (value && (
-        (email && String(value.email || '').trim().toLowerCase() === email) ||
-        (name && String(value.name || '').trim().toLowerCase() === name)
-      ))
-    ).map(([key]) => key);
-    const permissionKeys = Object.keys(permissions).filter(key =>
-      name && key.trim().toLowerCase() === name
-    );
-
-    const updates = {};
-    bindingUids.forEach(key => { updates['EVLT_ACCOUNT_BINDINGS/' + key] = null; });
-    requestUids.forEach(key => { updates['EVLT_ACCOUNT_REQUESTS/' + key] = null; });
-    permissionKeys.forEach(key => { updates['EVLT_ADMIN_DB/userPermissions/' + key] = null; });
-
-    if (!Object.keys(updates).length) {
-      throw new HttpsError('not-found', 'No matching approval, request or legacy permission record was found.');
-    }
-
-    await db.ref().update(updates);
-
-    const [afterBindings, afterRequests, afterPermissions] = await Promise.all([
-      db.ref('EVLT_ACCOUNT_BINDINGS').get(),
-      db.ref('EVLT_ACCOUNT_REQUESTS').get(),
-      db.ref('EVLT_ADMIN_DB/userPermissions').get()
-    ]);
-    const leftBinding = Object.entries(afterBindings.val() || {}).some(([key, value]) =>
-      bindingUids.includes(key) || (value && (
-        (email && String(value.email || '').trim().toLowerCase() === email) ||
-        (name && String(value.volunteerName || '').trim().toLowerCase() === name)
-      ))
-    );
-    const leftRequest = Object.entries(afterRequests.val() || {}).some(([key, value]) =>
-      requestUids.includes(key) || (value && (
-        (email && String(value.email || '').trim().toLowerCase() === email) ||
-        (name && String(value.name || '').trim().toLowerCase() === name)
-      ))
-    );
-    const leftPermission = Object.keys(afterPermissions.val() || {}).some(key =>
-      name && key.trim().toLowerCase() === name
-    );
-    if (leftBinding || leftRequest || leftPermission) {
-      throw new HttpsError('internal', 'The server write completed but verification found matching records still present.');
-    }
-
-    // Disable the Firebase Auth user as well, if it exists. Keep the Auth record
-    // so an administrator can restore access later if this was a mistake.
-    let authDisabled = false;
-    try {
-      await getAuth().updateUser(targetUid, { disabled: true });
-      await getAuth().revokeRefreshTokens(targetUid);
-      authDisabled = true;
-    } catch (err) {
-      if (err.code !== 'auth/user-not-found') throw err;
-    }
-
-    return {
-      success: true,
-      removedBindings: bindingUids.length,
-      removedRequests: requestUids.length,
-      removedLegacyPermissions: permissionKeys.length,
-      authDisabled
-    };
+    return revokeAccount(db, getAuth(), targetUid);
   }
 );
 
