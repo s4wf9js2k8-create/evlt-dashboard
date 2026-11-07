@@ -8310,7 +8310,7 @@
           </div>
           ${rolePermissionsNeedMigration ? '<p style="font-size:.74rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.55rem .7rem;margin-bottom:.7rem;">Existing account permissions are shown on their linked roles. Review the matrix and save to apply the role based system.</p>' : ''}
           <div style="overflow:auto;border:1px solid var(--border);border-radius:10px;">
-            <table style="width:100%;border-collapse:collapse;min-width:480px;">
+            <table class="role-permission-table" style="width:100%;border-collapse:collapse;">
               <thead><tr style="background:#f8fafc;text-align:left;"><th style="padding:.55rem .7rem;font-size:.72rem;">Page</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can view</th><th style="padding:.55rem;text-align:center;font-size:.72rem;">Can edit</th></tr></thead>
               <tbody>${ACCOUNT_ACCESS_PAGES.map(page => `<tr style="border-top:1px solid var(--border-subtle);">
                 <td style="padding:.48rem .7rem;font-size:.78rem;">${escapeHtml(page.label)} <span style="font-size:.68rem;color:var(--text-muted);">${escapeHtml(page.section)}</span></td>

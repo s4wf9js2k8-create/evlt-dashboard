@@ -16,8 +16,18 @@ async function evltCallAccessSave(data){
   if(!navigator.onLine)throw new Error('You are offline. Reconnect and save again. Your changes have been kept.');
   if(!auth?.currentUser)throw new Error('Sign in again before saving.');
   const token=await auth.currentUser.getIdToken();
-  const response=await fetch('https://europe-west1-'+firebaseConfig.projectId+'.cloudfunctions.net/saveAccessSettings',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({data})});
-  const body=await response.json();if(!response.ok||body.error||body.result?.saved!==true)throw new Error(body.error?.message||'The save could not be confirmed. Your changes have been kept.');return body.result;
+  let response;
+  try {
+    response=await fetch('https://europe-west1-'+firebaseConfig.projectId+'.cloudfunctions.net/saveAccessSettings',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({data})});
+  } catch {
+    throw new Error('Cannot reach the Firebase access save service. Check your connection. If other pages work, ask the System Admin to check the saveAccessSettings function. Your changes have been kept; try saving again once the service is available.');
+  }
+  let body;
+  try { body=await response.json(); } catch {
+    throw new Error('The Firebase access save service returned an unexpected response (HTTP '+response.status+'). Ask the System Admin to check the saveAccessSettings function. Your changes have been kept.');
+  }
+  if(!response.ok||body?.error||body?.result?.saved!==true)throw new Error(body?.error?.message||'The save could not be confirmed (HTTP '+response.status+'). Your changes have been kept.');
+  return body.result;
 }
 async function evltSaveRole(){
   if(!currentUser?.isSystemAdmin||!evltRoleEditor||evltRoleSaving)return;
