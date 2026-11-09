@@ -47,7 +47,7 @@
       .header-left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
       .header-right { display: flex; align-items: center; gap: 1rem; }
       
-      .header-logo { width: 34px; height: 34px; flex-shrink: 0; display: block; }
+      .header-logo { width: 34px; height: 34px; flex-shrink: 0; display: block; border-radius: 50%; }
       .brand-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.9rem; letter-spacing: -0.01em; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       
       .menu-btn { display: none; background: none; border: none; color: white; cursor: pointer; padding: 0.25rem; border-radius: var(--radius-sm); flex-shrink: 0; }
