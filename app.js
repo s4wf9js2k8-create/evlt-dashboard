@@ -356,6 +356,15 @@
         const dayActionsAdded = (db.actions || []).filter(a => toISODate(a.createdDate) === iso);
         const dayActionsCompleted = (db.actions || []).filter(a => toISODate(a.completedDate) === iso);
 
+        const daily = db.dailyChecks || {};
+        const matchesDaily = toISODate(daily.lastCheckDate) === iso;
+        const hasDailyActivity = matchesDaily && (daily.trackWalk?.result || daily.testRun?.result || (daily.runningTrains || []).length);
+        const dailySnapshot = matchesDaily ? {
+          trackWalk: JSON.parse(JSON.stringify(daily.trackWalk || {})),
+          testRun: JSON.parse(JSON.stringify(daily.testRun || {})),
+          runningTrains: [...(daily.runningTrains || [])]
+        } : {};
+
         const attendanceMapped = dayClockLogs.map(l => ({
           name: l.name,
           clockIn: l.clockIn || '-',
@@ -377,18 +386,20 @@
         }));
 
         if (archIdx > -1) {
+          Object.assign(db.historicalArchive[archIdx], dailySnapshot);
           db.historicalArchive[archIdx].attendance = attendanceMapped;
           if (mappedIncidents.length > 0) db.historicalArchive[archIdx].incidents = mappedIncidents;
           if (mappedMaint.length > 0) db.historicalArchive[archIdx].maintenance = mappedMaint;
           if (dayActionsAdded.length > 0) db.historicalArchive[archIdx].actionsAdded = dayActionsAdded.map(a => a.Title || a.title);
           if (dayActionsCompleted.length > 0) db.historicalArchive[archIdx].actionsCompleted = dayActionsCompleted.map(a => a.Title || a.title);
         } else {
-          if (dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0) {
+          if (hasDailyActivity || dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0 || dayActionsAdded.length > 0 || dayActionsCompleted.length > 0) {
             db.historicalArchive.push({
               date: iso,
               trackWalk: { inspector: 'N/A', result: 'Not Completed', notes: '' },
               testRun: { inspector: 'N/A', result: 'Not Completed', notes: '', trains: [] },
               runningTrains: [],
+              ...dailySnapshot,
               attendance: attendanceMapped,
               incidents: mappedIncidents,
               maintenance: mappedMaint,
@@ -405,6 +416,7 @@
         if (!db.historicalArchive) db.historicalArchive = [];
         
         const dates = new Set();
+        if (db.dailyChecks?.lastCheckDate) dates.add(toISODate(db.dailyChecks.lastCheckDate));
         (db.historicalArchive || []).forEach(a => { if (a.date) dates.add(toISODate(a.date)); });
         (db.clockLogs || []).forEach(l => { if (l.date) dates.add(toISODate(l.date)); });
         (db.incidents || []).forEach(i => { if (i.Date) dates.add(toISODate(i.Date)); });
@@ -453,46 +465,9 @@
           return;
         }
 
-        const daily = db.dailyChecks;
-        const dayClockLogs = (db.clockLogs || []).filter(l => toISODate(l.date) === lastDate);
-        const dayIncidents = (db.incidents || []).filter(i => toISODate(i.Date) === lastDate);
-        const dayMaintenance = (db.maintenanceLogs || []).filter(m => toISODate(m.endDate) === lastDate || toISODate(m.startDate) === lastDate);
-        const dayActionsAdded = (db.actions || []).filter(a => toISODate(a.createdDate) === lastDate);
-        const dayActionsCompleted = (db.actions || []).filter(a => toISODate(a.completedDate) === lastDate);
-
-        const trackWalkDone = daily.trackWalk && daily.trackWalk.result;
-        const testRunDone = daily.testRun && daily.testRun.result;
-        const trainsRan = (daily.runningTrains || []).length > 0;
-
-        const somethingHappened = trackWalkDone || testRunDone || trainsRan ||
-          dayClockLogs.length > 0 || dayIncidents.length > 0 || dayMaintenance.length > 0 ||
-          dayActionsAdded.length > 0 || dayActionsCompleted.length > 0;
-
-        const resetUpdates = {};
-
-        if (somethingHappened) {
-          if (!db.historicalArchive) db.historicalArchive = [];
-          const existingIndex = db.historicalArchive.findIndex(a => toISODate(a.date) === lastDate);
-          
-          const archiveEntry = {
-            date: lastDate,
-            trackWalk: trackWalkDone ? daily.trackWalk : null,
-            testRun: testRunDone ? daily.testRun : null,
-            runningTrains: daily.runningTrains || [],
-            attendance: dayClockLogs.map(l => ({ name: l.name, clockIn: l.clockIn, clockOut: l.clockOut })),
-            incidents: dayIncidents.map(i => ({ asset: i.asset, description: i.Description, status: i.Status, redTagStatus: i['Red Tag Status'] })),
-            maintenance: dayMaintenance.map(m => ({ asset: m.assetName, workDone: m.workDone, performedBy: m.performedBy })),
-            actionsAdded: dayActionsAdded.map(a => a.Title),
-            actionsCompleted: dayActionsCompleted.map(a => a.Title)
-          };
-
-          if (existingIndex > -1) {
-            db.historicalArchive[existingIndex] = { ...db.historicalArchive[existingIndex], ...archiveEntry };
-          } else {
-            db.historicalArchive.push(archiveEntry);
-          }
-          resetUpdates.historicalArchive = db.historicalArchive;
-        }
+        // Snapshot checks and trains before clearing the previous day's live data.
+        syncArchiveForDate(lastDate);
+        const resetUpdates = { historicalArchive: db.historicalArchive };
 
         db.dailyChecks = { lastCheckDate: todayStr, trackWalk: {}, testRun: {}, runningTrains: [] };
         resetUpdates.dailyChecks = db.dailyChecks;
@@ -3044,7 +3019,9 @@
           if (!db.dailyChecks.runningTrains.includes(n)) { db.dailyChecks.runningTrains.push(n); changed = true; }
         });
         if (changed) {
-          dbSet('EVLT_ADMIN_DB/dailyChecks', db.dailyChecks);
+          db.dailyChecks.lastCheckDate = getTodayString();
+          syncArchiveForDate(db.dailyChecks.lastCheckDate);
+          dbUpdate({ dailyChecks: db.dailyChecks, historicalArchive: db.historicalArchive });
           renderDashboard();
         }
       }
@@ -3055,7 +3032,9 @@
         db.dailyChecks.runningTrains = trainName === COACHES_VALUE
           ? db.dailyChecks.runningTrains.filter(t => !isCoachName(t))
           : db.dailyChecks.runningTrains.filter(t => t !== trainName);
-        dbSet('EVLT_ADMIN_DB/dailyChecks', db.dailyChecks);
+        db.dailyChecks.lastCheckDate = getTodayString();
+        syncArchiveForDate(db.dailyChecks.lastCheckDate);
+        dbUpdate({ dailyChecks: db.dailyChecks, historicalArchive: db.historicalArchive });
         renderDashboard();
       }
 
@@ -4367,11 +4346,11 @@
                         </div>
 
                         <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
-                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">🚂 Locos Running (${(a.testRun?.trains || a.runningTrains || []).length})</strong>
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">🚂 Locos Running (${(a.runningTrains ?? a.testRun?.trains ?? []).length})</strong>
                           <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
-                            ${(a.testRun?.trains || a.runningTrains || []).length === 0
+                            ${(a.runningTrains ?? a.testRun?.trains ?? []).length === 0
                               ? '<span style="color:var(--text-muted); font-size:0.75rem;">None recorded</span>'
-                              : (a.testRun?.trains || a.runningTrains || []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${escapeHtml(t)}</span>`).join('')}
+                              : (a.runningTrains ?? a.testRun?.trains ?? []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${escapeHtml(t)}</span>`).join('')}
                           </div>
                         </div>
 
@@ -4548,7 +4527,7 @@
         document.getElementById('editArch_TW_Notes').value = a.trackWalk?.notes || '';
         document.getElementById('editArch_TR_Result').value = a.testRun?.result || 'Not Completed';
         document.getElementById('editArch_TR_Inspector').innerHTML = archiveInspectorOptions(a.testRun?.inspector || '');
-        document.getElementById('editArch_LocosContainer').innerHTML = archiveLocoOptions(a.testRun?.trains || a.runningTrains || []);
+        document.getElementById('editArch_LocosContainer').innerHTML = archiveLocoOptions(a.runningTrains ?? a.testRun?.trains ?? []);
 
         document.getElementById('editArch_ShiftsContainer').innerHTML = '';
         (a.attendance || []).forEach(s => addArchiveShiftRow(s));
