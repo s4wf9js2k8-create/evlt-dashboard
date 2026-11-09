@@ -26,12 +26,12 @@ test('start changes disable earlier finishes, clear invalid selection and restor
   ctx.constrainShiftEnd({value:'04:00'},end);
   assert.equal(end.options[1].disabled,false);
 });
-test('save rejects invalid time order before changing records or writing',()=>{
+test('save rejects invalid time order before changing records or writing',async()=>{
   const fields={editClockLogId:'1',editClockLogName:'Alex',editClockLogDate:'2026-11-09',editClockLogIn:'09:00',editClockLogOut:'05:00'};
   const ctx=helpers(); let message='';
   Object.assign(ctx,{document:{getElementById:id=>({value:fields[id]})},canEditFeature:()=>true,alert:text=>message=text,db:{clockLogs:[{id:1,clockIn:'09:00',clockOut:'17:00'}]},dbUpdate:()=>assert.fail('must not save')});
-  vm.runInContext(source.slice(source.indexOf('      function saveClockLogShiftEdit('),source.indexOf('      function deleteClockLog(')),ctx);
-  ctx.saveClockLogShiftEdit({preventDefault(){}});
+  vm.runInContext(source.slice(source.indexOf('      async function saveClockLogShiftEdit('),source.indexOf('      function deleteClockLog(')),ctx);
+  await ctx.saveClockLogShiftEdit({preventDefault(){}});
   assert.match(message,/after clock-in/);
   assert.equal(ctx.db.clockLogs[0].clockOut,'17:00');
 });

@@ -322,6 +322,60 @@
         });
       }
 
+      function prepareArchiveUpdates(updates, dates) {
+        const original = db;
+        const draft = { ...db, ...JSON.parse(JSON.stringify(updates)),
+          historicalArchive: JSON.parse(JSON.stringify(db.historicalArchive || [])) };
+        try {
+          db = draft;
+          dates.forEach(date => syncArchiveForDate(date));
+          return { ...updates, historicalArchive: draft.historicalArchive };
+        } finally { db = original; }
+      }
+
+      function resetSaveFeedback(modalId) {
+        document.getElementById(modalId)?.querySelectorAll('.evlt-save-status, .evlt-form-message').forEach(el => el.remove());
+      }
+
+      async function saveOperationalForm(form, updates) {
+        if (!form || form.dataset.evltSaving === 'true') return false;
+        if (!navigator.onLine || !database) {
+          evltShowFormMessage(form, 'Could not save. Your entry is still here. Reconnect and try again.');
+          return false;
+        }
+        const owner = evltPageKey();
+        form.querySelectorAll('.evlt-save-status, .evlt-form-message').forEach(el => el.remove());
+        const status = document.createElement('p');
+        status.className = 'evlt-save-status';
+        status.setAttribute('role', 'status');
+        status.textContent = 'Saving…';
+        form.prepend(status);
+        const controls = Array.from(form.elements).map(element => ({ element, disabled: element.disabled }));
+        form.dataset.evltSaving = 'true';
+        form.setAttribute('aria-busy', 'true');
+        controls.forEach(({ element }) => { element.disabled = true; });
+        try {
+          if (!await dbUpdate(updates)) {
+            if (evltPageKey() === owner) evltShowFormMessage(form, 'Could not save. Your entry is still here. Check your connection and try again.');
+            return false;
+          }
+          if (evltPageKey() !== owner) return false;
+          Object.assign(db, updates);
+          evltDirtyForms.delete(form);
+          evltToast('Changes saved.');
+          return true;
+        } catch (error) {
+          console.error('Operational save failed:', error);
+          if (evltPageKey() === owner) evltShowFormMessage(form, 'Could not save. Your entry is still here. Please try again.');
+          return false;
+        } finally {
+          status.remove();
+          delete form.dataset.evltSaving;
+          form.removeAttribute('aria-busy');
+          controls.forEach(({ element, disabled }) => { element.disabled = disabled; });
+        }
+      }
+
       function exportArrayToCsv(filename, rows, columns) {
         const escapeCell = (v) => {
           const s = v === null || v === undefined ? '' : String(v);
@@ -362,7 +416,8 @@
         const dailySnapshot = matchesDaily ? {
           trackWalk: JSON.parse(JSON.stringify(daily.trackWalk || {})),
           testRun: JSON.parse(JSON.stringify(daily.testRun || {})),
-          runningTrains: [...(daily.runningTrains || [])]
+          runningTrains: [...(daily.runningTrains || [])],
+          runningTrainsRecorded: true
         } : {};
 
         const attendanceMapped = dayClockLogs.map(l => ({
@@ -3079,12 +3134,14 @@
         } else {
           trainGroup.style.display = 'none';
         }
+        resetSaveFeedback('opCheckModal');
         document.getElementById('opCheckModal').style.display = 'flex';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveOpCheck(e) {
+      async function saveOpCheck(e) {
         e.preventDefault();
+        if (!canEditFeature('dashboard')) return;
         const checkKey = document.getElementById('opCheckKey').value;
         const inspector = document.getElementById('opCheckInspector').value;
         const result = document.getElementById('opCheckResult').value;
@@ -3109,13 +3166,11 @@
           }
         }
 
-        if (!db.dailyChecks) db.dailyChecks = {};
         const todayStr = getTodayString();
-        db.dailyChecks.lastCheckDate = todayStr;
-        db.dailyChecks[checkKey] = { inspector, result, notes, trains: selectedTrains, recordedBy: currentUser ? currentUser.name : 'User' };
-
-        syncArchiveForDate(todayStr);
-        dbUpdate({ dailyChecks: db.dailyChecks, historicalArchive: db.historicalArchive });
+        const dailyChecks = { ...(db.dailyChecks || {}), lastCheckDate: todayStr,
+          [checkKey]: { inspector, result, notes, trains: selectedTrains, recordedBy: currentUser ? currentUser.name : 'User' } };
+        const updates = prepareArchiveUpdates({ dailyChecks }, [todayStr]);
+        if (!await saveOperationalForm(e.currentTarget, updates)) return;
 
         closeModal('opCheckModal');
         renderDashboard();
@@ -3395,6 +3450,19 @@
           /^([01]\d|2[0-3]):[0-5]\d$/.test(end) && end > start;
       }
 
+      function shiftDurationText(start, end) {
+        if (!start || start === '-' || !end || end === '-') return 'Select clock-in and clock-out to see the duration.';
+        if (!validShiftTimeOrder(start, end)) return 'Clock-out must be after clock-in on the same day.';
+        const minutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+        const total = minutes(end) - minutes(start);
+        const hours = Math.floor(total / 60), remainder = total % 60;
+        return `${start}–${end} · ${hours} ${hours === 1 ? 'hour' : 'hours'}${remainder ? ` ${remainder} minutes` : ''}`;
+      }
+
+      function updateShiftDuration(startSelect, endSelect, output) {
+        if (output) output.textContent = shiftDurationText(startSelect.value, endSelect.value);
+      }
+
       function constrainShiftEnd(startSelect, endSelect) {
         const start = startSelect.value;
         Array.from(endSelect.options).forEach(option => {
@@ -3447,14 +3515,18 @@
         inInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockIn || '') ? existing.clockIn : '';
         outInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockOut || '') ? existing.clockOut : '';
 
-        inInput.onchange = () => constrainShiftEnd(inInput, outInput);
+        const duration = document.getElementById('editClockLogDuration');
+        inInput.onchange = () => { constrainShiftEnd(inInput, outInput); updateShiftDuration(inInput, outInput, duration); };
+        outInput.onchange = () => updateShiftDuration(inInput, outInput, duration);
         constrainShiftEnd(inInput, outInput);
+        updateShiftDuration(inInput, outInput, duration);
+        resetSaveFeedback('editClockLogModal');
 
         modal.style.display = 'flex';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveClockLogShiftEdit(e) {
+      async function saveClockLogShiftEdit(e) {
         e.preventDefault();
 
         if (!canEditFeature('clockLogs')) {
@@ -3478,38 +3550,17 @@
           return;
         }
 
-        if (!db.clockLogs) db.clockLogs = [];
-
-        const oldLog = idValue
-          ? db.clockLogs.find(l => String(l.id) === String(idValue))
-          : null;
-        const oldDate = oldLog ? toISODate(oldLog.date) : null;
-
-        if (oldLog) {
-          oldLog.name = name;
-          oldLog.date = date;
-          oldLog.clockIn = clockIn;
-          oldLog.clockOut = clockOut;
-          oldLog.status = 'Completed';
-        } else {
-          db.clockLogs.push({
-            id: Date.now(),
-            name,
-            date,
-            clockIn,
-            clockOut,
-            status: 'Completed'
-          });
+        const clockLogs = JSON.parse(JSON.stringify(db.clockLogs || []));
+        const oldLog = idValue ? clockLogs.find(l => String(l.id) === String(idValue)) : null;
+        if (idValue && !oldLog) {
+          evltShowFormMessage(e.currentTarget, 'This shift was removed. Your entry is still here; reopen the attendance records to review.');
+          return;
         }
-
-        // Rebuild the historical archive for both dates if a record was moved.
-        if (oldDate && oldDate !== date) syncArchiveForDate(oldDate);
-        syncArchiveForDate(date);
-
-        dbUpdate({
-          clockLogs: db.clockLogs,
-          historicalArchive: db.historicalArchive
-        });
+        const oldDate = oldLog ? toISODate(oldLog.date) : null;
+        if (oldLog) Object.assign(oldLog, { name, date, clockIn, clockOut, status: 'Completed' });
+        else clockLogs.push({ id: Date.now(), name, date, clockIn, clockOut, status: 'Completed' });
+        const updates = prepareArchiveUpdates({ clockLogs }, [oldDate, date].filter(Boolean));
+        if (!await saveOperationalForm(e.currentTarget, updates)) return;
 
         closeModal('editClockLogModal');
         if (currentView === 'calendar') {
@@ -4327,6 +4378,12 @@
         document.getElementById('assetHistoryModal').style.display = 'flex';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
+      function archiveRunningTrains(archive) {
+        if (Array.isArray(archive.runningTrains)) return archive.runningTrains;
+        if (archive.runningTrainsRecorded) return [];
+        return archive.testRun?.trains || [];
+      }
+
       function renderArchives() {
         const content = document.getElementById('content');
         const archives = db.historicalArchive || [];
@@ -4372,11 +4429,11 @@
                         </div>
 
                         <div style="background:#f8fafc; padding:0.6rem 0.8rem; border-radius:var(--radius); border:1px solid var(--border);">
-                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">🚂 Locos Running (${(a.runningTrains ?? a.testRun?.trains ?? []).length})</strong>
+                          <strong style="color:var(--text); display:block; margin-bottom:0.3rem;">🚂 Locos Running (${(archiveRunningTrains(a)).length})</strong>
                           <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
-                            ${(a.runningTrains ?? a.testRun?.trains ?? []).length === 0
+                            ${(archiveRunningTrains(a)).length === 0
                               ? '<span style="color:var(--text-muted); font-size:0.75rem;">None recorded</span>'
-                              : (a.runningTrains ?? a.testRun?.trains ?? []).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${escapeHtml(t)}</span>`).join('')}
+                              : (archiveRunningTrains(a)).map(t => `<span style="background:var(--primary); color:white; padding:2px 7px; border-radius:4px; font-size:0.7rem; font-weight:600;">${escapeHtml(t)}</span>`).join('')}
                           </div>
                         </div>
 
@@ -4476,12 +4533,12 @@
         return '<option value="">Not recorded</option>' + archiveVolunteerOptions(selected);
       }
 
-      function archiveLocoOptions(selectedList) {
+      function archiveLocoOptions(selectedList, selectionClass = 'editArch-loco') {
         const selected = new Set(selectedList || []);
         const locos = (db.fleetItems || []).map(x => x.name || x.number).filter(Boolean);
         const euro = (db.eurotunnelTrains || []).map(x => x.name || x.number).filter(Boolean);
-        const names = [...new Set([...locos, ...euro])];
-        return EVLTAssignments.assetChoices(names.map(name=>({name}))).map(c => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="editArch-loco" value="${escapeHtml(c.value)}" ${c.members.some(n=>selected.has(n)) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
+        const names = [...new Set([...locos, ...euro, ...(selectedList || [])])];
+        return EVLTAssignments.assetChoices(names.map(name=>({name}))).map(c => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="${selectionClass}" value="${escapeHtml(c.value)}" ${c.members.some(n=>selected.has(n)) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
       }
 
       function addArchiveShiftRow(shift = {}) {
@@ -4498,8 +4555,15 @@
         c.appendChild(row);
         const startSelect = row.querySelector('.arch-shift-in');
         const endSelect = row.querySelector('.arch-shift-out');
-        startSelect.onchange = () => constrainShiftEnd(startSelect, endSelect);
+        const duration = document.createElement('p');
+        duration.className = 'arch-shift-duration';
+        duration.style.gridColumn = '1 / -1';
+        duration.setAttribute('role', 'status');
+        row.appendChild(duration);
+        startSelect.onchange = () => { constrainShiftEnd(startSelect, endSelect); updateShiftDuration(startSelect, endSelect, duration); };
+        endSelect.onchange = () => updateShiftDuration(startSelect, endSelect, duration);
         constrainShiftEnd(startSelect, endSelect);
+        updateShiftDuration(startSelect, endSelect, duration);
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
@@ -4557,7 +4621,10 @@
         document.getElementById('editArch_TW_Notes').value = a.trackWalk?.notes || '';
         document.getElementById('editArch_TR_Result').value = a.testRun?.result || 'Not Completed';
         document.getElementById('editArch_TR_Inspector').innerHTML = archiveInspectorOptions(a.testRun?.inspector || '');
-        document.getElementById('editArch_LocosContainer').innerHTML = archiveLocoOptions(a.runningTrains ?? a.testRun?.trains ?? []);
+        document.getElementById('editArch_LocosContainer').innerHTML = archiveLocoOptions(archiveRunningTrains(a));
+        document.getElementById('editArch_TestedLocosContainer').innerHTML = archiveLocoOptions(a.testRun?.trains || [], 'editArch-tested-loco');
+        document.getElementById('editArch_TR_Notes').value = a.testRun?.notes || '';
+        document.getElementById('editArchiveDate').value = dateIso;
 
         document.getElementById('editArch_ShiftsContainer').innerHTML = '';
         (a.attendance || []).forEach(s => addArchiveShiftRow(s));
@@ -4566,15 +4633,17 @@
         document.getElementById('editArch_MaintContainer').innerHTML = '';
         (a.maintenance || []).forEach(m => addArchiveMaintRow(m));
 
+        resetSaveFeedback('editArchiveModal');
         document.getElementById('editArchiveModal').style.display = 'flex';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
-      function saveArchiveEdit(e) {
+      async function saveArchiveEdit(e) {
         e.preventDefault();
         if (!canEditFeature('archives')) { alert('You do not have permission to edit archive records.'); return; }
-        const index = parseInt(document.getElementById('editArchiveIndex').value, 10);
-        const archive = db.historicalArchive?.[index];
+        const dateIso = document.getElementById('editArchiveDate').value;
+        const index = (db.historicalArchive || []).findIndex(a => toISODate(a.date) === dateIso);
+        const archive = index >= 0 ? JSON.parse(JSON.stringify(db.historicalArchive[index])) : null;
         if (!archive) { alert('Archive record no longer exists.'); return; }
 
         const invalidShift = Array.from(document.querySelectorAll('.archive-edit-shift-row')).some(row => {
@@ -4588,18 +4657,22 @@
         }
 
         archive.trackWalk = {
+          ...archive.trackWalk,
           result: document.getElementById('editArch_TW_Result').value,
           inspector: document.getElementById('editArch_TW_Inspector').value,
           notes: document.getElementById('editArch_TW_Notes').value.trim()
         };
         const trains = EVLTAssignments.expandAssets(Array.from(document.querySelectorAll('.editArch-loco:checked')).map(x => x.value),db.fleetItems);
+        const testedTrains = EVLTAssignments.expandAssets(Array.from(document.querySelectorAll('.editArch-tested-loco:checked')).map(x => x.value),db.fleetItems);
         archive.testRun = {
+          ...archive.testRun,
           result: document.getElementById('editArch_TR_Result').value,
           inspector: document.getElementById('editArch_TR_Inspector').value,
-          notes: archive.testRun?.notes || '',
-          trains
+          notes: document.getElementById('editArch_TR_Notes').value.trim(),
+          trains: testedTrains
         };
         archive.runningTrains = trains;
+        archive.runningTrainsRecorded = true;
 
         archive.attendance = Array.from(document.querySelectorAll('.archive-edit-shift-row')).map(row => ({
           name: row.querySelector('.arch-shift-name')?.value || '',
@@ -4621,8 +4694,9 @@
           performedBy: (row.querySelector('.arch-maint-by')?.value || '').split(',').map(x => x.trim()).filter(Boolean)
         })).filter(x => x.asset || x.workDone);
 
-        db.historicalArchive.sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
-        dbUpdate({ historicalArchive: db.historicalArchive });
+        const historicalArchive = db.historicalArchive.map((entry, i) => i === index ? archive : entry);
+        historicalArchive.sort((a,b) => toISODate(b.date).localeCompare(toISODate(a.date)));
+        if (!await saveOperationalForm(e.currentTarget, { historicalArchive })) return;
         closeModal('editArchiveModal');
         renderArchives();
       }

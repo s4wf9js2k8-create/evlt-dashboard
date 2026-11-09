@@ -48,3 +48,11 @@ June and Daphne are presented together in asset choices. Selecting that carriage
 On laptops, the navigation menu stays fixed below the app header at the full screen height. Its links scroll independently from the main page. Phones retain the slide-out menu.
 
 Attendance & Hours now provides a calendar, monthly summary cards, daily hours graph, yearly hours graph and volunteer hour breakdowns. Selecting a day moves to its full event details, availability and shift records; Back to month returns to the month grid. Graphs count valid completed clock-in/out pairs only. Incomplete shifts stay visible in the day records and are excluded from hours. Overnight shifts count towards their start date. Daily and monthly figures are also available as accessible tables beneath each graph.
+
+## Confirmed operational saves
+
+Hours, daily check and daily archive editors show Saving… and prevent repeated submission until the database responds. They close only after a successful save. A failed or offline save keeps the entry open for correction or retry. Shift and check updates include their archive snapshot in the same database update.
+
+Hours editors show the selected same-day duration before saving, including each volunteer row in the archive editor. The existing AM/PM labels and finish-after-start restriction still apply.
+
+The archive editor provides separate selections for trains tested and trains that ran, plus editable test-run notes. Empty running selections stay empty when Firebase omits empty arrays. Existing legacy records retain their previous display fallback until an explicit running list is recorded. Archive edits identify the selected day by date rather than its position in the list.
