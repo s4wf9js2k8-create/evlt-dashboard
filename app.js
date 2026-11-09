@@ -3385,6 +3385,24 @@
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
+      function shiftTimeLabel(value) {
+        const [hour, minute] = value.split(':');
+        return `${value} (${Number(hour) % 12 || 12}:${minute} ${Number(hour) < 12 ? 'AM' : 'PM'})`;
+      }
+
+      function validShiftTimeOrder(start, end) {
+        return /^([01]\d|2[0-3]):[0-5]\d$/.test(start) &&
+          /^([01]\d|2[0-3]):[0-5]\d$/.test(end) && end > start;
+      }
+
+      function constrainShiftEnd(startSelect, endSelect) {
+        const start = startSelect.value;
+        Array.from(endSelect.options).forEach(option => {
+          option.disabled = !!start && start !== '-' && !!option.value && option.value !== '-' && option.value <= start;
+        });
+        if (endSelect.selectedOptions[0]?.disabled) endSelect.value = Array.from(endSelect.options).some(o => o.value === '-') ? '-' : '';
+      }
+
       function openEditClockLogModal(id = null) {
         if (!canEditFeature('clockLogs')) {
           alert('You do not have permission to edit attendance records.');
@@ -3412,7 +3430,7 @@
         for (let h = 0; h < 24; h++) {
           for (let m = 0; m < 60; m += 5) {
             const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-            timeOptions.push(`<option value="${value}">${value}</option>`);
+            timeOptions.push(`<option value="${value}">${shiftTimeLabel(value)}</option>`);
           }
         }
         inInput.innerHTML = timeOptions.join('');
@@ -3428,6 +3446,9 @@
         dateInput.value = existing ? toISODate(existing.date) : getTodayString();
         inInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockIn || '') ? existing.clockIn : '';
         outInput.value = existing && /^\d{2}:\d{2}$/.test(existing.clockOut || '') ? existing.clockOut : '';
+
+        inInput.onchange = () => constrainShiftEnd(inInput, outInput);
+        constrainShiftEnd(inInput, outInput);
 
         modal.style.display = 'flex';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
@@ -3449,6 +3470,11 @@
 
         if (!name || !date || !clockIn || !clockOut) {
           alert('Please complete the volunteer, date, clock-in and clock-out fields.');
+          return;
+        }
+
+        if (!validShiftTimeOrder(clockIn, clockOut)) {
+          alert('Clock-out must be after clock-in on the same day. For 9 AM to 5 PM, choose 09:00 to 17:00.');
           return;
         }
 
@@ -4433,7 +4459,7 @@
         for (let h = 0; h < 24; h++) {
           for (let m = 0; m < 60; m += 5) {
             const v = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-            html += `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`;
+            html += `<option value="${v}" ${v === selected ? 'selected' : ''}>${shiftTimeLabel(v)}</option>`;
           }
         }
         return html;
@@ -4470,6 +4496,10 @@
           <div class="form-group" style="margin:0;"><label>Clock Out</label><select class="arch-shift-out">${archiveTimeOptions(shift.clockOut || '-')}</select></div>
           <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.archive-edit-shift-row').remove()"><i data-lucide="trash-2"></i></button>`;
         c.appendChild(row);
+        const startSelect = row.querySelector('.arch-shift-in');
+        const endSelect = row.querySelector('.arch-shift-out');
+        startSelect.onchange = () => constrainShiftEnd(startSelect, endSelect);
+        constrainShiftEnd(startSelect, endSelect);
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
       }
 
@@ -4546,6 +4576,16 @@
         const index = parseInt(document.getElementById('editArchiveIndex').value, 10);
         const archive = db.historicalArchive?.[index];
         if (!archive) { alert('Archive record no longer exists.'); return; }
+
+        const invalidShift = Array.from(document.querySelectorAll('.archive-edit-shift-row')).some(row => {
+          const start = row.querySelector('.arch-shift-in').value;
+          const end = row.querySelector('.arch-shift-out').value;
+          return end !== '-' && !validShiftTimeOrder(start, end);
+        });
+        if (invalidShift) {
+          alert('Each clock-out must be after its clock-in on the same day. For 5 PM, choose 17:00.');
+          return;
+        }
 
         archive.trackWalk = {
           result: document.getElementById('editArch_TW_Result').value,
