@@ -4536,8 +4536,7 @@
       function archiveLocoOptions(selectedList, selectionClass = 'editArch-loco') {
         const selected = new Set(selectedList || []);
         const locos = (db.fleetItems || []).map(x => x.name || x.number).filter(Boolean);
-        const euro = (db.eurotunnelTrains || []).map(x => x.name || x.number).filter(Boolean);
-        const names = [...new Set([...locos, ...euro, ...(selectedList || [])])];
+        const names = [...new Set(locos)];
         return EVLTAssignments.assetChoices(names.map(name=>({name}))).map(c => `<label style="display:flex;align-items:center;gap:.35rem;font-size:.75rem;"><input type="checkbox" class="${selectionClass}" value="${escapeHtml(c.value)}" ${c.members.some(n=>selected.has(n)) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>`).join('') || '<span style="font-size:.75rem;color:var(--text-muted);">No locomotives recorded in stock.</span>';
       }
 
