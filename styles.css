@@ -718,3 +718,12 @@
       .vol-doc-empty { font-size: .78rem; color: var(--text-muted); padding: .8rem 0; }
       .vol-card-foot { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; padding: .7rem 1rem; border-top: 1px solid var(--border); background: rgba(0,0,0,.02); }
       .vol-foot-spacer { flex: 1 1 auto; }
+
+/* Keep page names and both permission controls visible together on phones. */
+#rolePermissionSettings { min-width: 0; }
+.role-permission-table { table-layout: fixed; white-space: normal; }
+.role-permission-table th:first-child { width: 56%; }
+.role-permission-table td:first-child { overflow-wrap: anywhere; }
+.role-permission-table td:first-child span { display: block; }
+.role-permission-table input[type="checkbox"] { min-width: 24px; min-height: 24px; }
+.role-permission-table th { white-space: normal; overflow-wrap: anywhere; }
