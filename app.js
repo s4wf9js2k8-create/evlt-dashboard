@@ -7726,7 +7726,7 @@
         }
         const targetUid = String(uid || '').trim();
         if (!targetUid) { alert('Force revoke failed: account UID is missing.'); return false; }
-        if (!confirm("FORCE REVOKE this EVLT account? The server will remove all matching approval links, sign-up requests and legacy permissions, disable the Firebase login and revoke its sessions. The volunteer profile and historical Trust records will be kept.")) return false;
+        if (!confirm("FORCE REVOKE this EVLT account? The server will revoke only this account, remove its approval, sign-up request and registered notification devices, and disable its Firebase login. Other accounts with the same name will be kept. The volunteer profile and historical Trust records will be kept.")) return false;
         const panel = document.getElementById('permissionAccountsPanel');
         const button = panel && Array.from(panel.querySelectorAll('button')).find(el => (el.getAttribute('onclick') || '').includes(targetUid));
         if (button) { button.disabled = true; button.textContent = 'Server revoking…'; }
@@ -7750,7 +7750,7 @@
           if (!result.success) throw new Error('The server did not confirm the revoke operation.');
           renderPermissionAccountSummary();
           if (typeof loadPendingAccountRequests === 'function') loadPendingAccountRequests();
-          alert('Server verified the force revoke. Removed '+result.removedBindings+' approval link(s), '+result.removedRequests+' sign-up request(s) and '+result.removedLegacyPermissions+' legacy permission(s). Firebase login disabled: '+(result.authDisabled ? 'yes' : 'no')+'. Volunteer profile and historical records were kept.');
+          alert('Server verified the force revoke. Removed '+result.removedBindings+' approval link(s), '+result.removedRequests+' sign-up request(s) and '+result.removedLegacyPermissions+' legacy permission(s). Removed '+(result.removedPushTokens || 0)+' notification device(s). Firebase login disabled: '+(result.authDisabled ? 'yes' : 'no')+'. Volunteer profile and historical records were kept.');
           return true;
         } catch (err) {
           console.error('Server force revoke failed:', err);
